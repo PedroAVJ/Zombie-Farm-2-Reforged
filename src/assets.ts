@@ -49,7 +49,7 @@ export interface ZombieModelPart {
 export interface ZombieModel {
   name: string;
   neck: { x: number; y: number };
-  scale: number; // whole-actor display scale (Regular .90, Small .60, Girl .80, Garden .70, Large 1.15, Headless .765)
+  scale: number; // whole-actor display scale (Regular .90, Small .60, Girl .80, Garden .70, Large 1.15)
   color: [number, number, number]; // authentic Market tint for the grey skeleton
   parts: ZombieModelPart[]; // z-sorted
   // Tier-4 variants (Eyebiscus/Heartichoke) SHARE a mutation bit with a lower-tier
@@ -129,7 +129,7 @@ interface SpecialZombieManifest {
 
 const SPECIAL_GROUP_SCALE: Record<string, number> = {
   Regular: 0.9, Female: 0.8, Girl: 0.8, Small: 0.6,
-  Large: 1.15, Headless: 0.765, Garden: 0.7,
+  Large: 1.15, Headless: 0.9, Garden: 0.7,
 };
 
 // These actors paint their complete face into their dedicated head attachments.
@@ -550,7 +550,7 @@ export async function loadAssets(): Promise<GameAssets> {
   // flat seed stage keeps its full texture (it IS just soil).
   const cropTop: Record<string, Texture> = {};
   for (const [f, tex] of Object.entries(crop))
-    cropTop[f] = f === SEED_FILE ? tex : makeCropTopTexture(tex);
+    cropTop[f] = f === SEED_FILE ? tex : makeCropTopTexture(tex, soil[PLOWED_FILE]);
 
   // Per-type zombie models: one shared atlas (ZombieSheet.png) sliced into part
   // sub-textures via frames.json, plus models.json (composition per unit type).

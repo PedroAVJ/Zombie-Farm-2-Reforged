@@ -26,7 +26,7 @@ import { getVisitTarget, enterVisit, exitVisit, clearVisitTarget } from "./net/v
 import { EconomyClient } from "./net/economy";
 import { QuestBus, QuestEvent } from "./quest/events";
 import { QuestSystem } from "./quest/QuestSystem";
-import { QuestDef, RewardType } from "./quest/types";
+import { QuestDef, questRewardInfo } from "./quest/types";
 import { RaidManager, RaidResultView } from "./raid/RaidManager";
 import { RaidScene } from "./raid/RaidScene";
 import { RAID_COOLDOWN_MS } from "./raid/RaidCatalog";
@@ -647,22 +647,8 @@ async function main() {
   // time; the HUD calls onQuestCompleteClosed when each is dismissed to feed the next.
   const uiIcon = (name: string) => `${BASE}assets/ui/${name}`;
   const questRewards = (def: QuestDef): QuestReward[] => {
-    switch (def.rewardType) {
-      case RewardType.Gold:
-        return def.rewardValue ? [{ icon: uiIcon("topbar_money_icon.png"), label: `+${def.rewardValue} Gold` }] : [];
-      case RewardType.Xp:
-        return def.rewardValue ? [{ icon: uiIcon("topbar_level_icon.png"), label: `+${def.rewardValue} XP` }] : [];
-      case RewardType.Brains:
-        return def.rewardValue
-          ? [{ icon: uiIcon("topbar_brain_icon.png"), label: `+${def.rewardValue} ${def.rewardValue === 1 ? "Brain" : "Brains"}` }]
-          : [];
-      case RewardType.Item:
-      case RewardType.Zombie:
-        // A named item/zombie reward — show its name; the quest sprite doubles as its icon.
-        return def.rewardItem ? [{ icon: uiIcon(def.sprite), label: def.rewardItem }] : [];
-      default:
-        return [];
-    }
+    const reward = questRewardInfo(def);
+    return reward ? [{ icon: uiIcon(reward.icon), label: reward.label }] : [];
   };
   const questCompleteQueue: QuestCompleteView[] = [];
   let questCompleteShowing = false;
@@ -2801,19 +2787,38 @@ async function main() {
 
   // Remove tool: a placed OBJECT sells back for a 50% refund; any plot is cleared
   // to bare ground for no money. A planted crop forfeits its cost and reward.
-  const tryRemove = (col: number, row: number, wx: number, wy: number) => {
+  const tryRemove = async (col: number, row: number, wx: number, wy: number) => {
     const id = field.objectAtPoint(wx, wy);
     if (id) {
       const d = field.objectDefOf(id);
       if (d?.category === "functional") return;
+      if (!d) return;
+      const purchase = objectPurchases.get(id);
+      const refund = purchase ? sellBack(purchase.cost) : sellRefund(d);
+      const refundBrains = purchase ? purchase.currency === "brains" : !!d.brainsNeeded;
+      const currency = refundBrains ? (refund === 1 ? "brain" : "brains") : "gold";
+      const confirmed = await hud.confirmInGame(
+        `Sell ${d.name}?`,
+        `The Remove tool will permanently sell this item for ${refund} ${currency}. This cannot be undone.`,
+        `Sell +${refund}${refundBrains ? "b" : "g"}`
+      );
+      // The farm may have changed while the confirmation was open.
+      if (!confirmed || field.objectDefOf(id) !== d) return;
       sellObject(id);
       return;
     }
-    if (field.plotOriginAt(col, row)) {
-      const origin = field.plotOriginAt(col, row);
+    const origin = field.plotOriginAt(col, row);
+    if (origin) {
+      const crop = field.cropInfoAt(col, row);
+      const warning = crop
+        ? `Remove this plot and discard the ${crop.name} growing on it? You will receive no refund.`
+        : "Remove this plot and return it to bare ground? You will receive no refund.";
+      const confirmed = await hud.confirmInGame("Remove this plot?", warning, "Remove Plot");
+      const current = field.plotOriginAt(col, row);
+      if (!confirmed || !current || current.oc !== origin.oc || current.or !== origin.or) return;
       jobs.cancelAtTile(col, row); // drop any queued job on this plot first
       field.removePlot(col, row); // plot (and any crop) -> bare ground, no refund
-      if (origin && state.onFarm) state.onFarm({ type: "remove", oc: origin.oc, or: origin.or }, {});
+      if (state.onFarm) state.onFarm({ type: "remove", oc: origin.oc, or: origin.or }, {});
       audio.play("sell");
       saveManager.save();
     }
@@ -2824,7 +2829,7 @@ async function main() {
   const performEditTap = (mode: Mode, col: number, row: number, wx: number, wy: number) => {
     if (mode === "place") tryPlaceObject(col, row);
     else if (mode === "move") handleMoveTap(col, row, wx, wy);
-    else if (mode === "remove") tryRemove(col, row, wx, wy);
+    else if (mode === "remove") void tryRemove(col, row, wx, wy);
     else if (mode === "instagrow") tryInstaGrow(col, row, wx, wy);
     else if (mode === "rotate") {
       const id = field.objectAtPoint(wx, wy);

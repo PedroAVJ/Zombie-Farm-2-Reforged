@@ -57,6 +57,41 @@ export interface QuestDef {
   ignoreCheckQuest: boolean;
 }
 
+/** Presentation-ready reward metadata shared by active and completed quest views. */
+export interface QuestRewardInfo {
+  /** Filename under assets/ui. */
+  icon: string;
+  label: string;
+}
+
+/** Convert a quest's encoded reward fields into the text and icon players see. */
+export function questRewardInfo(def: Pick<
+  QuestDef, "rewardType" | "rewardValue" | "rewardItem" | "sprite"
+>): QuestRewardInfo | null {
+  switch (def.rewardType) {
+    case RewardType.Gold:
+      return def.rewardValue
+        ? { icon: "topbar_money_icon.png", label: `+${def.rewardValue} Gold` }
+        : null;
+    case RewardType.Xp:
+      return def.rewardValue
+        ? { icon: "topbar_level_icon.png", label: `+${def.rewardValue} XP` }
+        : null;
+    case RewardType.Brains:
+      return def.rewardValue
+        ? {
+            icon: "topbar_brain_icon.png",
+            label: `+${def.rewardValue} ${def.rewardValue === 1 ? "Brain" : "Brains"}`,
+          }
+        : null;
+    case RewardType.Item:
+    case RewardType.Zombie:
+      return def.rewardItem ? { icon: def.sprite, label: def.rewardItem } : null;
+    default:
+      return null;
+  }
+}
+
 /** Runtime progress for one active quest: a count per requirement. */
 export interface QuestProgress {
   id: string;
@@ -69,6 +104,8 @@ export interface QuestView {
   title: string;
   icon: string; // sprite filename
   tip: string;
+  /** Reward shown before completion so players can judge whether to pursue it. */
+  reward: QuestRewardInfo | null;
   /** Per-objective lines with current/target counts and done flag. */
   objectives: { text: string; count: number; total: number; done: boolean }[];
 }

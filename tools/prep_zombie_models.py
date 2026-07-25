@@ -214,12 +214,14 @@ def group_of(key):
 
 def scale_of(key):
     # Exact whole-actor scale from -[ZombieActor<Group> initSprite] setScale: in the
-    # ZF2R binary, with the Headless family reduced by 15% for display.
+    # ZF2R binary, with only the models that omit a head reduced by 15% for display.
     # Per-tier overrides the game sets on top of the group value:
     if key.startswith("ZombieActorGirlTier3"):      # Amazon body — scaled up
         return 1.10
     if key.startswith("ZombieActorHeadlessTier5"):  # Skull head — scaled down
-        return 0.68
+        return 0.80
+    if key in HEADLESS:                             # Tier 1-4 omit the head sprite
+        return 0.765
     # Zcarecrow (Large2*) and Zanta (Large3*) are their OWN seasonal subclasses,
     # NOT the barbarian ZombieActorLarge family — they don't inherit its 1.15
     # scale-up. Like every other seasonal reskin (Jacko/Reindeer/Teddy), they're
@@ -234,7 +236,7 @@ def scale_of(key):
         "Girl": 0.80,
         "Garden": 0.70,
         "Large": 1.15,     # barbarian/brute family; base 0.90 x the ~1.28 "large" ratio
-        "Headless": 0.765,
+        "Headless": 0.90,
     }.get(g, 0.90)
 
 

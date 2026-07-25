@@ -9,7 +9,7 @@
 // advance — dormant, not broken. Epic quests are selected per active boss event.
 import { GameState } from "../GameState";
 import { QuestBus, QuestEvent } from "./events";
-import { QuestDef, QuestView, RewardType } from "./types";
+import { QuestDef, QuestView, RewardType, questRewardInfo } from "./types";
 import { QuestSave } from "../save/schema";
 
 // Notification IDs that have live emitters. A quest only auto-activates once one of
@@ -202,6 +202,7 @@ export class QuestSystem {
         title: def.title,
         icon: def.sprite,
         tip: def.tip,
+        reward: questRewardInfo(def),
         objectives: def.requirements.map((r, i) => ({
           text: r.text,
           count: displayCounts[i],

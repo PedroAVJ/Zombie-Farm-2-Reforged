@@ -42,6 +42,10 @@ describe("QuestSystem client-paced progress", () => {
       grantItem: vi.fn(), grantZombie: vi.fn(), completed: vi.fn(), render: vi.fn(),
     });
     system.restore();
+    expect(system.views()[0].reward).toEqual({
+      icon: "topbar_level_icon.png",
+      label: "+10 XP",
+    });
     bus.post(QuestEvent.SoilPlowed);
     expect(system.views()[0].objectives[0].count).toBe(1);
     expect(system.serialize().active[0].counts[0]).toBe(0);

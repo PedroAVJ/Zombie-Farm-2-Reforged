@@ -73,6 +73,11 @@
 #hud .qobj { font-size: 14px; color: #f4e9cf; margin: 4px 0; }
 #hud .qobj.done { color: #8fdc5a; }
 #hud .qtip { margin-top: 10px; font-size: 12px; font-style: italic; color: #cbb98f; }
+#hud .qreward-title { margin-top: 12px; color: #d8bc84; font-size: 12px;
+  font-weight: 800; text-transform: uppercase; letter-spacing: .06em; }
+#hud .qreward { display: flex; align-items: center; gap: 7px; margin-top: 4px;
+  color: #ffe49a; font-size: 15px; font-weight: 800; }
+#hud .qreward img { width: 26px; height: 26px; object-fit: contain; }
 /* full quest log */
 #hud .panel.questlog { text-align: left; width: min(460px, 92vw); }
 #hud .qlog-list { margin-top: 8px; max-height: 64vh; overflow-y: auto;

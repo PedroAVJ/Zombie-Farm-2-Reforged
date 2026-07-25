@@ -577,6 +577,21 @@ export class Hud {
       tip.textContent = q.tip;
       panel.appendChild(tip);
     }
+    if (q.reward) {
+      const heading = document.createElement("div");
+      heading.className = "qreward-title";
+      heading.textContent = "Reward";
+      const reward = document.createElement("div");
+      reward.className = "qreward";
+      const icon = document.createElement("img");
+      icon.src = UI(q.reward.icon);
+      icon.alt = "";
+      icon.onerror = () => { icon.style.visibility = "hidden"; };
+      const label = document.createElement("span");
+      label.textContent = q.reward.label;
+      reward.append(icon, label);
+      panel.append(heading, reward);
+    }
   }
 
   // Brief top-center banner for quest completion (messageComplete).
