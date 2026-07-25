@@ -3155,8 +3155,11 @@ async function main() {
         // Storage; a ripe fruit tree harvests for gold; else it's tile-based (same
         // clickbox as Plow) — ripe plot -> harvest; tilled plot -> plant picker;
         // spent plot -> re-till; else free-roam when idle.
-        // A touch tap deliberately bypasses zombies so the plot/crop beneath is
-        // always reachable. Touch zombie inspection is handled by press-and-hold.
+        // A mouse resolves the zombie first; a finger cannot. A zombie's sprite
+        // covers the plots drawn behind it, so on touch the tile keeps the tap and
+        // the zombie is reached by press-and-hold instead. That only applies where
+        // the tile actually wants the tap: when nothing beneath claims it, the
+        // cascade below falls through to the zombie so open ground needs no hold.
         const zu = isTouchPointer(pressPointerType) ? null : zombies.pick(wx, wy);
         if (zu) {
           inspectZombie(zu);
@@ -3241,8 +3244,13 @@ async function main() {
           else hud.openPlantMenu(onPick);
         } else if (field.isSpent(col, row)) {
           jobs.enqueue("till", col, row); // re-till a harvested dirt/hole plot
-        } else if (!jobs.busy) {
-          walk.goToPoint(wx, wy); // free-roam only when idle; not a queued job
+        } else {
+          // Nothing on this tile claimed the tap. On touch that makes an
+          // overlapping zombie the obvious target, so away from plots it takes a
+          // plain tap and the hold gesture is never needed.
+          const bare = isTouchPointer(pressPointerType) ? zombies.pick(wx, wy) : null;
+          if (bare) inspectZombie(bare);
+          else if (!jobs.busy) walk.goToPoint(wx, wy); // free-roam only when idle
         }
       } else if (hud.mode === "plant" && !field.canPlant(col, row)) {
         hud.setPlanting(null); // tapped anything but plantable ground -> back to select

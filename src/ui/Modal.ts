@@ -7,6 +7,35 @@
 // and any programmatic dismissal.
 import { UI } from "./uiAsset";
 
+/** The slice of a backdrop element `bindBackdropDismiss` needs, so the guard can
+ * be exercised without a DOM. */
+export interface BackdropElement {
+  addEventListener(type: string, handler: (e: { target: unknown }) => void): void;
+}
+
+/**
+ * Close `bg` when the backdrop itself is clicked — but only if that click's
+ * press also landed on the backdrop.
+ *
+ * Panels opened straight from a farm tap (the plant picker, zombie info, crop
+ * info, object actions…) append a full-screen `inset: 0` backdrop while the
+ * finger is still on the glass, during the very `pointerup` that opened them.
+ * The tap's trailing compatibility `click` then lands on that brand-new backdrop
+ * and dismisses the panel before the player ever sees it — which reads on a
+ * phone as "tapping the plot does nothing". Requiring a `pointerdown` on the
+ * backdrop closes that hole without any timing heuristics: a backdrop that did
+ * not exist when the finger went down cannot have received the press.
+ */
+export function bindBackdropDismiss(bg: BackdropElement, close: () => void): void {
+  let pressed = false;
+  bg.addEventListener("pointerdown", (e) => { pressed = e.target === bg; });
+  bg.addEventListener("click", (e) => {
+    if (!pressed || e.target !== bg) return;
+    pressed = false;
+    close();
+  });
+}
+
 export interface ModalHandle {
   /** The `.panelbg` backdrop element (already appended to the host). */
   bg: HTMLElement;
@@ -72,9 +101,7 @@ export function openModal(opts: ModalOpts): ModalHandle {
   }
 
   bg.appendChild(panel);
-  if (opts.backdropClose !== false) {
-    bg.onclick = (e) => { if (e.target === bg) close(); };
-  }
+  if (opts.backdropClose !== false) bindBackdropDismiss(bg, close);
   host.appendChild(bg);
   return { bg, panel, close };
 }

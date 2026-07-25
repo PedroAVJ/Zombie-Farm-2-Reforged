@@ -38,7 +38,7 @@ import {
 // HUD styles live in a real stylesheet (src/ui/hud.css) so they get CSS tooling
 // and hot-reload. Vite injects it at module load — no manual <style> element.
 import "./ui/hud.css";
-import { openModal } from "./ui/Modal";
+import { bindBackdropDismiss, openModal } from "./ui/Modal";
 import { renderLevelUp, renderQuestComplete, renderObjectActions, renderInfoPanel } from "./ui/panels/dialogs";
 import {
   openSettings as openSettingsPanel, openDevMenu as openDevMenuPanel,
@@ -1573,7 +1573,7 @@ export class Hud {
       subsEl.style.display = "none";
     }
     bg.appendChild(mkt);
-    if (!tutorialBoostMarket) bg.onclick = (e) => { if (e.target === bg) bg.remove(); };
+    if (!tutorialBoostMarket) bindBackdropDismiss(bg, () => bg.remove());
     this.el.appendChild(bg);
     renderSubs();
     renderGrid();
@@ -1822,7 +1822,7 @@ export class Hud {
     desc.textContent = en.description ?? "";
     box.append(close, img, name, desc);
     bg.appendChild(box);
-    bg.onclick = (e) => { if (e.target === bg) bg.remove(); };
+    bindBackdropDismiss(bg, () => bg.remove());
     this.el.appendChild(bg);
     this.audio.play("menuClick");
   }
@@ -2070,7 +2070,7 @@ export class Hud {
     bg.appendChild(pm);
     // In tutorial mode the backdrop tap must NOT dismiss (there's no other way
     // to reopen the constrained menu); otherwise tapping outside closes it.
-    if (!onlyKey) bg.onclick = (e) => { if (e.target === bg) bg.remove(); };
+    if (!onlyKey) bindBackdropDismiss(bg, () => bg.remove());
     this.el.appendChild(bg);
 
     if (onlyKey) {
@@ -2887,7 +2887,7 @@ export class Hud {
     void refresh();   // then pull fresh server data (online only)
 
     bg.appendChild(panel);
-    bg.onclick = (e) => { if (e.target === bg) bg.remove(); };
+    bindBackdropDismiss(bg, () => bg.remove());
     this.el.appendChild(bg);
   }
 
@@ -3422,7 +3422,7 @@ export class Hud {
     wrap.className = "cmb";
     panel.append(x, wrap);
     bg.appendChild(panel);
-    bg.onclick = (e) => { if (e.target === bg) { stop(); bg.remove(); } };
+    bindBackdropDismiss(bg, () => { stop(); bg.remove(); });
     this.el.appendChild(bg);
 
     const portraitOf = (key: string) => this.zombiePortraitOf?.(key) ?? "";
@@ -3724,7 +3724,7 @@ export class Hud {
     wrap.append(list, detail);
     panel.append(x, wrap);
     bg.appendChild(panel);
-    if (!tutorialRaid) bg.onclick = (e) => { if (e.target === bg) close(); };
+    if (!tutorialRaid) bindBackdropDismiss(bg, close);
     this.el.appendChild(bg);
 
     // Default selection: first unlocked raid, else the first card.
@@ -3896,7 +3896,7 @@ export class Hud {
     if (tutorialRaid) x.style.display = "none";
     panel.appendChild(x);
     bg.appendChild(panel);
-    if (!tutorialRaid) bg.onclick = (e) => { if (e.target === bg) bg.remove(); };
+    if (!tutorialRaid) bindBackdropDismiss(bg, () => bg.remove());
     this.el.appendChild(bg);
 
     if (!party || !party.eligible.length) {
