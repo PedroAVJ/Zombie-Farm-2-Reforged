@@ -166,7 +166,7 @@ const PERCH_TWEAK: Record<number, { dx?: number; dy?: number }> = {
   2: { dy: 0.32 }, // Lawyers: existing correction + another half-height down
   3: { dy: 0.095 }, // Pirates: about one quarter of the boss's rendered height down
   4: { dy: 0.12 }, // Ninjas: too high on the structure
-  5: { dy: 0.16 }, // Robots (sky perch): hovering too high
+  5: { dy: 0.31 }, // Robots: another ~40% of the boss's rendered height down
   6: { dx: -0.03, dy: 0.2 }, // Aliens (sky perch): too high; rides a UFO
   7: { dx: -0.18, dy: 0.28 }, // Summer Break (sky perch): squid boss too far right + too high
   8: { dx: -0.14 }, // Circus: boss too far right on the car

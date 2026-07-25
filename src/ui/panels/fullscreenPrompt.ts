@@ -7,6 +7,7 @@ export interface FullscreenPromptEnvironment {
   fullscreenEnabled: boolean;
   canRequestFullscreen: boolean;
   alreadyFullscreen: boolean;
+  fullscreenDisplayMode: boolean;
   standalone: boolean;
 }
 
@@ -19,6 +20,7 @@ export function shouldOfferFullscreenPrompt(env: FullscreenPromptEnvironment): b
     env.fullscreenEnabled &&
     env.canRequestFullscreen &&
     !env.alreadyFullscreen &&
+    !env.fullscreenDisplayMode &&
     !env.standalone;
 }
 
@@ -35,6 +37,8 @@ export function offerFullscreenPrompt(hud: Hud, mobile: boolean, signedIn: boole
     fullscreenEnabled: document.fullscreenEnabled,
     canRequestFullscreen: typeof document.documentElement.requestFullscreen === "function",
     alreadyFullscreen: document.fullscreenElement !== null,
+    fullscreenDisplayMode: typeof matchMedia === "function" &&
+      matchMedia("(display-mode: fullscreen)").matches,
     standalone: isStandalone(),
   })) return;
 

@@ -10,6 +10,7 @@ const eligible: FullscreenPromptEnvironment = {
   fullscreenEnabled: true,
   canRequestFullscreen: true,
   alreadyFullscreen: false,
+  fullscreenDisplayMode: false,
   standalone: false,
 };
 
@@ -24,6 +25,7 @@ describe("shouldOfferFullscreenPrompt", () => {
     ["fullscreen disabled", { fullscreenEnabled: false }],
     ["missing requestFullscreen", { canRequestFullscreen: false }],
     ["already fullscreen", { alreadyFullscreen: true }],
+    ["fullscreen display mode", { fullscreenDisplayMode: true }],
     ["installed standalone app", { standalone: true }],
   ])("does not offer when %s", (_label, patch) => {
     expect(shouldOfferFullscreenPrompt({ ...eligible, ...patch })).toBe(false);

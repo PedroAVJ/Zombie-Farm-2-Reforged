@@ -49,7 +49,7 @@ export interface ZombieModelPart {
 export interface ZombieModel {
   name: string;
   neck: { x: number; y: number };
-  scale: number; // exact ZF2 group setScale (Regular .90, Small .60, Girl .80, Garden .70, Large 1.15, Headless .90)
+  scale: number; // whole-actor display scale (Regular .90, Small .60, Girl .80, Garden .70, Large 1.15, Headless .765)
   color: [number, number, number]; // authentic Market tint for the grey skeleton
   parts: ZombieModelPart[]; // z-sorted
   // Tier-4 variants (Eyebiscus/Heartichoke) SHARE a mutation bit with a lower-tier
@@ -129,7 +129,7 @@ interface SpecialZombieManifest {
 
 const SPECIAL_GROUP_SCALE: Record<string, number> = {
   Regular: 0.9, Female: 0.8, Girl: 0.8, Small: 0.6,
-  Large: 1.15, Headless: 0.9, Garden: 0.7,
+  Large: 1.15, Headless: 0.765, Garden: 0.7,
 };
 
 // These actors paint their complete face into their dedicated head attachments.
