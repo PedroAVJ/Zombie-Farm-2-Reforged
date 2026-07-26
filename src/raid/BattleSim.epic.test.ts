@@ -22,12 +22,12 @@ describe("Epic Boss BattleSim mode", () => {
   it("preserves an injured boss's starting health", () => {
     const boss = unit("boss", "enemy", true);
     boss.hp = 3_250;
-    const sim = new BattleSim([unit("p", "player")], [boss], null, false, [], null, 60_000, null, null, true, true);
+    const sim = new BattleSim([unit("p", "player")], [boss], null, false, [], 60_000, null, null, true, true);
     expect(sim.snapshot().units.find((u) => u.id === "boss")?.hp).toBe(3_250);
   });
 
   it("ends with an escape at the hard 30-second-style deadline", () => {
-    const sim = new BattleSim([unit("p", "player")], [unit("boss", "enemy", true)], null, false, [], null, 1_000, null, null, true, true);
+    const sim = new BattleSim([unit("p", "player")], [unit("boss", "enemy", true)], null, false, [], 1_000, null, null, true, true);
     for (let i = 0; i < 25 && !sim.finished; i++) sim.step(50);
     expect(sim.finished).toBe(true);
     expect(sim.outcome().escaped).toBe(true);
@@ -35,7 +35,7 @@ describe("Epic Boss BattleSim mode", () => {
   });
 
   it("suppresses butterflies but still waits for the final brain bubble", () => {
-    const sim = new BattleSim([unit("p", "player")], [unit("boss", "enemy", true)], null, false, [], null, 60_000, null, null, true, false);
+    const sim = new BattleSim([unit("p", "player")], [unit("boss", "enemy", true)], null, false, [], 60_000, null, null, true, false);
     for (let i = 0; i < 300 && !sim.chargingBubble(); i++) sim.step(50);
     const charging = sim.chargingBubble();
     expect(charging?.kind).toBe("brain");
@@ -44,7 +44,7 @@ describe("Epic Boss BattleSim mode", () => {
 
   it("drops an Epic Boss from above, then holds it for the landing beat", () => {
     const sim = new BattleSim(
-      [unit("p", "player")], [unit("boss", "enemy", true)], null, false, [], null,
+      [unit("p", "player")], [unit("boss", "enemy", true)], null, false, [],
       60_000, null, null, true, true, true, 150
     );
     const before = sim.snapshot().units.find((u) => u.id === "boss")!;

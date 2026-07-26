@@ -200,15 +200,12 @@ export interface BossSpecial {
   damage: number; // effect damage (data value, or a sensible default)
 }
 
-/** Environmental-hazard config for the live sim (obstacle actors crossing the lane). */
-export interface HazardConfig {
-  limit: number; // max obstacles on the lane at once
-  spawnMs: number; // interval between obstacle spawns
-  damage: number; // damage an obstacle deals to a zombie it hits
-  sprite: string; // projectile sprite name (falls back to a tinted dot if unloaded)
-  initial: boolean; // spawn one obstacle immediately at the start
-  grab: boolean; // grab hazard (Lawyers car / Circus trapeze) — seizes instead of damages
-}
+// NOTE: there is deliberately no "crossing obstacle" hazard config here. An earlier
+// ground-crossing obstacle/grab mechanic (a sprite or dot sliding along the lane, damaging
+// or seizing zombies) was NOT part of the base game — it was fabricated during development
+// and has been removed. The real, source-derived hazards are GrabberConfig (Circus Trapeze
+// Artist) and CrabConfig (Beach crab) below. Do not reintroduce a crossing obstacle without
+// ground truth from the binary.
 
 /** Carried-grab hazard config (Circus Trapeze Artist). Ground truth: the actor sweeps
  *  in from the left, grabs the rear-most deployed zombie, then rises to carry it off; the

@@ -22,15 +22,15 @@
 // carrotWall/junkWall blockers, the Circus trapeze carried-grab (grabberOf), and the
 // Beach crab carry-off (crabOf). The trapeze and crab are CLIENT-ONLY — the server
 // verifier replays the un-harassed fight and the client concedes via clientWin.
-// Still disabled: the ground-crossing environmental obstacles — Tree World turtle,
-// Valentine's geyser, Beach sea-mine — where RaidManager.hazardOf returns null
-// pending better visual integration. The Lawyers cars grab has no shipped sprite.
+// NOTE: a ground-crossing obstacle/grab hazard once lived here. It was NOT a base-game
+// mechanic — it was fabricated during development — and has been removed entirely.
+// Do not reintroduce it without ground truth from the binary.
 //
 // Combat numbers are the GROUND-TRUTH fight-data model (combatStats.ts, recovered from
 // the binary): maxHp = con*100 and cadence = attackCooldownMs (2s zombie / 1s enemy ÷ dex)
 // arrive on the CombatUnit; per-swing damage = finalPower(str*10) * mult, then the player
 // lineup-depth band (1.0/0.85/0.7/0.55; enemies ×1.0). See combatStats.lineupDamageBand.
-import type { BossSpecial, BossThrowConfig, CombatUnit, CrabConfig, GrabberConfig, HazardConfig, RaidOutcome } from "./types";
+import type { BossSpecial, BossThrowConfig, CombatUnit, CrabConfig, GrabberConfig, RaidOutcome } from "./types";
 import { ACTIVATED_ABILITY, activatedKeyFor, teamAbilitiesIn } from "../zombie/abilities";
 import { deriveHitDamage, lineupDamageBand, POWER_PER_STR } from "./combatStats";
 import { BOSS_SPECIAL_DAMAGE_MULT, PROJECTILE_DAMAGE_MULT } from "./balance";
@@ -213,9 +213,6 @@ const WALL_TAP_DAMAGE = 75;
 // stop here and break it before continuing.
 const WALL_MELEE_GAP = ENGAGE;
 
-// ---- Environmental obstacle hazards (spawnObstacle:) ----
-const OBSTACLE_SPEED = 190; // obstacle crossing speed (sim px/s), right→left
-
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
 /** Deterministic 0..1 hash (no RNG — keeps the sim replayable). */
@@ -367,10 +364,7 @@ export interface SimGrabber {
 }
 
 /** A boss projectile in flight, consumed by the renderer. Ballistic throws use the
- *  default gravity; straight-line hazards (alien laser, crossing obstacles) set
- *  `gravity: 0`. `crossing` hazards traverse the lane and expire off the left edge
- *  instead of fizzling when they reach the ground. `hazard` tags obstacle actors so
- *  the spawner can honour the raid's concurrent-obstacle limit. */
+ *  default gravity; straight-line bolts (the alien laser) set `gravity: 0`. */
 export interface SimProjectile {
   id: string;
   x: number;
@@ -384,9 +378,6 @@ export interface SimProjectile {
   spriteSize: number;
   done: boolean;
   gravity: number;
-  crossing: boolean;
-  hazard: boolean;
-  grab: boolean; // grab hazard (car/trapeze): seizes the zombie instead of damaging it
 }
 
 /** Compact, JSON-safe verifier state used by the server's 15-second replay checkpoints. */
@@ -408,7 +399,6 @@ export interface BattleSimSnapshot {
   specialCast: number;
   specialCount: number;
   pendingSpecial: BossSpecial | null;
-  obstacleTimer: number;
   summonsLeft: number;
   spawnSeq: number;
   activatedKeys: string[];
@@ -542,9 +532,6 @@ export class BattleSim {
   private specialCast = 0; // wind-up left on the pending special
   private specialCount = 0;
   private pendingSpecial: BossSpecial | null = null;
-  // ---- environmental obstacle hazards ----
-  private hazard: HazardConfig | null;
-  private obstacleTimer = 0;
   // ---- carried-grab hazard (Trapeze Artist) ----
   readonly grabbers: SimGrabber[] = [];
   private grabberCfg: GrabberConfig | null;
@@ -577,8 +564,6 @@ export class BattleSim {
     private concentration = false,
     /** Boss special (non-throw) actions to schedule. */
     bossSpecials: BossSpecial[] = [],
-    /** Environmental obstacle hazards for this raid (null = none). */
-    hazard: HazardConfig | null = null,
     /** Round length before the boss enrages (ms). */
     roundMs: number = DEFAULT_ROUND_MS,
     /** Unit the boss's `summonBoss` action spawns (null = don't summon). */
@@ -630,15 +615,10 @@ export class BattleSim {
     this.bossThrow = bossThrow;
     this.throwTimer = bossThrow?.intervalMs ?? 0;
     this.specials = this.boss ? bossSpecials : [];
-    this.hazard = hazard;
     this.roundLeft = roundMs;
     this.summonTemplate = this.boss ? summonTemplate : null;
     this.wallTemplate = this.boss ? wallTemplate : null;
     this.summonsLeft = SUMMON_CAP;
-    // A raid whose obstacle actor spawns one at the start (e.g. the beach Crab)
-    // drops its first obstacle immediately.
-    if (hazard?.initial) this.spawnObstacle();
-
     // Keep every activated move represented. In particular, Mini Buddy remains
     // available on a veteran Large zombie even when it also owns Bash/Smash.
     this.activatedKeys = [
@@ -666,7 +646,6 @@ export class BattleSim {
       specialCast: this.specialCast,
       specialCount: this.specialCount,
       pendingSpecial: this.pendingSpecial ? { ...this.pendingSpecial } : null,
-      obstacleTimer: this.obstacleTimer,
       summonsLeft: this.summonsLeft,
       spawnSeq: this.spawnSeq,
       activatedKeys: [...this.activatedKeys],
@@ -707,7 +686,6 @@ export class BattleSim {
     this.specialCast = snapshot.specialCast;
     this.specialCount = snapshot.specialCount ?? 0;
     this.pendingSpecial = snapshot.pendingSpecial ? { ...snapshot.pendingSpecial } : null;
-    this.obstacleTimer = snapshot.obstacleTimer;
     this.summonsLeft = snapshot.summonsLeft;
     this.spawnSeq = snapshot.spawnSeq;
     this.activatedKeys.splice(0, this.activatedKeys.length, ...snapshot.activatedKeys);
@@ -1228,7 +1206,6 @@ export class BattleSim {
         }
       }
     }
-    this.stepObstacles(dtMs);
     this.stepGrabbers(dtMs);
     this.stepCrabs(dtMs);
     this.stepProjectiles(dtMs);
@@ -1626,44 +1603,6 @@ export class BattleSim {
     return best;
   }
 
-  /** Spawn one crossing obstacle hazard from the right edge (honours the limit). */
-  private spawnObstacle() {
-    if (!this.hazard) return;
-    const active = this.projectiles.filter((p) => p.hazard && !p.done).length;
-    if (active >= this.hazard.limit) return;
-    // Cross at the combat band (where zombies advance/fight), not the back of the
-    // field — otherwise the hazard sweeps past below everyone and never connects.
-    const y = CENTER_Y;
-    this.projectiles.push({
-      id: `haz${this.projSeq++}`,
-      x: ENEMY_HOLD_X,
-      y,
-      vx: -OBSTACLE_SPEED,
-      vy: 0,
-      rot: 0,
-      rotSpeed: -4,
-      damage: this.hazard.damage
-        ? Math.max(1, Math.round(this.hazard.damage * PROJECTILE_DAMAGE_MULT))
-        : 0,
-      sprite: this.hazard.sprite,
-      spriteSize: 40,
-      done: false,
-      gravity: 0,
-      crossing: true,
-      hazard: true,
-      grab: !!this.hazard.grab,
-    });
-  }
-
-  /** Obstacle spawn cadence: drop a new obstacle every spawnMs, up to the limit. */
-  private stepObstacles(dtMs: number) {
-    if (!this.hazard || !this.anyAlive(this.players)) return;
-    this.obstacleTimer -= dtMs;
-    if (this.obstacleTimer > 0) return;
-    this.obstacleTimer = this.hazard.spawnMs;
-    this.spawnObstacle();
-  }
-
   /** Deployed zombies (released from the focus bar and out on the lane). */
   private deployed(): SimUnit[] {
     return this.players.filter(
@@ -2007,9 +1946,6 @@ export class BattleSim {
       spriteSize,
       done: false,
       gravity: grav,
-      crossing: false,
-      hazard: false,
-      grab: false,
     });
   }
 
@@ -2019,20 +1955,20 @@ export class BattleSim {
     const dt = dtMs / 1000;
     for (const pr of this.projectiles) {
       if (pr.done) continue;
-      pr.vy += pr.gravity * dt; // gravity 0 for straight bolts / crossing hazards
+      pr.vy += pr.gravity * dt; // gravity 0 for straight bolts (alien laser)
       pr.x += pr.vx * dt;
       pr.y += pr.vy * dt;
       pr.rot += pr.rotSpeed * dt;
       const hitR = ZOMBIE_HIT_R + pr.spriteSize * PROJ_HIT_FACTOR;
       for (const p of this.players) {
-        // A thrown item / hazard can only strike zombies that have moved out to
-        // fight — ones still waiting in the group or charging up are safe.
+        // A thrown item can only strike zombies that have moved out to fight —
+        // ones still waiting in the group or charging up are safe.
         if (!p.alive || (p.state !== "advance" && p.state !== "fight")) continue;
         const dx = p.x - pr.x;
         const dy = p.y - pr.y;
         if (dx * dx + dy * dy <= hitR * hitR) {
-          // Carried grabs are the Trapeze Artist (stepGrabbers), not projectiles; a
-          // crossing hazard here just deals its damage.
+          // Carried grabs are the Trapeze Artist (stepGrabbers) and the Beach crab
+          // (stepCrabs), not projectiles — a projectile only ever deals damage.
           this.dealEnemyDamage(p, pr.damage);
           p.struckThisTick = true;
           pr.done = true;
@@ -2040,13 +1976,8 @@ export class BattleSim {
         }
       }
       if (pr.done) continue;
-      // Crossing hazards run the length of the lane and expire off the left edge;
-      // ballistic throws fizzle (miss) once they reach the ground.
-      if (pr.crossing) {
-        if (pr.x <= -60) pr.done = true;
-      } else if (pr.y >= GROUND_Y) {
-        pr.done = true;
-      }
+      // A ballistic throw fizzles (misses) once it reaches the ground.
+      if (pr.y >= GROUND_Y) pr.done = true;
     }
     // Compact in place (keep the readonly array reference stable).
     let w = 0;

@@ -275,7 +275,7 @@ export async function finish(
     return { status: 409, body: { error: "stale_ruleset", rulesetVersion: RAID_RULESET_VERSION } };
   }
   const verified = replayRaid(new BattleSim(
-    config.playerUnits, config.enemyUnits, null, false, [], null, def.fightMs,
+    config.playerUnits, config.enemyUnits, null, false, [], def.fightMs,
     null, null, true, true, true, 150
   ), body.finalTick as number, body.inputs as RaidReplayInput[]);
   if (!verified.ok) return { status: 422, body: { error: verified.error } };

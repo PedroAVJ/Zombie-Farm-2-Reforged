@@ -13,7 +13,7 @@ function unit(over: Partial<CombatUnit> & Pick<CombatUnit, "id" | "sourceKey" | 
 /** Build a sim with a trapeze grabber; the player starts already deployed on the lane. */
 function grabSim(grabber: GrabberConfig, players: CombatUnit[], enemies: CombatUnit[]) {
   const sim = new BattleSim(
-    players, enemies, null, true, [], null, 10 * 60 * 1000, null, null, false, false, false, 60, grabber
+    players, enemies, null, true, [], 10 * 60 * 1000, null, null, false, false, false, 60, grabber
   );
   for (const p of players) {
     const su = sim.units.find((u) => u.id === p.id)!;
@@ -161,7 +161,7 @@ describe("boss wall (carrotWall / junkWall)", () => {
     const sim = new BattleSim(
       [player], [boss], null, true,
       [{ name: "wall", weight: 100, castMs: 0, cooldownMs: 999999, damage: 0 }],
-      null, 10 * 60 * 1000, null, wallTemplate
+      10 * 60 * 1000, null, wallTemplate
     );
     stepUntil(sim, () => sim.units.some((u) => u.isWall && u.alive));
     const wall = sim.units.find((u) => u.isWall)!;
@@ -183,7 +183,7 @@ describe("boss wall (carrotWall / junkWall)", () => {
       { intervalMs: 100, options: [{ damage: 1, weight: 1, sprite: "carrot.png", spriteSize: 20 }] },
       true,
       [{ name: "wall", weight: 100, castMs: 3000, cooldownMs: 999999, damage: 0 }],
-      null, 10 * 60 * 1000, null, wallTemplate
+      10 * 60 * 1000, null, wallTemplate
     );
     sim.units.find((u) => u.id === "p")!.state = "advance";
     sim.step(16);
@@ -228,7 +228,7 @@ describe("boss wall (carrotWall / junkWall)", () => {
     const sim = new BattleSim(
       [blocked, healer, past], [minion, boss], null, true,
       [{ name: "wall", weight: 100, castMs: 1, cooldownMs: 999999, damage: 0 }],
-      null, 10 * 60 * 1000, null, wallTemplate
+      10 * 60 * 1000, null, wallTemplate
     );
     const b = sim.units.find((u) => u.id === "blocked")!;
     const h = sim.units.find((u) => u.id === "healer")!;
@@ -259,7 +259,7 @@ describe("boss wall (carrotWall / junkWall)", () => {
 /** Build a sim with a Beach crab; the player starts already deployed on the lane. */
 function crabSim(crab: CrabConfig, players: CombatUnit[], enemies: CombatUnit[]) {
   const sim = new BattleSim(
-    players, enemies, null, true, [], null, 10 * 60 * 1000, null, null, false, false, false, 60, null, crab
+    players, enemies, null, true, [], 10 * 60 * 1000, null, null, false, false, false, 60, null, crab
   );
   for (const p of players) {
     sim.units.find((u) => u.id === p.id)!.state = "advance";

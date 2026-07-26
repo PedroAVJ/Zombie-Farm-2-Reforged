@@ -30,25 +30,13 @@ import {
 import { BASE } from "../base";
 import { ABILITY_TIER, ABILITY_POOL } from "../zombie/traits";
 import { displayTotals } from "../zombie/statDisplay";
-import { BossSpecial, BossThrowConfig, CombatUnit, CrabConfig, GrabberConfig, HazardConfig, RaidDef, RaidOutcome, RaidStage } from "./types";
+import { BossSpecial, BossThrowConfig, CombatUnit, CrabConfig, GrabberConfig, RaidDef, RaidOutcome, RaidStage } from "./types";
 import { rollLootTier } from "./LootTable";
 import { rollBrainDrop } from "./brainDrops";
 import { orderPartyRoster } from "./partySelection";
 
-/** Contact damage an environmental obstacle deals (source carries no value; a tuned
- *  chip value kept proportional to the ground-truth melee/HP scale — see BattleSim). */
-const HAZARD_DAMAGE = 28;
-/** Cadence for grab hazards (Lawyers cars / Circus trapeze), source has no timer. */
-const GRAB_SPAWN_MS = 9000;
-/** Real falling-obstacle art per raid id (raids/images/). Unmapped -> warning dot.
- *  Summer/Beach mine, Tree World pinecone, Valentine's teapot — all shipped sprites. */
-const OBSTACLE_SPRITE: Record<number, string> = {
-  7: "beach_debris_seamine.png",
-  10: "weapon_pinecone.png",
-  11: "valentines2012_debris_pot.png",
-};
 /** Real grab-hazard art per raid id. Circus = the trapeze girl (extracted from the
- *  stage atlas). Lawyers has no shipped car sprite, so it keeps the dot. */
+ *  stage atlas). */
 const GRAB_SPRITE: Record<number, string> = {
   8: "hazard_trapeze_girl.png",
 };
@@ -172,8 +160,6 @@ export interface RaidSetup {
   bossThrow: BossThrowConfig | null;
   /** Boss special (non-throw) actions for the live scene ([] if none). */
   bossSpecials: BossSpecial[];
-  /** Environmental obstacle hazards for the live scene (null if none). */
-  hazard: HazardConfig | null;
   /** Minion the boss's summonBoss action spawns (null if it can't summon). */
   summonTemplate: CombatUnit | null;
   /** Blocker the boss's wall action spawns (null if it has no wall). */
@@ -394,7 +380,6 @@ export class RaidManager {
       enemyUnits,
       bossThrow: this.bossThrowOf(raid, stage),
       bossSpecials: this.bossSpecialsOf(stage),
-      hazard: this.hazardOf(raid),
       grabber: this.grabberOf(raid),
       crab: this.crabOf(raid),
       ...this.summonWallTemplatesOf(stage, enemyUnits),
@@ -528,34 +513,6 @@ export class RaidManager {
           damage: a.damage ?? 0,
         };
       });
-  }
-
-  /** Build the raid's environmental-hazard config (null if it has none). Damage
-   *  obstacles (Beach/Tree/Valentine) carry no source damage value, so a small
-   *  default is used; grab hazards (Lawyers cars / Circus trapeze) seize a zombie
-   *  instead and spawn on a steady cadence. Real hazard art (by raid id) is used
-   *  where it ships; anything unmapped falls back to a round warning dot. */
-  private hazardOf(raid: RaidDef): HazardConfig | null {
-    // Ground-crossing obstacle/grab hazards are DISABLED for now — the little sprite/dot
-    // sliding along the lane read as an out-of-place "ground projectile" and didn't fit the
-    // scene. The mechanic (Beach crab, Tree World turtle, Lawyers/Circus grab) is preserved
-    // below; flip this early-return off to bring it back once the visuals are right.
-    return null;
-    // eslint-disable-next-line no-unreachable
-    if (raid.obstacleLimit && raid.obstacleSpawnSecs > 0) {
-      return {
-        limit: raid.obstacleLimit,
-        spawnMs: raid.obstacleSpawnSecs * 1000,
-        damage: HAZARD_DAMAGE,
-        sprite: OBSTACLE_SPRITE[raid.id] ?? "",
-        initial: !!raid.initialSpawnClass,
-        grab: false,
-      };
-    }
-    if (raid.hasGrab) {
-      return { limit: 1, spawnMs: GRAB_SPAWN_MS, damage: 0, sprite: GRAB_SPRITE[raid.id] ?? "", initial: false, grab: true };
-    }
-    return null;
   }
 
   /** Build the boss's projectile config for the selected stage. Returns null when

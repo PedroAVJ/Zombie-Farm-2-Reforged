@@ -2392,7 +2392,6 @@ async function main() {
       enemyUnits: setup.enemyUnits,
       bossThrow: setup.bossThrow,
       bossSpecials: setup.bossSpecials,
-      hazard: setup.hazard,
       grabber: setup.grabber,
       crab: setup.crab,
       summonTemplate: setup.summonTemplate,

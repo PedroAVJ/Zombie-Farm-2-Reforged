@@ -242,7 +242,6 @@ export function createPinnedSim(config: PinnedRaidConfig): BattleSim {
     config.bossThrow,
     config.concentration,
     config.bossSpecials,
-    null,
     undefined,
     config.summonTemplate,
     config.wallTemplate,

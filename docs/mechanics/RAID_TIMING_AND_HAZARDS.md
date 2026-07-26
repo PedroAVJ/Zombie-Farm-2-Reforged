@@ -111,17 +111,21 @@ items — see below.)
 **Brains ARE a real table** — `gameplayParameters.brainDropRateInvasion`
 (read by `buildStandardBossLootTable`):
 
-| Amount | Chance (lower → upper) |
-|---|---|
-| 10 brains | 5% → **10%** |
-| 30 brains | 2% → **4%** |
-| 50 brains | 1% → **2%** |
+| Amount (shipped) | Recovered amount | Chance (lower → upper) |
+|---|---|---|
+| **1 brain** | 10 | 5% → **10%** |
+| **3 brains** | 30 | 2% → **4%** |
+| **5 brains** | 5 | 1% → **2%** |
 
 The chance scales with the raid's level from the lower limit up to the upper ("optimal")
 limit, reaching it at `epicBossLootLevelWithOptimalChances` = **level 20**. These are the
-recovered base rates with the live game's 2× invasion-brain multiplier applied; amounts
-remain 10/30/50. Online rolls are pinned at start and credited only after replay verifies
-that the boss was defeated.
+recovered base rates with the live game's 2× invasion-brain multiplier applied
+(`BRAIN_DROP_RATE_MULTIPLIER = 2`, `BRAIN_OPTIMAL_LEVEL = 20` in `src/raid/brainDrops.ts`).
+
+**Amounts diverge from the recovered source on purpose.** The brainflation revert made a brain
+~10x more valuable, so the shipped stacks are 1/10 of the recovered 10/30/50 — the drop
+*chances* are untouched. Tiers roll rarest-first, so a boss awards at most one stack. Online
+rolls are pinned at start and credited only after replay verifies that the boss was defeated.
 
 Gold: `getStandardGoldLootForStageLevel:` + `goldDistributionLevelCoefficient` = 2.3
 (win gold scales with level); wiki figures still used where exact source gold is unmapped.
@@ -162,16 +166,18 @@ configs and threads them to the scene.
   - `pixelFire` → AoE chip to all fighting zombies.
   - `turnZombie` → removes your front zombie (turned against you).
   - `telekinesis` → a heavy single-target hit.
-- **Obstacle hazards** — Beach/Tree World/Valentine spawn crossing obstacles every
-  `obstacleSpawnTimer` up to `obstacleLimit`; `initialSpawnClass` drops one at the start
-  (the beach Crab). They traverse the lane and damage zombies they touch.
+- **Beach crab** — `initialSpawnClass` identifies the `BeachStageActorCrab`, and
+  `obstacleSpawnTimer` / `obstacleLimit` set its cadence and concurrent cap. It grabs and carries
+  a zombie off rather than damaging it (see the crab bullet below). This is the **only** consumer
+  of the obstacle fields; the generic crossing-obstacle hazard that once used them was a
+  fabrication and has been removed — see "REMOVED" at the end of this document.
 - **Knockback + stun** — an enemy attack with `knockBack` shoves the struck zombie back
   down the lane and re-slots it to the **back of the formation** (it must re-advance);
   a `stun` attack freezes it for `stunTimer`. Derived per-enemy from `Attacks.json` in
   `buildEnemyUnits`; applied in `BattleSim.tryAttack`. Verified headlessly (interrupted /
   frozen zombies deal measurably less damage over a fixed window).
-- **Brain drop table** — `RaidManager.rollBrainDrop` implements the 10/30/50-brain table
-  above, level-scaled toward the upper chances (replaces the old flat 5%).
+- **Brain drop table** — `src/raid/brainDrops.ts` (`rollBrainDrop`) implements the 1/3/5-brain
+  table above, level-scaled toward the upper chances (replaces the old flat 5%).
 - **Item loot tier-weighting** — `src/raid/LootTable.ts` (`rollLootTier`) encodes the
   bracket→threshold→tier tables above; `RaidManager.rollLoot` picks one tier from the
   luck bracket (`dice`), filters to eligible items (unique-owned / limit via the new
@@ -218,11 +224,23 @@ as an optimistic ceiling and the player concedes the difference via `clientWin`/
 Those concessions are merged one-way and can only worsen the submitting player's own result.
 See `../../SECURITY.md`.
 
+**REMOVED — the crossing-obstacle hazard was a fabrication.**
+A ground-crossing obstacle/grab mechanic (a sprite or dot sliding down the lane, damaging or
+seizing zombies) was implemented during development and is **not a base-game mechanic**. It has
+been deleted outright: `HazardConfig`, `RaidManager.hazardOf`, `BattleSim.spawnObstacle` /
+`stepObstacles`, the `hazard` / `crossing` / `grab` projectile flags, and the `obstacleTimer`
+snapshot field are all gone. It was previously described here and in the README as "disabled
+pending better visual integration", which wrongly framed an invention as deferred work. Do not
+reintroduce it without ground truth from the binary.
+
+Note the distinction from the recovered data above: `obstacleLimit` / `obstacleSpawnTimer` /
+`initialSpawnClass` **are** real fields in `Enemies.json`, and they are still read — but only to
+drive the Beach crab. What was never established is a faithful crossing-obstacle behaviour.
+
 **DEFERRED:**
 - The Circus trapeze, the Beach crab, and both walls ship real sprites (`hazard_trapeze_girl.png`,
-  `hazard_beach_crab.png`, `carrotWall.png`, `junkWall.png`). The remaining crossing OBSTACLES —
-  Tree World turtle, Valentine's geyser, and the Beach sea-mine — stay disabled (`hazardOf`
-  returns null) pending a non-fabricated model + atlas frames; the Lawyers cars aren't wired.
+  `hazard_beach_crab.png`, `carrotWall.png`, `junkWall.png`). The Lawyers cars (`hasGrab`, no
+  shipped sprite) are still unwired.
 - Round length is the observational 3:00 default; not sourced from a named data field.
 
 (Pirate / Ninja / City (Lawyers) stage art is no longer a gap — the rigs were recovered and

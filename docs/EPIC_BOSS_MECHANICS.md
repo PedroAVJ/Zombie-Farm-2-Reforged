@@ -35,9 +35,20 @@ and encounter timers, token stockpile, level/HP, rewards, activation, and Fight 
 
 ## Rewards
 
-Every cleared level awards `max(1, round(level / 4))` brains and 100 times that
-amount in gold, in addition to the existing loot roll and quest rewards. This scales
-from 1 brain and 100 gold at the early levels to 10 brains and 1,000 gold at level 40.
+Gold follows `max(1, round(level / 4)) * 100` per cleared level, scaling from 100 gold at the
+early levels to 1,000 gold at level 40. This curve is deliberately **unchanged** by the
+brainflation revert.
+
+Brains are on a separate, sparse schedule (a single brain is now ~10x more valuable, so runs
+hand them out at milestones instead of every level):
+
+- +1 brain on every 5th level cleared (5, 10, 15, 20, 25, 30, 35, 40).
+- +1 **bonus** brain at the boss's top tiers — levels 30/35/40 on a full 40-level ladder, or
+  level 20 for the short-ladder Dr. Groundhog.
+- Non-milestone levels award **no** brains at all.
+
+So a cleared level yields 0, 1, or at most 2 brains — not the old `round(level / 4)` ramp to 10.
+Both are in addition to the existing loot roll and quest rewards.
 
 Each boss uses its own recovered quest milestones, decor pool, and tame pet. Groundhog's
 chain grants Dr. Zombie (5), an Invasion Voucher (10), one brain (15), and Golden Dice

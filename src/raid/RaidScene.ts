@@ -16,7 +16,7 @@ import { RaidActor } from "./RaidActor";
 import { EnemyActor, type EnemyAttackPose } from "./EnemyActor";
 import { ParticleField, ParticleConfig } from "./Particles";
 import { ABILITY_POOL } from "../zombie/traits";
-import { BossSpecial, BossThrowConfig, CombatUnit, CrabConfig, GrabberConfig, HazardConfig, RaidDef, RaidLevelAsset, RaidOutcome } from "./types";
+import { BossSpecial, BossThrowConfig, CombatUnit, CrabConfig, GrabberConfig, RaidDef, RaidLevelAsset, RaidOutcome } from "./types";
 import { RAID_TICK_MS, type RaidReplayInput } from "./replay";
 import { extrapolatePosition, interpolatePosition, visualCountdown } from "./renderInterpolation";
 import { HEADLESS_HEIGHT_SCALE } from "../zombie/displayScale";
@@ -36,8 +36,6 @@ export interface RaidSceneParams {
   bossThrow: BossThrowConfig | null;
   /** Boss special (non-throw) actions to schedule during the fight. */
   bossSpecials?: BossSpecial[];
-  /** Environmental obstacle hazards for this raid (null/omitted = none). */
-  hazard?: HazardConfig | null;
   /** Minion the boss's summonBoss action spawns (null/omitted = none). */
   summonTemplate?: CombatUnit | null;
   /** Blocker the boss's wall action spawns (null/omitted = none). */
@@ -315,7 +313,6 @@ export class RaidScene {
 
   // Boss projectiles.
   private bossThrow: BossThrowConfig | null;
-  private hazardSprite = ""; // this raid's obstacle/grab art, preloaded for syncProjectiles
   private wallTemplate: CombatUnit | null; // preloaded so a spawned wall renders as a sprite
   private grabberSprite = ""; // Trapeze Artist art (preloaded), "" if this raid has none
   private crabSprite = ""; // Beach crab art (preloaded), "" if this raid has none
@@ -417,7 +414,6 @@ export class RaidScene {
     this.onStrike = params.onStrike ?? null;
     this.onBrainRelease = params.onBrainRelease ?? null;
     this.bossThrow = params.bossThrow;
-    this.hazardSprite = params.hazard?.sprite ?? "";
     this.wallTemplate = params.wallTemplate ?? null;
     this.grabberSprite = params.grabber?.sprite ?? "";
     this.crabSprite = params.crab?.sprite ?? "";
@@ -434,7 +430,6 @@ export class RaidScene {
       params.bossThrow,
       !!params.concentration,
       params.bossSpecials ?? [],
-      params.hazard ?? null,
       params.roundMs,
       params.summonTemplate ?? null,
       params.wallTemplate ?? null,
@@ -568,10 +563,6 @@ export class RaidScene {
     for (const opt of this.bossThrow?.options ?? []) {
       if (this.projTex.has(opt.sprite)) continue;
       this.projTex.set(opt.sprite, await loadTex(raidImage(opt.sprite)));
-    }
-    // Environmental hazard art (falling obstacle / grab), so it isn't a warning dot.
-    if (this.hazardSprite && !this.projTex.has(this.hazardSprite)) {
-      this.projTex.set(this.hazardSprite, await loadTex(raidImage(this.hazardSprite)));
     }
     // Trapeze Artist art + layer (above the field so it's tappable while carrying).
     if (this.grabberSprite) {
@@ -1817,7 +1808,7 @@ export class RaidScene {
       const visual = extrapolatePosition(pr.x, pr.y, pr.vx, pr.vy, this.simAccumulatorMs, RAID_TICK_MS);
       let px = this.mapX(visual.x);
       let py = this.mapProjY(visual.y);
-      if (!pr.hazard && !pr.crossing) {
+      {
         // Boss throw/laser: re-anchor the ORIGIN to the boss's hand, fading the shift
         // to zero as the projectile nears the ground so the LANDING still tracks the
         // target zombie. (The raw sim origin maps to a point down-left of the boss.)
