@@ -3,7 +3,7 @@
 // requirement dispatches the quest's reward and unlocks any quest gated behind it.
 //
 // Quests activate when their prerequisite is complete AND the player meets the level
-// gate. All 96 quests load; the farm loop, raids/invasions (loot/perfect/success),
+// gate. All 105 shipped quest records load; the farm loop, raids/invasions (loot/perfect/success),
 // and the Zombie Pot combiner have live emitters (see LIVE_EVENTS below). Quests
 // gated on still-unsupported categories (social and photo/camera) simply never
 // advance — dormant, not broken. Epic quests are selected per active boss event.

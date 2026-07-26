@@ -15,14 +15,22 @@ offline-only mode and never contacts the Worker.
 
 Core routes:
 
-- `POST /auth`
-- `POST /bootstrap`
-- `POST /commands`
-- `PUT /presentation`
-- `POST /raid/start`
-- `POST /raid/finish`
-- `POST /raid/revive`
-- account/session, friend, visit, and gift routes in `src/index.ts`
+- `GET /` — unauthenticated health probe
+- `POST /auth` — Google ID token → session JWT
+- `POST /bootstrap` — gameplay + presentation + writer + social + resumable-raid projection
+- `POST /commands` — allowlisted semantic command batch (account-version CAS)
+- `PUT /presentation` — versioned presentation-only document
+- `POST /writer/acquire`, `POST /writer/release`, `GET /writer/status` — exclusive writer lease
+- `POST /raid/start`, `POST /raid/finish`, `POST /raid/revive`
+- `POST /epic-boss/activate|end|start|finish`
+- `GET /black-market/orders`, `GET /black-market/summary`, `POST /black-market/orders`,
+  `POST /black-market/orders/:id/cancel`, `POST /black-market/orders/:id/fulfill`
+- `GET /me`, `POST /username`, `POST /session/refresh`, `POST /logout`,
+  `POST /session/logout-all`, `GET /session/list`, `POST /session/revoke`
+- `GET /friends`, `GET /friends/requests`, `GET /friends/:id/save` (read-only visit projection),
+  `POST /friends/add|accept|reject|remove|block`, `POST /friends/code/rotate`
+- `POST /gifts`, `GET /gifts/inbox`, `POST /gifts/claim`
+- `POST /dev/fixture/*` — DEV-only test fixtures, gated by `DEV_AUTH`
 
 `/commands` applies allowlisted semantic gameplay commands against server-held state
 using an account version, writer generation, sequential commands, and a D1 transaction
@@ -31,24 +39,39 @@ state-sync, action, and raid-checkpoint routes are authenticated but return
 `410 update_required`.
 
 `/raid/start` pins the combat config (enemy set and player roster, built from
-server-owned tables and catalogs) into the session row. `/raid/finish` accepts only
-`{ sessionId, finalTick, inputs }` — there is no field through which a client can
-assert a `win`, survivor, or casualty. The outcome is derived by replaying that input
-transcript against the pinned config (`src/raidVerifier.ts` → `src/raid/replay.ts`),
-and rewards are priced from the server catalog against the replayed survivor ratio. An
-elapsed-time gate (`future_finish`) and ruleset-version pinning (`stale_ruleset`) are
-defense-in-depth on top of the replay, not substitutes for it. Epic Boss finishes use
-the same path.
+server-owned tables and catalogs) into the session row. `/raid/finish` accepts
+`{ sessionId, finalTick, inputs, clientWin?, clientLosses? }`. The outcome is derived by
+replaying that input transcript against the pinned config (`src/raidVerifier.ts` →
+`src/raid/replay.ts`), and rewards are priced from the server catalog against the replayed
+survivor ratio. An elapsed-time gate (`future_finish`) and ruleset-version pinning
+(`stale_ruleset`, currently `RAID_RULESET_VERSION = 6`) are defense-in-depth on top of the
+replay, not substitutes for it.
+
+The optional `clientWin` / `clientLosses` fields exist because the Beach crab and Circus
+trapeze hazards run **client-only** — `raidVerifier.grabberOf` returns `null`, so the server
+replays the un-harassed fight, which is an optimistic ceiling. They are merged strictly
+one-way (`win = !retreated && replayOutcome.win && !conceded`; conceded deaths are
+intersected with zombies the replay brought home alive), so a client can only concede a
+worse result for itself. Epic Boss finishes use the same replay path and have **no**
+concession field.
 
 ## Current security restrictions
 
-- Raid start/finish do not yet join the `/commands` account-version transaction and can
-  race command writes.
-- A placed Plowing Monolith allows a repeatable remove/re-plow XP loop.
-- `MIN_PROTOCOL_VERSION` gates `/commands` only. Use `MUTATIONS_DISABLED=1` to stop
-  commands, presentation writes, and both raid mutation routes during an incident.
-- Paid currency, trading, competitive rankings, and PvP must remain disabled until the
-  release gates in `../SECURITY.md` pass.
+- If a transcript fails replay with `truncated_transcript`, `illegal_bubble`,
+  `illegal_ability`, or `input_after_finish` **and** the client conceded, the finish settles
+  as a synthesised zero-reward loss instead of rejecting, skipping roster-partition
+  validation. It grants nothing, but it is a gap in "every settlement is replay-verified"
+  and is recorded in the audit ledger.
+- `MIN_PROTOCOL_VERSION` gates `/commands` only; other mutation routes are gated by the
+  writer lease's `X-Integrity-Version` / `WRITER_LEASE_MODE` check. Use `MUTATIONS_DISABLED=1`
+  to stop commands, presentation writes, and the raid, Epic Boss, and Black Market mutation
+  routes during an incident.
+- Player-to-player trading now ships as the Black Market, which makes value transferable
+  between accounts. Keep it behind `BLACK_MARKET_ENABLED` in any environment where the
+  release gates in `../SECURITY.md` have not been confirmed.
+- Paid currency, competitive rankings, and PvP must remain disabled until those gates pass.
+- A raid and an Epic Boss fight are mutually exclusive: `/raid/start` rejects with
+  `409 raid_in_progress` while an Epic Boss session is live, and vice versa.
 
 ## Local development
 

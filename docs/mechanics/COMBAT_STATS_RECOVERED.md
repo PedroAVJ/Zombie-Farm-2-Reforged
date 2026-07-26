@@ -65,8 +65,10 @@ target: hitPoints -= max(0, damage − armor) × (1 − finalDamageReduction)   
 the recovered **1.0/0.85/0.7/0.55 lineup-depth band** (`lineupDamageBand`, used in
 `CombatEngine.hitDamage` + `BattleSim`) and enemies always hit at **band ×1.0**. The old
 `ENEMY_DAMAGE_MULT=2` per-hit enemy inflation is **gone**, and the anti-one-shot 1-HP floor is now
-implemented (`BattleSim.ONE_SHOT_FLOOR`). The **only** remaining deliberate knob is
-`ENEMY_ATTACK_PACE=2` in `balance.ts`: the disassembled enemy clock is `1/dex`, but because the sim
+implemented (`BattleSim.ONE_SHOT_FLOOR` — note it fires **once per unit**, gated on
+`oneShotProtectionUsed` and requiring `hp > 1`, not on every hit). The remaining deliberate knobs
+in `balance.ts` are `ENEMY_ATTACK_PACE=2`, `PROJECTILE_DAMAGE_MULT=2`, and
+`BOSS_SPECIAL_DAMAGE_MULT=2`. On the first: the disassembled enemy clock is `1/dex`, but because the sim
 doesn't model attack-animation time, enemy cadence is kept at `2/dex` to match reference footage
 (a Pirate brute at dex 0.5 hitting ~every 4 s). Per-hit enemy damage is faithful (×1.0); only the
 tempo is fudged.
@@ -104,7 +106,8 @@ HP came from the CombatUnit (`con × 100`) — an HP-inflated, ~10× too-slow fi
 to `deriveHitDamage(str×10, mult) × 0.7` (matching `resolveRaid`); the flat `× 0.7` was then
 replaced by the faithful lineup-depth band (players 1.0/0.85/0.7/0.55, enemies ×1.0). Boss throw / special /
 hazard chip damage (heuristic, no source value) was scaled ×7 to stay proportional to the
-corrected melee/HP scale (`PROJ_DMG_SCALE`/`SPECIAL_DMG_SCALE` 0.25→1.75, `HAZARD_DAMAGE` 4→28).
+corrected melee/HP scale (`PROJ_DMG_SCALE`/`SPECIAL_DMG_SCALE` 0.25→1.75 in `BattleSim.ts`;
+`HAZARD_DAMAGE` 4→28, which lives in `RaidManager.ts`, not `BattleSim`).
 Verified headlessly: a 5v5 even fight resolves in ~38 s (player wins 4/5) instead of stalling.
 
 The sim LOOP is otherwise still an approximation (attack scheduling, positioning, hazards). The
@@ -231,6 +234,9 @@ Every "pick one weighted entry" in the game funnels through this. Given an array
 4. walk the sorted array accumulating `frequency`; return the first entry whose **cumulative**
    frequency exceeds `roll`.
 
+(`combatStats.ts pickByFrequency` implements steps 2-4 but does **not** sort — over a cumulative
+walk the sort does not change the distribution, so this is deliberate, not an oversight.)
+
 So the `frequency` fields all over the data (`Attacks.json` attack variations,
 `UnitStats.json` `attacks[]`/`bossActions[]`, and the loot tables) are **weights in a
 cumulative `arc4random_uniform(Σfreq)` selection** — not percentages. This one primitive drives
@@ -267,9 +273,12 @@ Then `roll` is compared (`vcmpe ; bmi "select this tier"`) against a ladder of c
 thresholds, and **which ladder is used depends on `[fightMan bonusRoll]`** — i.e. Golden Dice
 swaps in a more-generous threshold set. Recovered threshold constants from the function's
 literal pool (0x96d40+): **`0.14, 0.24, 0.59, 0.74, 0.79, 0.84, 0.89, 0.92`** (and `0.09`).
-These are two/three cumulative rarity bands (common→rare→epic); the exact
-threshold→tier assignment and which set is the bonus set need the branch order transcribed —
-**values are ground truth, the per-tier labelling is not yet pinned.**
+**RESOLVED since this was written.** The branch order was transcribed and implemented in
+`src/raid/LootTable.ts`: there are **six** tiers (0-5, not two or three bands), and the ladder is
+selected by a luck bracket keyed on Golden Dice spent — B=0 reaches tiers 0-4, B=1 reaches 1-5,
+B=2 reaches 2-5, and B≥3 compresses toward tier 5 via `r' = r + 0.10n`, `d = 0.9ⁿ` (n = B−3),
+`r' < 0.39d → t3`, `r' < 0.79d → t4`, else t5. So each die raises the bracket rather than granting
+an extra roll. See the tier table in `RAID_TIMING_AND_HAZARDS.md`.
 
 ## Which items are in the table — `-[ZFFightSummary lootTableFromCategory:]` (0x967a5)
 
@@ -337,8 +346,13 @@ currency + unlock popup) is structurally correct; don't hard-code magnitudes fro
 
 # Implementation status (what got wired into the reimpl)
 
-- **Zombie sell = floor(baseCost/2)** — DONE (`economy.ts`).
-- **Raid standard gold = level×230, bonus gold = level×100** — DONE (`economy.ts` / raid resolve).
+- **Zombie sell = floor(baseCost/2)** — DONE (`economy.ts zombieSellValue`, with a floor of 1).
+- **Raid standard gold = level×230, bonus gold = level×100** — DONE, but in
+  `src/raid/RaidCatalog.ts` (**not** `economy.ts`, which holds only the sell/XP helpers), and only
+  as a **fallback**: authored `raid.goldReward` / `raid.bonusGold` win when non-zero, and the
+  result is scaled by the survival fraction, so casualties cut the payout. Bonus gold is paid only
+  when the loot roll returns the "Bonus Gold" entry. Online, both gold and the drop are
+  server-authoritative.
 - **Combat final-stat formulas + veterancy +5%/rank** — DONE (`combatStats.ts`).
 - **Damage = max(0, dmg−armor) × (1−DR)** — DONE (`combatStats.ts`).
 - **Frequency-weighted `arc4random_uniform(Σfreq)` selection** — DONE (`combatStats.ts pickByFrequency`).
@@ -353,6 +367,8 @@ currency + unlock popup) is structurally correct; don't hard-code magnitudes fro
 - **All of the above locked in by `npm test`** (Vitest, `src/**/*.test.ts`).
 - **Anti-one-shot 1-HP floor** — IMPLEMENTED as an inferred heuristic (`BattleSim.ONE_SHOT_FLOOR`);
   the exact in-binary state-bit (`0x10`) semantics stay inferred, so verify against play.
-- **Deferred / partial:** drop-rarity tier labels + which ladder is the Golden-Dice bonus set,
-  the `ivar_0x1ec` gold divisor, and level-up currency magnitudes —
+- **Item loot tiering** — DONE (`src/raid/LootTable.ts`): six tiers, four Golden-Dice luck
+  brackets, eligibility filtering (owned uniques and `limit`-capped items dropped) and a
+  walk-**down** to commoner tiers when the chosen tier is empty.
+- **Deferred / partial:** the `ivar_0x1ec` gold divisor and level-up currency magnitudes —
   left as-is pending a decompiler / in-game verification.

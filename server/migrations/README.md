@@ -18,7 +18,7 @@ Migration filenames are deployed identities, not cosmetic labels. The two histor
 D1 database see the renamed destructive migration as pending. `npm run migrations:check`
 allows only that exact legacy pair, rejects future duplicate/gapped numbers, and verifies
 that this document's fresh-database baseline contains every migration filename. New
-migrations must therefore continue at `0027` and use one unique number per file.
+migrations must therefore continue at `0031` and use one unique number per file.
 
 ---
 
@@ -77,8 +77,11 @@ manual `schema.sql` touched the table):
 | `0007_raid_rewards` | `ALTER TABLE raid_sessions ADD COLUMN raid_id` | Fails if `raid_id` exists. |
 | `0024_epic_boss_tokens` | `ALTER TABLE epic_boss_runs_v3 ADD COLUMN token_count` | Fails if `token_count` exists. |
 | `0025_writer_lease` | Four `ALTER TABLE account_runtime_v3 ADD COLUMN` statements | Fails if a writer-lease column was added manually. |
+| `0030_black_market_specific_mutations` | `ALTER TABLE black_market_orders ADD COLUMN mutation_required` (with a `CHECK` constraint) | Fails if `mutation_required` exists. |
 
-The remaining current migrations use repeatable deletes or `CREATE … IF NOT EXISTS`.
+The remaining current migrations use repeatable deletes or `CREATE … IF NOT EXISTS`
+(including `0029_restore_ledger`, which recreates the `ledger` table dropped by the v3
+reset — gift claims now write their XP reward there, so an upgraded database needs it).
 Read destructive reset migrations before applying them; repeatable does not mean safe
 for data retention.
 
@@ -100,6 +103,10 @@ wrangler d1 execute zombiefarm --remote --command \
   migrations `0021` and `0024`. The `0022` retry-skip table is legacy and unused.
 - For post-raid revival support, verify `raid_revivals_v3` and its
   `idx_raid_revivals_pending` index exist after migration `0023`.
+- For gift claiming, verify the `ledger` table and `idx_ledger_account` exist after
+  migration `0029` — a claim writes its XP reward there and fails without it.
+- For specific-mutation Black Market orders, verify
+  `black_market_orders.mutation_required` exists after migration `0030`.
 
 ## Going forward
 

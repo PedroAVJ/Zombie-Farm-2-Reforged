@@ -13,7 +13,7 @@ plus `Market.json`, `TileProperties.json`, and `Pets.json` records.
 
 | Boss | Source identity | Coverage | Important caveat |
 | --- | --- | --- | --- |
-| Dr. Groundhog | `epicBossID: 1` | Complete authored set | Already prepared for the web runtime |
+| Dr. Groundhog | `epicBossID: 1` | Complete authored set | (All eight bosses are now prepared for the web runtime — see the status note below) |
 | Loco Locust | `epicBossID: 2` / `EPIC_BOSS2` | Complete authored set | Banjo has its own sound |
 | Bully Frog | `epicBossID: 3` | Complete authored set | Earlier audit saw only two animated rewards; all eight decor rewards are present |
 | Foul Owl | `epicBossID: 4` | Complete authored set | Four snowmen are also milestone loot |
@@ -28,6 +28,19 @@ not be classified as Epic Boss assets without new evidence.
 
 All filenames below are relative to
 `ZF2R_extracted/raw/ios-1.0/1.0/Payload/ZF2R.app/`.
+
+> **Read that scope line literally.** This document inventories the *extracted bundle*, not the
+> repo. The prep scripts normalize what ships into `public/assets/epic-bosses/<boss>/` under
+> generic names (`boss.png`, `portrait.png`, `source-sheet.png`, `background-NN.png`,
+> `loot-icon.png`, `quest-icon.png`), and they deliberately do not ship everything listed here —
+> several market icons, banners, and `.plist` companions named below have no shipped counterpart.
+> Do not treat a filename in this document as evidence that the asset is in the runtime; check
+> the boss's directory.
+>
+> **Runtime status (2026-07-25):** all eight bosses ship a `catalog.json` and are exported from
+> `src/epicBoss/catalog.ts`; each directory carries `boss.png`, `portrait.png`, `loot-icon.png`,
+> `quest-icon.png`, `intro-1..3.png`, `music.wav`, `punch.wav`, `intro.caf`, and its backgrounds
+> (15 for the five early bosses, 12 for EPB 8-10).
 
 ## Shared event assets
 
@@ -169,8 +182,12 @@ The material gap is not images; it is configuration for EPB 8-10:
 
 - no `EpicEventEnemy` definitions for Rocky Rhino, General Larvaelus, or Mystical Mamba;
 - no plist/frame-coordinate metadata paired with their 2048x2048 boss textures;
-- no recovered level animation lists, stats, loot thresholds, or quest chains for those
-  three bosses;
+- no recovered level animation lists or quest chains for those three bosses. Their stats and
+  loot thresholds are no longer absent but **reconstructed, not recovered**: each ships
+  `baseHp` / `multipliers` / `maxLevel` / `unitStats` and a loot ladder (Rocky Rhino and General
+  Larvaelus `[10,20,30,35,40]`, Mystical Mamba `[15,30,40]`), flagged `"reconstructed": true`
+  where the five early bosses carry `false`. Their `animations` object is still empty, and they
+  ship `source-sheet.png` with no `source-sheet.plist`;
 - no boss-specific battle background beyond the 12 shared `bg_*` layers; and
 - no trustworthy Rambo Raccoon Epic Boss set.
 

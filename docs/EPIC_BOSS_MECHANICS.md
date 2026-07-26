@@ -2,10 +2,15 @@
 
 ## Implemented coverage
 
-Market → Epic Boss offers all eight recovered bosses. Starting one spends 100 brains
-and creates a 14-day wall-clock run; only one boss event can be active at a time. A run
-can be purchased again after its final level is completed or the event expires, and
-purchasing never extends an active run.
+Market → Epic Boss offers all eight recovered bosses. Starting one creates a 14-day
+wall-clock run; only one boss event can be active at a time. A run can be purchased again
+after its final level is completed or the event expires, and purchasing never extends an
+active run.
+
+Costs and unlocks (post-"brainflation revert"; server-enforced in `v3/epicBoss.ts`):
+Dr. Groundhog costs **5 brains** and unlocks at **player level 24**; the other seven cost
+**10 brains** and unlock at **level 32**. A locked activation returns `403 locked` with the
+required level, and the Market card renders "Available at player level N".
 
 Groundhog uses 20 levels. The other seven bosses use their recovered level-40 reward
 tracks. Maximum HP is `round(2000 * LevelMultiplier[level - 1])`, using
@@ -15,7 +20,8 @@ is held constant for reconstructed levels 22-40. Each fight has a hard
 distractions or consuming Concentration. The normal army cap and permanent invasion
 casualty rules apply, and Epic Boss attack order is stored separately.
 
-Every attempt costs either one Boss Token or 10 brains; there is no retry timer. While
+Every attempt costs either one Boss Token or 1 brain (`EPIC_BOSS_FIGHT_BRAIN_COST`, reduced
+from 10 by the brainflation revert); there is no retry timer. While
 an event is active, harvesting a vegetable crop can yield a Boss Token. The chance uses
 the recovered 35% starter-loot rate as a ceiling and scales with both grow time and
 harvest value, so longer and more valuable crops are more efficient. Tokens can be

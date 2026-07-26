@@ -1,6 +1,6 @@
 # Security and Anti-Cheat Status
 
-Last reviewed: 2026-07-19
+Last reviewed: 2026-07-25
 
 ## Reporting a vulnerability
 
@@ -15,7 +15,10 @@ lease or rate limits.
 
 Out of scope: cheats that only affect a purely offline/local save (there is no server
 and no other player to defend against there — the client is the authority by design),
-and the known gaps already documented below.
+and the known gaps already documented below. In particular, the `clientWin`/`clientLosses`
+raid concession is **intended** — it exists because two hazards are client-only, and it can
+only make the submitting player's own result worse. A report showing it can improve an
+outcome, affect another account, or yield rewards is very much in scope.
 
 This is a non-commercial hobby project with no bounty and best-effort response times.
 Please give a reasonable window before disclosing publicly.
@@ -23,7 +26,7 @@ Please give a reasonable window before disclosing publicly.
 ## Scope and status
 
 This document describes the current source tree at gameplay protocol v3 (client integrity
-version 4, raid ruleset version 4). It covers authentication, sessions, the exclusive writer
+version 4, raid ruleset version 6). It covers authentication, sessions, the exclusive writer
 lease, social features, gameplay commands, persistence, economy, farms, quests, raids, Epic
 Boss runs, the Black Market, rate limiting, and operational controls.
 
@@ -38,10 +41,16 @@ Protocol v3 is a server-authoritative base for farm, shop, inventory, object, st
 raid, Epic Boss, Black Market, and social operations. The three anti-cheat gaps that previously
 blocked valuable/competitive use have been closed:
 
-1. **Raid outcomes are now server-verified by deterministic replay.** `/raid/finish` no longer
-   accepts a client-asserted `win`/`survivors`/`losses`. It replays the pinned combat with the
-   submitted input transcript and derives the outcome server-side (`server/src/raidVerifier.ts`
-   → `src/raid/replay.ts`). Epic Boss finishes replay the same way.
+1. **Raid outcomes are server-verified by deterministic replay, with one-way concessions.**
+   `/raid/finish` replays the pinned combat with the submitted input transcript and derives the
+   outcome server-side (`server/src/raidVerifier.ts` → `src/raid/replay.ts`). Since ruleset
+   version 6 it also accepts optional `clientWin` / `clientLosses` fields, because the Beach crab
+   and Circus trapeze hazards are client-only and the verifier deliberately replays the
+   *un-harassed* fight. These are merged **monotonically downward** (`server/src/v3/raid.ts`):
+   `win = !retreated && replayOutcome.win && !conceded` (AND, never OR), and conceded casualties
+   are intersected with the zombies the replay had escaping. A client can therefore make its own
+   result worse, never better — it cannot claim a win the replay did not produce, nor save a
+   zombie the replay killed. Epic Boss finishes replay the same way and have **no** concession path.
 2. **Raid, Epic Boss, and Black Market mutations are serialized with `/commands`.** All mutation
    routes acquire the same exclusive per-account active-operation lock (`active_batch_id`) through
    the writer lease, so a raid settlement and a command batch can no longer interleave.
@@ -50,8 +59,10 @@ blocked valuable/competitive use have been closed:
    costs gold. Neither path yields cost-free repeatable XP.
 
 **Remaining posture.** Rewards and progression are now server-derived and catalog-bounded. The
-residual risks below are integrity limitations (bot-optimal input, deployment-gated enforcement,
-non-deterministic loot rolls, session compromise, offline mutability), not outcome forgery. This
+residual risks below are integrity limitations (client-only hazards and their concession fallback,
+bot-optimal input, deployment-gated enforcement, non-deterministic loot rolls, session compromise,
+offline mutability), not upward outcome forgery — no path lets a client claim a better result than
+the replay produced. This
 build is a non-commercial fan reimplementation with no real payment rail, so "paid currency" is
 notional. `MUTATIONS_DISABLED=1` remains the incident stop for all gameplay writes.
 
@@ -108,17 +119,22 @@ notional. `MUTATIONS_DISABLED=1` remains the incident stop for all gameplay writ
 
 - `/raid/start` pins the entire combat configuration from server-owned roster and catalog state
   (`buildPinnedV3Raid`): player/enemy units, boss throw/specials, summon and wall templates,
-  grabber, and concentration. The pinned config and `ruleset_version` are stored on the session
-  (migrations `0016`, `0017`, `0027`).
-- `/raid/finish` requires a matching `rulesetVersion` (`RAID_RULESET_VERSION = 4`; a mismatch
-  returns `426 stale_ruleset` and closes the session), rejects a `finalTick` beyond the paced
+  and concentration. The pinned config and `ruleset_version` are stored on the session
+  (migrations `0016`, `0017`, `0027`). The config still carries a `grabber` field, but since
+  ruleset 6 `raidVerifier.grabberOf` returns `null` unconditionally — hazards are client-only
+  and are not simulated server-side at all.
+- `/raid/finish` requires a matching `rulesetVersion` (`RAID_RULESET_VERSION = 6`; a mismatch
+  returns `409 stale_ruleset` and closes the session), rejects a `finalTick` beyond the paced
   elapsed real time (`future_finish`), then **replays** the pinned sim with the submitted input
-  transcript and derives `win`/`survivors`/`losses`/`retreated`. Illegal inputs (e.g. an
-  un-unlocked ability) are rejected by the replay.
+  transcript and derives `win`/`survivors`/`losses`/`retreated`, subject to the one-way
+  concession merge described above.
 - Casualties are deleted, survivor veterancy is incremented, and rewards (gold, first-clear XP,
-  brains, one loot roll) are computed server-side and catalog-bounded. Roster culling is
-  server-only: a forged casualty submitted through `/roster/actions` is rejected
+  brains, one loot roll) are computed server-side and catalog-bounded. On the concession-fallback
+  branch survivors are deliberately emptied so **no unverifiable veterancy is awarded**. Roster
+  culling is server-only: a forged casualty submitted through `/roster/actions` is rejected
   (`server_only_raid_result`).
+- Every rejected finish writes a durable `raid_finish_rejected` row to `audit_events_v3`
+  (stale ruleset, bad session config, replay failure, roster mismatch).
 - Every finish write carries a session-scoped `result_json` CAS guard and checks that exactly
   one row changed; a raced/duplicate finish returns the stored result. Post-battle revival
   restores casualties only from a server-owned snapshot, one brain each, idempotently.
@@ -129,8 +145,18 @@ notional. `MUTATIONS_DISABLED=1` remains the incident stop for all gameplay writ
 
 - Buy/sell-zombie orders escrow the counter-value on the server: a buy order escrows the brain
   price, a sell order escrows the zombie (with its mutation/veterancy snapshot).
-- Order creation enforces a per-day order cap, price bounds (`1 … 1,000,000` brains), and a
-  request fingerprint so a retried create is idempotent.
+- Order creation enforces a cap of 10 simultaneously-open orders and 50 per UTC day, price bounds
+  (`1 … 1,000,000` brains), and a request fingerprint so a retried create is idempotent. Both caps
+  are checked twice — pre-flight, and again in the insert's `WHERE` clause so a race cannot exceed
+  them.
+- Buy orders may demand **specific mutations** (`mutation_required`, migration `0030`): a 13-bit
+  mask, legal only on `BUY_ZOMBIE` with `mutated: true`, validated bit-by-bit. Every anatomical
+  slot in the mask must be satisfied; bits within one slot are OR-alternatives; unrequested extra
+  mutations are allowed. The match is compiled into SQL and re-checked inside the fulfillment
+  transaction, not merely pre-flight.
+- Delivery is gated on the **recipient**: `special`-category zombies require player level 20, and
+  colored classes require the matching gravestone to be placed (`server/src/rosterCatalog.ts`).
+  Checked pre-flight and re-checked as a SQL guard inside the fulfillment claim.
 - Fulfillment settles both deliveries atomically against authoritative roster/balance state;
   cancellation returns the escrow. Orders cannot be self-fulfilled or double-settled.
 
@@ -160,6 +186,25 @@ mode a legacy client bypasses fencing, so single-writer serialization is guarant
 upgraded clients. Set `WRITER_LEASE_MODE=enforce` (and confirm the client integrity version)
 before treating serialization as guaranteed for every request.
 
+### Client-only hazards and the concession fallback
+
+Since ruleset 6 the Beach crab and Circus trapeze run only on the client, so the server replays a
+fight that is strictly easier than the one the player saw. The player concedes the difference via
+`clientWin: false` / `clientLosses`. Two consequences:
+
+- A player who genuinely *would* have won can be forced to report a loss by a hostile local
+  modification, but only against their own account — the merge is one-way and zero-reward.
+- If a transcript fails replay with `truncated_transcript`, `illegal_bubble`, `illegal_ability`,
+  or `input_after_finish` **and** the client conceded, the settlement no longer hard-rejects. It
+  closes the session as a synthesised zero-reward loss and skips roster-partition validation
+  (`server/src/v3/raid.ts`). `illegal_ability` and `illegal_bubble` were previously treated as
+  forgery rejections. This is self-harming by construction — it grants nothing — but it is a real
+  hole in the otherwise absolute claim that every settlement is replay-verified. The fallback is
+  recorded in the audit ledger, so its rate is observable.
+
+Closing this properly means simulating the hazards server-side (restoring `grabberOf`) so no
+concession is needed.
+
 ### Bot-optimal input, not forged outcomes
 
 Because the server replays the client's input transcript against the pinned enemies, a modified
@@ -179,8 +224,11 @@ per-session seed would make settlement fully reconstructable.
 
 `/commands` records per-batch rejection counts and the top-level rejection reason in the request
 metric, and durable commands plus raid start/finish/revive are written to the v3 audit ledger.
-There is still no thresholded alerting on repeated forgery/timing/writer-takeover probes;
-failures are observable in logs but not yet triaged automatically.
+Additional durable/structured signals now exist: `raid_finish_rejected` audit rows (with the
+`concessionFallbackError` code when the fallback branch is taken), and `writer_operation_rejected`
+and `gift_claim_deferred` warn logs. There is still no thresholded alerting on repeated
+forgery/timing/writer-takeover probes; failures are observable in logs but not yet triaged
+automatically.
 
 ### Other residual risk
 
@@ -193,22 +241,26 @@ failures are observable in logs but not yet triaged automatically.
 
 ## Verification status
 
-On 2026-07-19 the following local checks passed on a clean working tree:
+On 2026-07-25 the following local checks passed on a clean working tree:
 
 ```text
-npm test                              # client: 274 passed, 1 skipped
+npm test                              # client: 379 passed, 1 skipped (60 files)
 cd server && npm run typecheck        # passed
-cd server && npm test                 # server: 239 passed
-cd server && npm run test:integration # 16 passed
+cd server && npm test                 # server: 267 passed (21 files)
+cd server && npm run test:integration # 34 passed (2 files)
 ```
 
 Coverage now includes the anti-forgery paths directly: replay determinism and illegal-input
 rejection (`src/raid/replay.test.ts`), a forged `/raid/finish` rejected with `bad_final_tick`
-(`server/test/integration/raidRewards.spec.ts`), a settlement that ignores a client-claimed
-outcome and derives the retreat plus the `stale_ruleset` gate (`server/test/integration/v3.spec.ts`,
+(`server/test/integration/raidRewards.spec.ts`), a settlement that derives the retreat rather than
+trusting a client-claimed win plus the `stale_ruleset` gate (`server/test/integration/v3.spec.ts`,
 `raidGates.spec.ts`), a server-only roster-cull rejection (`roster.spec.ts`), and writer-lease
 takeover/replacement (`v3.spec.ts`). Passing tests do not by themselves certify the production
 deployment; confirm the live commit and remote D1 schema per the rollout doc.
+
+Note that `vitest.integration.config.ts` allowlists only `v3.spec.ts` and `blackMarket.spec.ts`;
+the other files under `server/test/integration/` are retired protocol-v2 specs and do **not** run.
+A green integration run is not evidence about them.
 
 ## Required release gates
 
@@ -218,7 +270,8 @@ valuable/competitive features, confirm on the running environment:
 1. `WRITER_LEASE_MODE=enforce` and `MIN_PROTOCOL_VERSION=3` are set, and an un-upgraded client is
    actually rejected on every mutation route.
 2. The live Worker commit and remote D1 schema match this source (migrations applied through
-   `0027_v3_raid_replay.sql`); do not infer production state from source control.
+   `0030_black_market_specific_mutations.sql`); do not infer production state from source control.
+   Note `0030` is a non-idempotent `ALTER TABLE ... ADD COLUMN`.
 3. `SESSION_SECRET` has been rotated for the current deployment and is not a reused historical
    value.
 4. Add thresholded alerting on the existing audit/rejection telemetry (forged-finish attempts,

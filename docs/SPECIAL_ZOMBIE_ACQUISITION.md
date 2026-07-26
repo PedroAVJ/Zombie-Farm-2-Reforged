@@ -4,6 +4,10 @@ The runtime catalog contains 56 zombies in the Special category. Every one has a
 reachable acquisition route; Epic-event rewards and voucher gifts are deliberately
 excluded from the plantable zombie Market.
 
+The routes below account for all 56: 15 Epic Boss rewards, 5 plantable Market crops,
+2 voucher-exclusive, 6 combine-only, and the remaining **28 obtainable only through the
+Black Market** — every one of those is `marketHidden: true` and has no planting route at all.
+
 ## Epic Boss events (15)
 
 | Event | Milestone | Zombie |
@@ -32,7 +36,8 @@ themselves in the Zombie Pot.
 
 ## Market: Special zombie crops (5)
 
-These five permanent specials unlock at level 20 and cost 50 brains to plant:
+These five permanent specials unlock at level 20 and cost 5 brains to plant (the 50-brain
+figure predates the brainflation revert):
 
 - Bombie, Crazy Zombie, Cupid Zombie, Dapper Zombie, and Granny Zombie.
 
@@ -50,6 +55,28 @@ zombie (Crazy and Cupid retain both routes):
 
 Each voucher is limited to one owned copy of its exact result. The 2012 gift uses
 the distinct pink Cupid actor, not the ordinary Cupid actor.
+
+## Black Market (28)
+
+The only route for the 28 `marketHidden` specials — ZomBetty, ZomBloke, George Washington,
+John Hancock, Mummy Zombie, ZomHelga, Zombeach Bum, Zula Girl, Skittles, Zwamp Thing,
+Zcarecrow, Zanta Clause, Diver, JackoZombie, Reindeer, Teddy, Forest, Medusa, Old McZombie,
+Zastronaut, Deputy, Master Ninjombie, MerZombie, Ninjombie, Omega Zombie Bot, Poseidon,
+Sheriff, and Zombie Bot. Another player escrows the zombie as a `SELL_ZOMBIE` order, or fills
+a `BUY_ZOMBIE` request.
+
+Delivery is gated on the **recipient**, checked pre-flight and re-checked as a SQL guard inside
+the fulfillment transaction (`server/src/rosterCatalog.ts`, `server/src/v3/blackMarket.ts`):
+
+- **Player level 20** for any `special`-category zombie (`BLACK_MARKET_SPECIAL_LEVEL`); a failure
+  returns `403 black_market_level_locked`.
+- **A matching gravestone placed on the farm** for the Blue/Red/Silver colored classes (29 units
+  across the catalog carry a `className`). The check requires `status: 'placed'` — merely owning
+  a stored gravestone is not enough. A failure returns `403 black_market_grave_required`.
+
+Note the framing difference from the rest of this document: the Black Market **bypasses ordinary
+crop unlock levels entirely**. Level 20 and the gravestone are the *only* gates, so a zombie whose
+planting route would be locked can still arrive by trade.
 
 ## Combining
 

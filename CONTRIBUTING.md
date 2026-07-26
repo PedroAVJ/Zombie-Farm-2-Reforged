@@ -94,8 +94,11 @@ compatible with server-held state.
 **Server and security.** The server is authoritative for the economy, raids, and
 gifting, and that's load-bearing anti-cheat rather than an implementation detail. Read
 [SECURITY.md](SECURITY.md) before changing anything under `server/`. Never trust a
-client-supplied outcome, quantity, or price. Database changes go in a new numbered file
-under `server/migrations/` — never edit an applied migration.
+client-supplied outcome, quantity, or price. The one deliberate exception is the raid
+`clientWin`/`clientLosses` concession, which is merged strictly one-way so it can only worsen
+the submitting player's own result — if you touch that merge, preserve that property and say so
+in the description. Database changes go in a new numbered file under `server/migrations/` —
+never edit an applied migration.
 
 **Original-game fidelity.** Where behavior is recovered from the original binary,
 matching it beats improving it, and the recovered numbers in `docs/mechanics/` win over

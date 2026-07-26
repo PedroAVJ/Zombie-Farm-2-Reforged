@@ -19,10 +19,12 @@
 // Now implemented: focus-bar distractions (butterfly/brain bubbles, with
 // Concentration bypass), activated abilities (windup/cooldown/stun/knockback),
 // boss specials, ballistic projectiles, boss summon reinforcements, the
-// carrotWall/junkWall blockers, and the Circus trapeze carried-grab (grabberOf).
-// Still disabled: only the ground-crossing environmental hazards — Beach crab,
-// Tree World turtle, Lawyers cars — where RaidManager.hazardOf returns null
-// pending better visual integration.
+// carrotWall/junkWall blockers, the Circus trapeze carried-grab (grabberOf), and the
+// Beach crab carry-off (crabOf). The trapeze and crab are CLIENT-ONLY — the server
+// verifier replays the un-harassed fight and the client concedes via clientWin.
+// Still disabled: the ground-crossing environmental obstacles — Tree World turtle,
+// Valentine's geyser, Beach sea-mine — where RaidManager.hazardOf returns null
+// pending better visual integration. The Lawyers cars grab has no shipped sprite.
 //
 // Combat numbers are the GROUND-TRUTH fight-data model (combatStats.ts, recovered from
 // the binary): maxHp = con*100 and cadence = attackCooldownMs (2s zombie / 1s enemy ÷ dex)

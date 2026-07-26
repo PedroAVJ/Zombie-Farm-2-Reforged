@@ -1,10 +1,13 @@
 # Protocol v3 destructive rollout
 
-> **Security status (2026-07-19):** the anti-cheat gaps that made protocol v3 fun-only are
+> **Security status (2026-07-25):** the anti-cheat gaps that made protocol v3 fun-only are
 > closed — raid/Epic Boss outcomes are server-verified by deterministic replay, all mutation
 > routes are serialized through the writer lease's active-operation lock, and the free-plow XP
-> loop is gone. Before enabling valuable/competitive features, complete the deployment-time
-> release gates in `../SECURITY.md` (notably `WRITER_LEASE_MODE=enforce`, `MIN_PROTOCOL_VERSION=3`,
+> loop is gone. Since raid ruleset version 6 the Beach crab and Circus trapeze hazards are
+> client-only, so `/raid/finish` accepts one-way `clientWin`/`clientLosses` concessions that can
+> only worsen the submitting player's own result; see the concession-fallback limitation in
+> `../SECURITY.md`. Before enabling valuable/competitive features, complete the deployment-time
+> release gates there (notably `WRITER_LEASE_MODE=enforce`, `MIN_PROTOCOL_VERSION=3`,
 > `SESSION_SECRET` rotation, and confirming the live commit/D1 schema).
 
 Protocol v3 deliberately has no data migration or backward compatibility. The reset
@@ -18,15 +21,18 @@ usable by the v3 application.
    and the raid, Epic Boss, and Black Market mutation routes reject writes.
 2. Disable or hide sign-in at the client edge so a user cannot create an account while
    the database is being replaced.
-3. Apply the pending migrations through `server/migrations/0027_v3_raid_replay.sql`
+3. Apply the pending migrations through `server/migrations/0030_black_market_specific_mutations.sql`
    to the production D1 database. `0020_protocol_v3_reset.sql` is intentionally
    repeatable and recreates the protocol-v3 baseline; `0021` adds Epic Boss runs and
    sessions; `0024` adds run-scoped fight tokens; `0025` adds the authenticated
    writer-lease columns (`writer_session_id` / `writer_token_hash` / `writer_last_activity_at`
    / `active_batch_expires_at`) and clears prior unauthenticated writer ids so the first
-   upgraded client must re-acquire control; `0026` adds the Black Market order tables; and
+   upgraded client must re-acquire control; `0026` adds the Black Market order tables;
    `0027` adds the pinned raid-replay columns (`config_json` / `ruleset_version`) that make
-   server-side raid verification possible. Confirm Wrangler reports no pending migrations
+   server-side raid verification possible; `0028` adds gift rewards; `0029` restores the
+   `ledger` table that the v3 reset dropped (gift claims write their XP reward there); and
+   `0030` adds `black_market_orders.mutation_required` for specific-mutation buy orders —
+   a **non-idempotent** `ADD COLUMN`. Confirm Wrangler reports no pending migrations
    afterward.
 4. Rotate `SESSION_SECRET` with `wrangler secret put SESSION_SECRET`. Never reuse the
    historical value. This invalidates any token copied before the database reset even if
@@ -59,9 +65,10 @@ client reaching the old schema can create state that must be reset again.
 - A raid produces one `/raid/start` and one `/raid/finish`; an early finish gets one
   scheduled retry from the supplied `retryAfterMs` and never polls.
 - A raid result is derived by server-side replay of the submitted input transcript against the
-  pinned enemy config, not asserted by the client. A `/raid/finish` carrying a forged win or a
-  `finalTick` beyond elapsed real time is rejected; a stale `rulesetVersion` returns
-  `426 stale_ruleset`. The outcome, casualties, and rewards come from the replay.
+  pinned enemy config. A `/raid/finish` carrying a forged win or a `finalTick` beyond elapsed
+  real time is rejected; a stale `rulesetVersion` returns `409 stale_ruleset`. The outcome,
+  casualties, and rewards come from the replay, adjusted only by the player's own one-way
+  hazard concession.
 - Presentation changes generate at most one `/presentation` request per minute and
   authoritative reconciliation generates none.
 - Friends, requests, and inbox make no polling requests and refresh only at bootstrap or

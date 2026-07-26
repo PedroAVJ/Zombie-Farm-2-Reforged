@@ -3,15 +3,19 @@
 Operational companion to [`../SECURITY.md`](../SECURITY.md). Covers what the Worker
 logs, what to alert on, and how to respond.
 
-> **Protocol-v3 notice (2026-07-15):** much of the detailed event catalog below was
-> created for the retired v2 save/action/replay routes. Protocol v3 emits request
-> metrics and selected successful-command audit rows, but individual semantic command
-> rejections inside an HTTP-200 batch are not yet emitted through `slog()`. Do not
-> assume the absence of v2 rejection events proves that v3 traffic is clean.
+Last reviewed: 2026-07-25.
+
+> **Protocol-v3 notice (2026-07-25):** the v2 save/action/sync routes are retired behind a
+> `410` middleware (`retiredV2` in `src/index.ts`), which runs as `app.use("*")` and therefore
+> short-circuits *before* those handlers. Their `slog()` calls still exist in the source but
+> are **unreachable** — see the dead-events table in §2. Protocol v3 emits request metrics and
+> durable audit rows; individual semantic command rejections inside an HTTP-200 batch are still
+> not emitted through `slog()`. Do not assume quiet logs prove v3 traffic is clean.
 >
 > For an active gameplay-integrity incident, set `MUTATIONS_DISABLED=1` and deploy.
-> Raising `MIN_PROTOCOL_VERSION` currently stops stale `/commands` clients only; it
-> does not stop `/raid/start`, `/raid/finish`, or `/presentation`.
+> Raising `MIN_PROTOCOL_VERSION` stops stale `/commands` clients only. The other mutation
+> routes (`/raid/*`, `/epic-boss/*`, `/black-market/*`, `PUT /presentation`) are gated instead
+> by the writer lease's `X-Integrity-Version` check under `WRITER_LEASE_MODE=enforce`.
 
 The Worker is a Cloudflare Worker (`src/index.ts`) backed by one D1 database named
 `zombiefarm` (see `wrangler.toml`). Logs go to stdout; view them live with
@@ -48,22 +52,37 @@ wrangler tail --format json | grep '"lvl":"alert"'
 
 | `sec` | `lvl` | Meaning | Alert when |
 |---|---|---|---|
+**Live under protocol v3:**
+
+| `sec` | `lvl` | Meaning | Alert when |
+|---|---|---|---|
 | `dev_auth_rejected` | alert | A `devSub` (dev-bypass) sign-in hit a **prod** server (`DEV_AUTH` unset). Should be impossible in normal use. | **any** occurrence → page. Confirm `DEV_AUTH` is unset in prod. |
+| `account_command_rejected` | alert | An account exceeded its hourly/daily command-volume ceiling and was refused. | **any** sustained occurrence → automation or a runaway client on that account. |
 | `auth_token_invalid` | warn | A Google ID token failed verification. | > ~20/min globally, or a burst from one IP → credential/endpoint probing. |
 | `auth_denied` | info | A request was rejected at auth. `stage:"token"` = bad/expired/absent JWT (routine). `stage:"session"` = valid signature but the session is revoked / idle-expired / mismatched. | Spike in `stage:"session"` → possible **leaked-token replay after a revoke**. Investigate the account; consider logout-all + secret rotation. |
-| `rate_limited` | warn | A route’s per-key limit tripped (`route`, `who`). | Sustained for one `who` → abuse or a stuck client. Global spike across routes → attack/DDoS. |
-| `save_invalid` | warn | `PUT /save` failed structural/bounds validation (`reason`). | > a few/min for one `account` → modified client forging a save. Investigate that account. |
-| `save_too_large` | warn | Save body exceeded `MAX_SAVE_BYTES`. | Repeated for one `account` → modified/broken client. |
-| `economy_rejected` | warn | One or more currency events were rejected (overdraw, over-cap, bad reason). `rejected` = count in the batch. | > a few/min for one `account` → currency-cheat attempts. |
-| `farm_rejected` | warn | One or more `/farm/actions` were rejected (unaffordable, plot state, **not-grown** = insta-harvest attempt). | > a few/min for one `account` → farm-cheat attempts. |
-| `inventory_rejected` | warn | One or more `/inventory/actions` were rejected (can't afford a buy, **none owned** = using a boost you don't have, stack full). | > a few/min for one `account` → boost-fabrication attempts. |
-| `roster_rejected` | warn | One or more `/roster/actions` were rejected (**no_unit** = selling a zombie the server doesn't own, bad key). | > a few/min for one `account` → fabricated-zombie sell attempts. |
-| `shop_rejected` | warn | A `/shop/*` purchase was rejected (bad/non-sequential size, can't afford, climate already owned). | > a few/min for one `account` → farm-size/climate fabrication attempts. |
-| `gift_credit_deferred` | warn | A gift claim couldn’t settle the brain to the balance immediately (crash-window path). | Recurring for the same `account`/`gift` → settlement stuck; see §4 reconcile. |
-| `save_conflict` | info | Optimistic-concurrency loser on `PUT /save` (client retries with fresh rev). Normal. | High global rate → a client save-loop bug, not an attack. |
-| `grants_reconciled` | info | Deferred gift grants were credited on `GET /save`. Healthy self-heal. | — |
+| `rate_limited` | warn | A route's per-key limit tripped (`route`, `who`). | Sustained for one `who` → abuse or a stuck client. Global spike across routes → attack/DDoS. |
+| `account_command_volume` | warn | An account's command volume crossed the soft warning threshold (`hourly`, `daily`). | Repeated for one `account` → precursor to `account_command_rejected`. |
+| `writer_operation_rejected` | warn | A mutation was refused because another operation held the account's writer fence. | Sustained for one `account` → a stuck lease or two clients fighting; check `active_batch_expires_at`. |
+| `gift_claim_deferred` | warn | A gift claim lost the account fence to a live raid/Epic Boss/command settlement and returned `409 operation_in_progress` for the client to retry. The gift stays in the inbox — nothing is lost. | Recurring for the same `account`/`gift` → the fence is not clearing; inspect `active_batch_id`. |
 | `logout_all` | info | An account revoked all its sessions. | — |
-| `cleanup` | info | Nightly cron purge counts (sessions/buckets/requests/raid/ledger/farm). | Absence for > 24h → cron not firing. |
+| `cleanup` | info | Nightly cron purge counts (`sessions`, `buckets`, `requests`, `raidSessions`). v3 deliberately retains premium, purchase/refund, zombie-lifecycle, and raid audit events. | Absence for > 24h → cron not firing. |
+
+Raid integrity is audited durably in D1 rather than through `slog()`: `audit_events_v3` carries
+raid start/finish rows and a `raid_finish_rejected` row for every refused finish (including the
+`concessionFallbackError` code). Query that table, not the logs, when investigating raid forgery.
+
+**Dead — retired v2 handlers (do not build alert rules on these):**
+
+`save_invalid`, `save_too_large`, `save_conflict`, `grants_reconciled`, `economy_rejected`,
+`farm_rejected`, `inventory_rejected`, `object_rejected`, `roster_rejected`, `shop_rejected`,
+`storage_rejected`, `quest_rejected`, and the legacy `raid_replay` / `invalid_raid_input` pair.
+Their call sites still exist in `src/index.ts`, but every route that reaches them is intercepted
+by the `retiredV2` `410` middleware, so they can no longer fire. (The live v3 raid path logs to
+`audit_events_v3` instead.) An older alert rule keyed on these will be silent forever — which
+reads as "clean" and is not.
+
+Note the previous edition of this table listed `gift_credit_deferred`; no such event exists. The
+real name is `gift_claim_deferred`.
 
 **General rule:** a single `warn` is usually a modified client poking one account —
 scope the response to that account. A **global** rise in `warn`/`alert` across many
@@ -77,8 +96,10 @@ The correctness controls are D1 constraints, but the **free-tier D1 write budget
 the scaling ceiling (see `SECURITY.md` “Method for reducing server load”). Track, in
 the Cloudflare dashboard:
 
-- **D1 rows written / day** — the binding constraint. The save path is ~3 writes per
-  flush; the client debounces (5s / 30s-max, see `SaveManager`) to stay within it.
+- **D1 rows written / day** — the binding constraint. Under v3 the dominant write path is
+  `/commands` batches (plus raid/Epic Boss settlement and presentation writes), not the retired
+  per-flush save. The client coalesces gameplay into batches — the rollout doc's smoke check is
+  fifty farm commands settling in no more than six `/commands` requests per minute.
 - **D1 rows read / day**, **database size**.
 - **Worker requests, CPU time, error rate (5xx).**
 
@@ -117,21 +138,30 @@ wrangler secret put SESSION_SECRET
 (edit the `rateLimit(...)` line in `index.ts`), or add an early `return c.json({error:"disabled"},503)`
 at the top of the handler. Prefer this over taking the whole Worker down.
 
-**Reconcile stuck gift grants** — normally automatic on `GET /save`. To inspect:
+**Stuck gift claims** — the v2 deferred-`grants` model is retired along with `GET /save`, so
+there is no longer a self-healing reconcile pass. Under v3 a gift claim is atomic
+(`db.claimGiftBrain`); if it loses the account fence it logs `gift_claim_deferred`, returns
+`409 operation_in_progress`, and **leaves the gift claimable in the inbox** for the client to
+retry. Nothing is owed and nothing needs manual settlement. If the 409 repeats for one account,
+the problem is a stuck writer fence, not the gift:
 ```sh
 wrangler d1 execute zombiefarm --remote \
-  --command "SELECT id, account_id, source_gift_id FROM grants WHERE settled_at IS NULL"
+  --command "SELECT active_batch_id, active_batch_expires_at FROM account_runtime_v3 WHERE account_id = 'ACCT'"
 ```
-Then have the affected account load once (fires `reconcilePendingGrants`), or settle
-manually against `balances`.
+An expired `active_batch_expires_at` that is not clearing points at a settlement that died
+mid-operation; releasing the lease (or waiting out the TTL) unblocks the account.
 
-**Quarantine / inspect a suspect save** — read the blob out before touching it:
+**Quarantine / inspect a suspect account** — v3 gameplay state is server-owned and no longer
+lives in the v2 `saves` blob (`GET`/`PUT /save` both return `410`). Inspect the authoritative
+tables instead — `balances`, `roster_v3`, `gameplay_documents_v3`, `farm_documents_v3`,
+`object_documents_v3`, `account_runtime_v3` — and read `audit_events_v3` for how the account
+got there:
 ```sh
 wrangler d1 execute zombiefarm --remote \
-  --command "SELECT rev, length(blob) FROM saves WHERE account_id = 'ACCT'"
+  --command "SELECT kind, created_at, detail_json FROM audit_events_v3 WHERE account_id = 'ACCT' ORDER BY created_at DESC LIMIT 50"
 ```
-To neutralize a weaponized save (it can’t exceed the validator, but to be safe), CAS
-in a sanitized blob at the current `rev`. Keep a copy of the original first.
+Repair balance, roster, object, quest, and raid rows together — restoring one in isolation can
+leave an inconsistent or exploitable account.
 
 **Restore data** — D1 supports point-in-time restore (Time Travel). Find a bookmark
 before the incident and restore:
@@ -151,5 +181,7 @@ loss — the local save keeps the player whole until writes resume.
 
 1. Confirm the triggering `sec`/`lvl` rate has returned to baseline (`wrangler tail`).
 2. If a client-side forgery got through, add a regression case to the integration
-   suite (`test/integration/`) so it can’t recur silently.
+   suite so it can't recur silently — and add it to `v3.spec.ts` or `blackMarket.spec.ts`,
+   which are the only two files `vitest.integration.config.ts` actually runs. A spec added
+   elsewhere under `test/integration/` will never execute.
 3. Note the event + response here if the procedure was missing or wrong.

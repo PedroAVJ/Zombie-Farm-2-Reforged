@@ -4,7 +4,9 @@ Quest-data prep for the ZF2R quest engine.
 Reads the extracted 1.0 app bundle's Quests.plist (the authoritative, data-driven
 quest definitions) and produces:
 
-  public/assets/quests.json      all 96 quests, normalized to JSON
+  public/assets/quests.json      all 105 quests, normalized to JSON (71 standard +
+                                 34 Epic Boss event quests, incl. the Bully Frog
+                                 records embedded in the EpicEventEnemy row)
   public/assets/ui/<sprite>.png  each quest's top-level rail icon (loose PNGs)
 
 The quest engine (src/quest/) consumes quests.json at runtime. Every quest is kept,

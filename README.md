@@ -32,10 +32,11 @@ already-scoped work. Security bugs go through private disclosure, not public iss
 ## Status
 
 A broad playable prototype: farming, placed objects, storage, owned zombies,
-mutations, quests, live invasions, cloud saves, friends, gifting, and read-only
-farm visits all exist. It is **not** content-complete or fully faithful to every
-original system. The biggest remaining work is raid breadth/fidelity, pets,
-missing QoL menus, and broader asset integration.
+mutations, quests, live invasions, Epic Bosses, cloud saves, friends, gifting,
+the Black Market, and read-only farm visits all exist. It is **not**
+content-complete or fully faithful to every original system. The biggest
+remaining work is raid fidelity polish, missing QoL menus, and broader asset
+integration.
 
 ### Where the docs live
 
@@ -73,11 +74,17 @@ must also update [SECURITY.md](SECURITY.md) and [server/README.md](server/README
 - 30x30 isometric farm rendered from generated field data with camera pan/zoom.
 - Modular farmer, walk/work animation, click-to-walk, pathing around placed objects.
 - Free-placed 4x4 plots with plow, plant, harvest, zombie-hole, and offline timers.
+- **Multi-plot plow selection**: drag to preview a rectangle of 4x4 plots (invalid plots stay visible in red and are skipped) and commit them as one batch of plow jobs. On touch the preview can be repositioned and resized with edge handles before a confirming tap.
+- Queued farm jobs keep advancing while the browser tab is hidden, and jobs replayed from elapsed offline time are stamped at their real completion moment, so growth timers stay accurate across backgrounding.
+- Objects placed against the farm's south/east edge (notably fruit trees) are harvestable — their walk-to point is clamped onto the grid, and a job with an unreachable destination cancels instead of jamming the queue.
 - Source-derived crop and zombie catalogs with level/currency/grave gates.
 - Local gold, brains, XP, level curve, item economy, and level-up unlock popup.
 - Persistent placeable objects, fruit trees, storage sheds, Mausoleum, graves, monoliths, Zombie Patch, and Zombie Pot.
 - A placed Plowing Monolith makes plowing free, removes the normal plow XP reward, and adds +1 XP to every crop, zombie, and fruit-tree harvest.
-- Market with Crops, Items, Upgrade, Boosts, Farmer, Pets, and Brains tabs, plus a name-search box and a themed pager on the card lists (pages fit the visible grid so it doesn't scroll on desktop/tablet).
+- The five functional Monoliths share one source texture and are distinguished by their authentic per-item Market color, carried in the placeable catalog and applied as a multiplicative tint to the Market card, the placement ghost, and the placed object.
+- **Functional items are limited to one owned copy** (the Zombie Pot allows three), counting placed and stored copies together; a maxed item disappears from the Market list. Functional items are also permanent — they can be moved, rotated, and stored, but never sold.
+- The Remove tool confirms before selling a placed object or clearing a planted plot (which forfeits the growing crop).
+- Market with Crops, Items, Upgrade, Boosts, Farmer, Pets, and Epic Boss tabs, plus a name-search box and a themed pager on the card lists (pages fit the visible grid so it doesn't scroll on desktop/tablet).
 - Farm Size upgrades (40/50/60 tiers grow the field + adjust backdrop/foliage/camera).
 - Whole-farm ground/climate skins: owned terrains are stored in `GameState`, purchased in the Market Upgrade tab, repaint every tile via `Field.setClimate`, and can be re-applied for free later. The current climate is saved.
 - Storage UI with Items, the owned-pet collection, Boosts, and Received tabs.
@@ -86,10 +93,12 @@ must also update [SECURITY.md](SECURITY.md) and [server/README.md](server/README
 - Owned zombies with per-type models/portraits, wandering, roster, detail cards, storage/deploy, selling (with confirmation), veterancy, mutations, and ability display.
 - Tapping a still-growing crop or zombie opens an info popup with its type, a live countdown to harvest, and an Insta-Grow button that spends one boost use to ripen it on the spot.
 - Mutation/combination system (Zombie Pot) with bitmask inheritance, slot restrictions, timers, mixed-color combined zombies, same-type alternate results, and field rendering.
+- All farm zombies render at the standard zombie height regardless of their source group scale; headless variants deliberately render shorter. Kindlehead, Flamehead, and Party Zombie draw their missing heads as live procedural FX — a colored flame aura with rising motes, and looping confetti — on the farm and in raids.
 
 ### Quests
-- Quest engine loading all 96 source quests, activating each when its prerequisite and level gate are met.
+- Quest engine loading all 105 shipped quest records (71 farm/raid + 34 Epic Boss), activating each when its prerequisite and level gate are met.
 - Live quest events cover the farm loop (soil plowing, crop plant/harvest, zombie harvest, item purchase), raids/invasions (successful invasion, perfect invasion, raid loot), and the Zombie Pot combiner (combine + harvest).
+- The quest detail popup shows the quest's reward (icon + amount) before you complete it.
 - Completing a quest shows a celebratory "QUEST COMPLETE!" popup (quest icon + reward), styled like the level-up popup; multiple completions queue and show one at a time. Raid-driven completions are held until the player returns to the farm, so they never pop over the battle result screen.
 
 ### Raids and combat
@@ -97,21 +106,27 @@ must also update [SECURITY.md](SECURITY.md) and [server/README.md](server/README
 - Army-selection boost frontend: a **Concentration** toggle (bypasses the focus minigame) and a **Golden Dice** stepper (raises loot tier), both inventory-aware, consumed at raid start.
 - Zombies that die in an invasion are culled from the roster + save, unless revived from the one-time post-battle **revival offer** (one brain per casualty, restored from a server-owned snapshot online); casualties not revived are permanently lost.
 - All 11 invasions scale by player level through a full 7-stage difficulty ladder (McDonnell's authored ladder, extrapolated onto every other raid — one stage per invasion, not sequential waves; enemies emerge one at a time by design).
-- Side-view enemy actor art for all 11 raids: procedurally-animated rigs for 10 (idle/walk/attack-lunge) plus Video Games' real frame-atlas sprites. Ninja/Pirate/City rigs are decoded from the iOS binary (their bone layout ships in `public/assets/raids/enemies/models.json`; the atlases have no TexturePacker plist — see `docs/mechanics/RAID_TIMING_AND_HAZARDS.md`). Raid particle FX (impact dust, victory confetti, heal).
+- Side-view enemy actor art for all 11 raids. Ten use bone rigs from `public/assets/raids/enemies/models.json` (32 rigs); Video Games' five actors play real per-frame idle/attack animations. Eleven named enemy attacks (Circus, Lawyers, Pirate, Ninja, Robot) play **authored timelines recovered from `ZFAttackAnims`**, rotated so the source contact frame lands on the simulated hit; unmapped enemies fall back to a procedural lunge. Ninja/Pirate/City rigs are decoded from the iOS binary (their atlases have no TexturePacker plist — see `docs/mechanics/RAID_TIMING_AND_HAZARDS.md`). Raid particle FX (impact dust, victory confetti, heal).
+- Zombies fight with two recovered basic attacks — bite (anim 8) and scratch (anim 9) — alternating per swing from a per-unit seed so the horde is staggered, each with its own strike SFX. Zombies also narrow their eyes while their deployment bar fills.
+- Raid audio: per-stage battle BGM (farm/pirate/ninja/robot/alien themes, with `fightBGM` covering the other six raids) plus attack-keyed strike SFX (bite/poke/swipe/flail/punch) in both raids and Epic Boss fights.
 
 ### Online and social (Reforged)
 - **Google account authentication** — the hosted build gates the whole game behind Sign in with Google (`src/net/gate.ts`); an offline build (no config) has no lock.
 - **Player-chosen usernames** picked on first login.
 - **Online state** across devices: the Cloudflare Worker owns protocol-v3 gameplay state, with an exclusive single-writer lease (token-hashed, account-version CAS), account-version conflict handling, an offline command outbox, and a local per-account cache.
-- **Server-verified raids**: `/raid/finish` replays the pinned combat from the submitted input transcript and derives the outcome server-side (no client-asserted win/casualties); all mutation routes are serialized through the writer lease. See `SECURITY.md` for the current anti-cheat posture and residual limits.
+- **Server-verified raids**: `/raid/finish` replays the pinned combat from the submitted input transcript and derives the outcome server-side. Because the Beach crab and Circus trapeze hazards are client-only, the server replays the *un-harassed* fight and the client concedes the difference — concessions are merged one-way, so a client can only make its own result worse, never claim a win the replay didn't produce. All mutation routes are serialized through the writer lease. See `SECURITY.md` for the current anti-cheat posture and residual limits.
 - **Friends**: friend codes, server-backed friend lists, **daily brain gifting**, and a **gift inbox** with claiming.
-- **Black Market**: server-authoritative buy/sell-zombie orders with brain/zombie escrow, a per-day order cap, price bounds, and atomic fulfillment.
+- **Black Market**: server-authoritative buy/sell-zombie orders with brain/zombie escrow, caps of 10 open orders and 50 per day, price bounds, and atomic fulfillment. Buy orders can demand **specific mutations** (every requested anatomical slot must match; extras are allowed). Delivery is gated on the recipient — special zombies need player level 20, and colored classes need their gravestone placed.
 - **Read-only friend-farm visits**: the client reloads into visit mode and the server returns an allowlisted projection of the friend's save (farm, objects, zombies, Zombie Pot only — currencies zeroed; progression, quests, raids, storage, and social data omitted). Autosave is disabled and editing controls are hidden while visiting.
 
 ### Platform and interface
 - The Market's **Farmer** section supports independently equipping every owned source head and body. Unpriced parts start unlocked; priced heads use authoritative online purchases, and their listed harvesting, zombie growth/stat, and invasion-cooldown effects apply while equipped.
 - The source-derived **Pets** catalog includes all 40 market variants with their original prices and animations. Pet purchase/selection is server-authoritative online; one selected cosmetic companion follows the farmer and has no gameplay effects.
-- One responsive build for phone and desktop: capability autodetection (`src/platform.ts`), a compact touch HUD, and pinch-to-zoom/pan.
+- One responsive build for phone and desktop: capability autodetection (`src/platform.ts`), a compact touch HUD that collapses after you pick a tool, pinch-to-zoom/pan, `env(safe-area-inset-*)` padding, short-viewport and phone-landscape breakpoints, and Android Back handling.
+- Touch input model (`src/touchInput.ts`): select taps resolve to the plot under *initial contact* (finger wobble across an isometric edge can't misfire), zombies need a 450 ms hold rather than a tap so an overlapping unit can't steal a plot tap, and pointer capture plus a native-pointerup fallback keep releases from being retargeted when the HUD collapses under the finger.
+- **Drag-select plowing** (`src/plowSelection.ts`): tapping soil drops a 4x4 anchor preview; dragging repositions it and the corner/edge handles grow it into a rectangle; a second tap inside the preview commits every valid plot at once. Commit is deferred to pointer-up so one tap can never plow twice.
+- **Installable PWA**: a web app manifest (`public/manifest.webmanifest`), maskable/Apple icons, and a `vite-plugin-pwa` service worker. The app shell, boot script, and title art are precached; `/assets` art and audio are cached `CacheFirst` on first fetch, so offline play warms up progressively rather than downloading ~88 MB at install. Updates are `prompt`-mode — `src/pwa.ts` registers the worker manually (the build's CSP forbids inline script) and shows "new version ready" / "ready to play offline" toasts. The service worker is build-only; there is none in `npm run dev`.
+- A one-time **"Play Fullscreen?"** offer on mobile after the boot overlay is dismissed (`src/ui/panels/fullscreenPrompt.ts`), skipped when already fullscreen or running installed/standalone. Settings also has a Fullscreen row and an `F` hotkey.
 - Music, sound effects, and farm ambience are enabled by default and can be toggled independently in Settings. An optional **Mute When Unfocused** setting silences all channels while the game tab or window is in the background. The mandatory first-run tutorial uses real farm actions: plow, plant a zombie, buy and use Insta-Grow, harvest, then raid. Developer controls (a separate menu opened by an invisible hotspot beside the nameplate) support testing.
 - **Farm background** setting: foliage density choices (Deep Forest / Woodland / Light Meadow) persisted in `src/prefs.ts`. This changes the density of decorative surrounding foliage — distinct from ground/climate skins, which change the farm's tile terrain.
 - Settings toggles for **ZF2 Sprites** and **Reforged** edition, both persisted preferences (`src/prefs.ts`). Their behavior is **not yet wired** — the sprite toggle doesn't swap art, and the edition toggle doesn't gate features yet.
@@ -127,13 +142,13 @@ jobs, audio, save manager, quests, quest bus, raids, and helper functions (e.g. 
 
 Qualifiers: *implemented*, *partially implemented*, *placeholder*, *disabled*, *missing*, *Reforged-only*, *fidelity approximation*.
 
-- **Raids (partially implemented / fidelity approximation):** the ladder, live combat, boosts, and permanent casualties ship, but combat still needs better side-view actors, status/focus polish, and per-raid balance tuning. Boss **summon** reinforcements, the faithful **carrotWall/junkWall** blockers, and the Circus **trapeze carried-grab** are wired; only the ground-crossing crossing-obstacle hazards (Beach crab, Tree World turtle, Lawyers cars) stay **disabled** (`RaidManager.hazardOf` returns `null`) pending better visual integration.
+- **Raids (partially implemented / fidelity approximation):** the ladder, live combat, boosts, and permanent casualties ship, but combat still needs status/focus polish and per-raid balance tuning. Boss **summon** reinforcements, the faithful **carrotWall/junkWall** blockers, the Circus **trapeze carried-grab**, and the **Beach crab** carry-off are wired — the crab and trapeze are client-only tap-to-rescue minigames the server does not simulate (see the concession note under Online and social). The remaining ground-crossing obstacle hazards (Tree World turtle, Valentine's geyser, the Beach sea-mine) stay **disabled** (`RaidManager.hazardOf` returns `null`) pending a non-fabricated model, and the **Lawyers cars** grab has no shipped sprite and is not wired.
 - **Market/upgrades (partially implemented):** Farm Size and ground/climate skins work; authored **TMX map loading is missing**.
 - **Quests (partially implemented):** the farm loop, raids/invasions, Zombie Pot, and every Epic Boss emit live events. Recovered Epic quest chains are selected for the active boss; some late bosses have incomplete or missing shipped quest data. Social, photo/camera, and seasonal quest classes remain dormant.
-- **Epic Bosses (eight recovered bosses):** Market → Epic Boss offers Dr. Groundhog, Loco Locust, Bully Frog, Foul Owl, Skunkarella, Rocky Rhino, General Larvaelus, and Mystical Mamba as repeatable 14-day runs for 100 brains. All use 30-second manual-focus fights, permanent casualties, retained damage, crop-harvested fight tokens (or 10 brains per attempt), scaling brain/gold victory rewards, namespaced loot, pets, and deterministic online replay. The first five use exact authored combat strips; EPB 8-10 use static recovered art until their missing atlas metadata can be reconstructed. See `docs/EPIC_BOSS_MECHANICS.md`.
+- **Epic Bosses (eight recovered bosses):** Market → Epic Boss offers Dr. Groundhog, Loco Locust, Bully Frog, Foul Owl, Skunkarella, Rocky Rhino, General Larvaelus, and Mystical Mamba as repeatable 14-day runs. Dr. Groundhog costs 5 brains and unlocks at **player level 24**; the other seven cost 10 brains and unlock at **level 32** (server-enforced). All use 30-second manual-focus fights, permanent casualties, retained damage, crop-harvested fight tokens (or 1 brain per attempt), scaling brain/gold victory rewards, namespaced loot, pets, and deterministic online replay. The first five use exact authored combat strips; EPB 8-10 use static recovered art until their missing atlas metadata can be reconstructed. See `docs/EPIC_BOSS_MECHANICS.md`.
 - **Settings toggles — Sprites & Edition (placeholder):** the **ZF2 Sprites** and **Reforged/Traditional** switches persist a preference (`src/prefs.ts`) but do nothing yet. Sprites needs a ZF1 art pack and a runtime swap keyed off `getSpriteSet()`; Traditional needs feature gates so the online/friends surfaces read `isReforged()` and hide when it is off.
 - **QoL/UI (missing):** Received item cards/reveal/use flow, save reset/export/import, and fuller settings/help menus are missing.
-- **Assets (partially wired):** raid particle FX are wired, but most other particles/VFX, title/loading/news/social promo art, most localization/fonts, raid/combat audio, many terrain tiles, and many stage assets are extracted but not wired into runtime systems.
+- **Assets (partially wired):** raid particle FX and raid/combat audio (per-stage BGM + attack-keyed strike SFX) are wired, but most other particles/VFX, title/loading/news/social promo art, most localization/fonts, many terrain tiles, and many stage assets are extracted but not wired. Specific unwired audio: `enrageBGM`, `locolocustbanjo`, `rockyrhinogong`, `taiko`, `resurrect`, `parrot`, `rain`.
 - **Tests/CI (partially implemented):** Vitest suites exist for client and server; pull requests are gated by `.github/workflows/ci.yml` (client tests + build, server tests + integration + typecheck + migration check), and both deployment workflows are test-gated. Coverage remains incomplete — notably the HUD/DOM layer, which is largely untested.
 
 ## Run It Locally
@@ -184,12 +199,12 @@ npm run preview    # serve the built dist/ locally
 ## Tests
 
 ```bash
-npm test                            # client suite — 52 files, 295 tests
+npm test                            # client suite — 60 files, 380 tests
 npm run build                       # tsc typecheck + vite build
 
 cd server
-npm test                            # server unit suite — 18 files, 247 tests
-npm run test:integration            # route-level integration — 20 tests
+npm test                            # server unit suite — 21 files, 267 tests
+npm run test:integration            # route-level integration — 2 files, 34 tests
 npm run typecheck                   # tsc --noEmit
 npm run migrations:check            # validate migration ordering/numbering
 ```
@@ -229,6 +244,17 @@ The build uses a relative base (`base:"./"` in `vite.config.ts`), so it works
 whether it's served from a domain root or a Pages project subpath. All runtime
 asset URLs go through `import.meta.env.BASE_URL` (see `src/base.ts`); do not
 reintroduce hardcoded `/assets/...` paths or subpath hosting will 404.
+
+The build also injects a strict Content-Security-Policy `<meta>` tag (`vite.config.ts`),
+allowlisting `script-src 'self'` plus the Google Sign-In origins, `worker-src 'self' blob:`,
+and the configured API origin in `connect-src`. There is no `unsafe-inline`, which is why
+`public/boot.js` is an external file and `src/pwa.ts` registers the service worker manually.
+**Write UI code accordingly: no inline `<script>`, no inline `onclick` handlers** — build
+elements with `addEventListener` and `element.style`. The CSP is applied on build only, so a
+violation will pass `npm run dev` and fail in production.
+
+The Worker is deployed separately by `.github/workflows/deploy-server.yml`, which is
+**manual (`workflow_dispatch`) only** — pushing to `main` does not ship server changes.
 
 ## Asset Provenance
 
@@ -270,8 +296,8 @@ export round-trips the same schema the runtime reads.
 | Path | Role |
 |---|---|
 | `src/main.ts` | App boot, auth gate, game wiring, input, debug hooks |
-| `src/hud.ts` | DOM HUD shell: menus, market, raids, zombie/quest/social panels. Still the largest file (~4.3k lines); an in-progress refactor is moving panels out into `src/ui/` |
-| `src/ui/` | Extracted HUD pieces: `hud.css`, `Modal.ts`, `hudTypes.ts`, `uiAsset.ts`, and `panels/` (dialogs, settings, storage) |
+| `src/hud.ts` | DOM HUD shell: menus, market, Black Market, raids, zombie/quest/social panels. Still the largest file (~4.4k lines); an in-progress refactor is moving panels out into `src/ui/` |
+| `src/ui/` | Extracted HUD pieces: `hud.css`, `Modal.ts`, `hudTypes.ts`, `uiAsset.ts`, and `panels/` (dialogs, settings, storage, fullscreenPrompt) |
 | `src/Field.ts` | Terrain, plots, crops, objects, climate skins, occupancy, persistence |
 | `src/GameState.ts` | Currencies, XP/level, storage, boosts, raid progress, friends |
 | `src/JobSystem.ts` | Growth/harvest timers, offline catch-up, fertilize |
@@ -285,7 +311,10 @@ export round-trips the same schema the runtime reads.
 | `src/tutorial/` | First-run tutorial controller, beats, and DOM overlay |
 | `src/social/` | Local friend-list fallback + gifting helpers |
 | `src/audio.ts` | Opt-in BGM/SFX |
-| `src/platform.ts`, `src/touchInput.ts` | Phone/desktop capability detection, pinch-zoom and pan |
+| `src/platform.ts`, `src/touchInput.ts` | Phone/desktop capability detection, pinch-zoom and pan, tap/hold gesture rules |
+| `src/plowSelection.ts` | Drag-select plow rectangle geometry |
+| `src/pwa.ts` | Service-worker registration and update/offline toasts |
+| `src/blackMarketRules.ts` | Client-side Black Market gating and mutation matching |
 | `src/prefs.ts` | Persisted user preferences (audio, foliage, sprite set, edition) |
 | `src/base.ts` | `BASE_URL` prefixing for all runtime asset URLs — never hardcode `/assets/...` |
 | `src/iso.ts`, `src/depthSort.ts`, `src/lighting.ts`, `src/cropTop.ts` | Isometric projection, draw-order toposort, night lighting, crop overhang fix |

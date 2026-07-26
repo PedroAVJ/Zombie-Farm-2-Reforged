@@ -1,5 +1,14 @@
 # Black Market implementation plan
 
+> **Status (2026-07-25): SHIPPED.** This document is the original design plan and is kept
+> for its rationale, not as a description of current behavior. The feature is live and
+> server-authoritative; the nav reshuffle described below (Social hub, Epic Bosses moved out
+> of the standalone Boss button) is done. Two things have changed since: buy orders can now
+> demand **specific mutations** (`mutation_required`, migration `0030`), and delivery is gated
+> on the recipient (level 20 for special zombies, a matching placed gravestone for colored
+> classes). For current behavior read `../SECURITY.md` (Black Market section) and
+> `../server/README.md`; where this plan and those disagree, they win.
+
 ## Objective
 
 Add an asynchronous, account-backed Black Market where players can either sell an

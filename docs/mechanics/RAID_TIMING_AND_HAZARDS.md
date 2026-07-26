@@ -194,19 +194,34 @@ configs and threads them to the scene.
   uses the action's own sprite. Sim: `SimUnit.isWall` + `BattleSim.tapWall`.
 - **Trapeze Artist grab (Circus)** — REWRITTEN 2026-07-17 as the real carried-grab minigame
   (`BattleSim` `SimGrabber` / `stepGrabbers` / `tapGrabber`, config from `RaidManager.grabberOf`).
-  It sweeps in from the LEFT across the combat band, seizes the rear-most deployed zombie (→
-  `grabbed` state, inactive), holds ~1 s, then RISES to carry it off. The player **taps it (100/tap,
-  1000 HP → ~10 taps, tapDelay 0.25 s)**; killed → the zombie **drops** back and resumes fighting;
-  escaped off the top → the carried zombie **dies**. Renders as a tappable sprite with an HP bar
+  It swings in across the combat band, seizes a selected zombie (→ `grabbed` state, inactive),
+  holds ~1 s, then RISES to carry it off. Successive appearances **alternate the entry side**
+  (`swingStartDeg` 0°/180° by sequence) and aim at a chosen victim rather than always the
+  rear-most (`contactDeg`, `targetId`). The player **taps it (100/tap, `RESCUE_HAZARD_HP` 667 →
+  7 taps, tapDelay 0.25 s)**; killed → the zombie **drops** back and resumes fighting; escaped
+  off the top → the carried zombie **dies**. Renders as a tappable sprite with an HP bar
   (`RaidScene.syncGrabbers`); the carried zombie rides up via `mapProjY`. Verified headlessly
   (`BattleSim.hazards.test.ts`: grab / tap-to-free / escape-kills / tap-cooldown / wall-tap).
   NOTE: the old crossing-`HazardConfig` "grab" (a ~2.5 s stun + knockback dot) was an agent-added
-  fabrication — NOT in the base game — and is retired; `hazardOf` stays disabled. The Lawyers cars
+  fabrication — NOT in the base game — and is retired. The Lawyers cars
   (`hasGrab`, no shipped sprite) reuse `grabZombie` but different motion and are NOT wired.
+- **Beach crab carry-off (Summer Break)** — WIRED (`RaidManager.crabOf`, `BattleSim` `SimCrab` /
+  `stepCrabs` / `tapCrab`, `RaidScene.syncCrabs`, sprite `hazard_beach_crab.png`). The
+  `BeachStageActorCrab` wanders the lane, grabs a zombie, holds 2 s, then hauls it off-screen.
+  Same tap-to-rescue economy as the trapeze (667 HP, 100/tap → 7 taps); `spawnMs` and `limit`
+  come from the raid's `obstacleSpawnSecs` / `obstacleLimit` (5 s, 2). A zombie carried off is
+  **alive but out of the fight**, not killed. Tests: `BattleSim.hazards.test.ts`.
+
+**CLIENT-ONLY (important):** the crab and the trapeze run only on the client. Since raid ruleset
+version 6 `raidVerifier.grabberOf` returns `null`, so the server replays the *un-harassed* fight
+as an optimistic ceiling and the player concedes the difference via `clientWin`/`clientLosses`.
+Those concessions are merged one-way and can only worsen the submitting player's own result.
+See `../../SECURITY.md`.
 
 **DEFERRED:**
-- The Circus trapeze + both walls ship real sprites (`hazard_trapeze_girl.png`, `carrotWall.png`,
-  `junkWall.png`). The Beach/Tree World/Valentine crossing OBSTACLES stay disabled (`hazardOf`
+- The Circus trapeze, the Beach crab, and both walls ship real sprites (`hazard_trapeze_girl.png`,
+  `hazard_beach_crab.png`, `carrotWall.png`, `junkWall.png`). The remaining crossing OBSTACLES —
+  Tree World turtle, Valentine's geyser, and the Beach sea-mine — stay disabled (`hazardOf`
   returns null) pending a non-fabricated model + atlas frames; the Lawyers cars aren't wired.
 - Round length is the observational 3:00 default; not sourced from a named data field.
 
