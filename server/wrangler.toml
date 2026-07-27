@@ -21,7 +21,7 @@ migrations_dir = "migrations"
 # DEV_AUTH=1 enables the no-Google dev sign-in path — MUST stay unset/0 in prod.
 [vars]
 GOOGLE_CLIENT_ID = "249211577622-cmqa6so9re0hgh2lti4mpe40nlcm3l4k.apps.googleusercontent.com"
-ALLOWED_ORIGIN = "https://actualdoctornerd-ai.github.io"
+ALLOWED_ORIGIN = "https://zombiefarmreforged.com"
 DEV_AUTH = "0"
 MIGRATION_CUTOFF_MS = "0"
 # Old mutation clients are intentionally cut off immediately. The current client uses
