@@ -126,8 +126,6 @@ export class AudioManager {
   muteWhenUnfocused = false;
   private bgm: HTMLAudioElement;
   private ambBed: HTMLAudioElement;
-  private rainBed: HTMLAudioElement;
-  private rainOn = false;
   private ambTimer: ReturnType<typeof setTimeout> | null = null;
   private oneShots = new Set<HTMLAudioElement>();
   private armed = false; // whether a user-gesture resume listener is pending
@@ -148,10 +146,6 @@ export class AudioManager {
     this.ambBed.loop = true;
     this.ambBed.volume = 0.25;
     this.ambBed.preload = "none";
-    this.rainBed = new Audio(A("rain.mp3"));
-    this.rainBed.loop = true;
-    this.rainBed.volume = 0.32;
-    this.rainBed.preload = "none";
 
     // Restore persisted channel toggles. Autoplay may be blocked until the user
     // interacts, so arm a one-shot gesture listener to (re)start any looping
@@ -224,8 +218,6 @@ export class AudioManager {
       void this.activeBgm().play().catch(() => this.arm());
     if (this.ambienceOn && this.ambBed.paused)
       void this.ambBed.play().catch(() => this.arm());
-    if (this.ambienceOn && this.rainOn && this.rainBed.paused)
-      void this.rainBed.play().catch(() => this.arm());
   }
 
   // --- music ---------------------------------------------------------------
@@ -243,15 +235,12 @@ export class AudioManager {
     if (!this.canPlay()) {
       this.activeBgm().pause();
       this.stopAmbience();
-      this.rainBed.pause();
       for (const audio of this.oneShots) audio.pause();
       this.oneShots.clear();
       return;
     }
     if (this.musicOn) void this.activeBgm().play().catch(() => this.arm());
     if (this.ambienceOn) this.startAmbience();
-    if (this.ambienceOn && this.rainOn)
-      void this.rainBed.play().catch(() => this.arm());
   };
 
   setMuteWhenUnfocused(on: boolean) {
@@ -372,31 +361,20 @@ export class AudioManager {
   setAmbienceVolume(value: number) {
     this.ambienceVolume = clampVolume(value);
     this.ambBed.volume = 0.25 * this.ambienceVolume;
-    this.rainBed.volume = 0.32 * this.ambienceVolume;
     this.persist();
   }
 
   private startAmbience() {
     void this.ambBed.play().catch(() => this.arm());
-    if (this.rainOn) void this.rainBed.play().catch(() => this.arm());
     this.scheduleAmbienceOneShot();
   }
 
   private stopAmbience() {
     this.ambBed.pause();
-    this.rainBed.pause();
     if (this.ambTimer !== null) {
       clearTimeout(this.ambTimer);
       this.ambTimer = null;
     }
-  }
-
-  /** Cosmetic rain bed, governed by the existing Ambience channel/volume. */
-  setRain(on: boolean) {
-    this.rainOn = on;
-    if (on && this.ambienceOn && this.canPlay())
-      void this.rainBed.play().catch(() => this.arm());
-    else this.rainBed.pause();
   }
 
   private scheduleAmbienceOneShot() {

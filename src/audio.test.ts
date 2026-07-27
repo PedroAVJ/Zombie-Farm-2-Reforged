@@ -70,7 +70,7 @@ describe("AudioManager focus muting", () => {
       music: true, sfx: true, ambience: true, muteWhenUnfocused: true,
     }));
     const audio = new AudioManager();
-    const [music, ambience, rain] = MockAudio.instances;
+    const [music, ambience] = MockAudio.instances;
 
     expect(music.playCalls).toBe(1);
     expect(ambience.playCalls).toBe(1);
@@ -79,10 +79,9 @@ describe("AudioManager focus muting", () => {
     windowTarget.dispatchEvent(new Event("blur"));
     expect(music.paused).toBe(true);
     expect(ambience.paused).toBe(true);
-    expect(rain.paused).toBe(true);
 
     audio.play("buy");
-    expect(MockAudio.instances).toHaveLength(3);
+    expect(MockAudio.instances).toHaveLength(2);
 
     focused = true;
     windowTarget.dispatchEvent(new Event("focus"));

@@ -22,6 +22,10 @@ const rareCombinePairIds = (): [string, string] => {
 };
 
 describe("protocol v3 command engine", () => {
+  it("starts fresh players with the post-brainflation balance", () => {
+    expect(freshGameplayState().balance).toEqual({ gold: 400, brains: 2, xp: 0 });
+  });
+
   it("can claim the ordered writer lane without changing gameplay state", () => {
     const state = freshGameplayState();
     const result = applyCommandBatch(state, commands({ type: "writer.claim" }), { now: 1 });
@@ -99,6 +103,7 @@ describe("protocol v3 command engine", () => {
 
   it("starts with free Farmer heads and authoritatively buys a priced head once", () => {
     const state = freshGameplayState();
+    state.balance.brains = 20;
     expect(state.farmerHeads).toEqual(expect.arrayContaining([0, 1, 4, 5, 10, 11]));
     expect(state.farmerHeads).not.toContain(12);
 
@@ -175,7 +180,7 @@ describe("protocol v3 command engine", () => {
     expect(result.state.farm.plots["15:12"]).toMatchObject({
       state: "planted", cropKey: "ZombieActorRegularTier1", zombie: true,
     });
-    expect(result.state.balance).toMatchObject({ gold: 355, brains: 19 });
+    expect(result.state.balance).toMatchObject({ gold: 355, brains: 1 });
   });
 
   it("rejects a new free-placed plot whose footprint overlaps another plot", () => {

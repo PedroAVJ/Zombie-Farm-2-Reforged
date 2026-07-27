@@ -243,22 +243,11 @@ export function openSettings(hud: Hud): void {
         hud.getDayNightMode(),
         (v) => {
           hud.onSetDayNightMode?.(v);
-          hud.refreshEnvironmentControls();
         }
       ),
       noteEl("Auto follows this device's local clock (night from 7pm to 7am).")
     );
   }
-  if (hud.getWeather && hud.onSetWeather) {
-    ambienceBlock.push(
-      row("Rain", hud.getWeather(), (v) => {
-        hud.onSetWeather?.(v);
-        hud.refreshEnvironmentControls();
-      }),
-      noteEl("A visual and ambience effect only; rain does not change crop growth.")
-    );
-  }
-
   panel.append(
     row("Music", hud.audio.musicOn, (v) => hud.audio.setMusic(v)),
     volumeRow("Music Volume", hud.audio.musicVolume, (v) => hud.audio.setMusicVolume(v)),

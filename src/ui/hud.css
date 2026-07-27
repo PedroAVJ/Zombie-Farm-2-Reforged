@@ -166,44 +166,25 @@
   border: 2px solid #490c17; border-radius: 10px 10px 0 0; color: #fff;
   font-weight: 700; font-size: 12px; text-shadow: 0 1px 1px #000; }
 
-/* Player-facing ambience controls. Auto uses local device time; rain is cosmetic. */
-#hud .environment-bar { position: fixed; right: 12px; top: 67px; display: flex;
-  gap: 5px; pointer-events: auto; }
-#hud .environment-btn { min-width: 72px; padding: 6px 9px; border: 2px solid #2f1d0d;
-  border-radius: 12px; cursor: pointer; background: linear-gradient(#697887, #3d4854);
-  color: #fff; font: 800 11px system-ui, sans-serif; text-shadow: 0 1px 2px #111;
-  box-shadow: 0 2px 4px rgba(0,0,0,.4); }
-#hud .environment-btn:hover { filter: brightness(1.12); }
-#hud .environment-btn.on { background: linear-gradient(#4b7294, #29465f); }
-
-/* Lightweight CSS rain: visual-only, screen-space, and non-interactive. */
-#hud.weather-rain::before { content: ""; position: fixed; inset: -80px -30px 0;
-  pointer-events: none; opacity: .48;
-  background-image: repeating-linear-gradient(112deg,
-    transparent 0 21px, rgba(205,232,255,.78) 22px 23px, transparent 24px 43px);
-  background-size: 46px 92px; animation: zf-rain .48s linear infinite; }
-@keyframes zf-rain { from { transform: translate3d(0,-92px,0); }
-  to { transform: translate3d(-34px,0,0); } }
-
 /* bottom-center: farming tools */
 #hud .tools { position: fixed; left: 50%; transform: translateX(-50%); bottom: 10px;
   display: flex; gap: 10px; pointer-events: auto;
   background: rgba(30,45,20,.55); padding: 6px 10px; border-radius: 16px; }
 /* During a live raid the battle scene owns the screen: hide the farm chrome but
    keep raid panels (.panelbg) visible. */
-#hud.raiding .topbar, #hud.raiding .tools, #hud.raiding .menucol, #hud.raiding .environment-bar,
+#hud.raiding .topbar, #hud.raiding .tools, #hud.raiding .menucol,
 #hud.raiding .questcol, #hud.raiding .invade-shortcut, #hud.raiding .fab,
 #hud.raiding .touch-cancel, #hud.raiding .plant-label,
 #hud.raiding .crop-hover { display: none !important; }
 /* "u" key: hide all farm chrome for a clean, unobstructed view of the farm. */
-#hud.ui-hidden .topbar, #hud.ui-hidden .tools, #hud.ui-hidden .menucol, #hud.ui-hidden .environment-bar,
+#hud.ui-hidden .topbar, #hud.ui-hidden .tools, #hud.ui-hidden .menucol,
 #hud.ui-hidden .questcol, #hud.ui-hidden .invade-shortcut, #hud.ui-hidden .fab,
 #hud.ui-hidden .touch-cancel,
 #hud.ui-hidden .plant-label, #hud.ui-hidden .crop-hover { display: none !important; }
 /* Visiting a friend's farm: a strictly read-only view. Hide every farm-editing
    surface (tools, menu, quests, fab, top bar) so nothing can be mutated; only the
    camera, zombie inspect, and the visit banner remain. */
-#hud.visiting .topbar, #hud.visiting .tools, #hud.visiting .menucol, #hud.visiting .environment-bar,
+#hud.visiting .topbar, #hud.visiting .tools, #hud.visiting .menucol,
 #hud.visiting .questcol, #hud.visiting .invade-shortcut, #hud.visiting .fab,
 #hud.visiting .touch-cancel, #hud.visiting .crop-hover { display: none !important; }
 #hud .visit-banner { position: fixed; top: 12px; left: 50%; transform: translateX(-50%);
@@ -1129,7 +1110,6 @@
     left: calc(6px + env(safe-area-inset-left)); right: calc(6px + env(safe-area-inset-right)); }
   #hud .questcol { left: calc(8px + env(safe-area-inset-left)); }
   #hud .menucol { right: calc(8px + env(safe-area-inset-right)); }
-  #hud .environment-bar { right: calc(8px + env(safe-area-inset-right)); }
   #hud .tools { bottom: calc(10px + env(safe-area-inset-bottom)); }
   #hud .fab { bottom: calc(12px + env(safe-area-inset-bottom));
     right: calc(14px + env(safe-area-inset-right)); }
@@ -1316,13 +1296,18 @@
 #hud.tutorial .tools { display: none !important; }
 #hud.tutorial .fab { display: block !important; }
 #hud.tutorial .topbar, #hud.tutorial .questcol, #hud.tutorial .menucol,
-#hud.tutorial .environment-bar,
 #hud.tutorial .tools, #hud.tutorial .fab, #hud.tutorial .touch-cancel,
 #hud.tutorial .invade-shortcut { pointer-events: none !important; }
 #hud.tutorial .invade-shortcut:not(.tut-highlight) { display: none !important; }
 #hud.tutorial .tut-highlight { pointer-events: auto !important; }
 #hud.tutorial .mkt-bg.tut-market { z-index: 41; pointer-events: auto; }
-#hud .tut-layer.invade-step .tut-tim { bottom: 104px; }
+#hud .tut-layer.invade-step .tut-tim {
+  left: auto; right: max(12px, env(safe-area-inset-right)); bottom: 0;
+  flex-direction: row-reverse;
+}
+#hud .tut-layer.invade-step .tut-bubble::after {
+  left: auto; right: -14px; border-right-color: transparent; border-left-color: #7a4a1e;
+}
 /* Full-screen tap blocker: only present while a step gates input. It swallows
    every DOM tap so nothing but the highlighted element is reachable. */
 #hud.tutorial .tut-blocker { position: fixed; inset: 0; pointer-events: auto;
@@ -1332,6 +1317,7 @@
 #hud .tut-highlight { position: relative; z-index: 41 !important; pointer-events: auto !important;
   border-radius: 12px; box-shadow: 0 0 0 3px #ffe27a, 0 0 16px 4px rgba(255,210,80,.9);
   animation: tutGlow 1s ease-in-out infinite; }
+#hud .invade-shortcut.tut-highlight { position: fixed; }
 @keyframes tutGlow { 0%,100% { box-shadow: 0 0 0 3px #ffe27a, 0 0 12px 3px rgba(255,210,80,.7); }
   50% { box-shadow: 0 0 0 4px #fff0a8, 0 0 22px 7px rgba(255,210,80,1); } }
 /* Tim's slide-up popup: anchored at bottom-left. The right-side width reserve keeps

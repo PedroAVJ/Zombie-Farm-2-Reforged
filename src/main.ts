@@ -39,7 +39,7 @@ import { harvestXp } from "./farmRewards";
 import {
   DEFAULT_FARM_BACKGROUND, getFarmBackground, isFarmBackground, setFarmBackground,
   FARM_BG_DENSITY, type FarmBackground, getDayNightMode, setDayNightMode,
-  isLocalNight, getWeatherEnabled, setWeatherEnabled, type DayNightMode,
+  isLocalNight, type DayNightMode,
 } from "./prefs";
 import { BASE } from "./base";
 import { TutorialController } from "./tutorial/TutorialController";
@@ -446,12 +446,8 @@ async function main() {
     // as one continuous surface instead of the hills floating over a near-black void.
   };
   let dayNightMode: DayNightMode = getDayNightMode();
-  let weatherEnabled = getWeatherEnabled();
   const syncEnvironment = () => {
     setNight(dayNightMode === "night" || (dayNightMode === "auto" && isLocalNight()));
-    hud.setWeatherVisual(weatherEnabled);
-    audio.setRain(weatherEnabled);
-    hud.refreshEnvironmentControls();
   };
   hud.getNight = () => isNight;
   hud.onSetNight = (on) => setNight(on); // retained for the developer menu
@@ -459,12 +455,6 @@ async function main() {
   hud.onSetDayNightMode = (mode) => {
     dayNightMode = mode;
     setDayNightMode(mode);
-    syncEnvironment();
-  };
-  hud.getWeather = () => weatherEnabled;
-  hud.onSetWeather = (on) => {
-    weatherEnabled = on;
-    setWeatherEnabled(on);
     syncEnvironment();
   };
   syncEnvironment();

@@ -31,7 +31,6 @@ const SPRITE_KEY = "zf2r.spriteSet";
 const EDITION_KEY = "zf2r.edition";
 const FARM_BG_KEY = "zf2r.farmBackground";
 const DAY_NIGHT_KEY = "zf2r.dayNight";
-const WEATHER_KEY = "zf2r.weather";
 
 /** Which sprite pack to render with. Defaults to ZF2 (the only pack wired today). */
 export function getSpriteSet(): SpriteSet {
@@ -93,15 +92,6 @@ export function setDayNightMode(mode: DayNightMode): void {
 export function isLocalNight(at = new Date()): boolean {
   const hour = at.getHours();
   return hour >= 19 || hour < 7;
-}
-
-/** Rain is an optional ambience effect and never changes crop timers/economy. */
-export function getWeatherEnabled(): boolean {
-  return localStorage.getItem(WEATHER_KEY) === "on";
-}
-
-export function setWeatherEnabled(enabled: boolean): void {
-  localStorage.setItem(WEATHER_KEY, enabled ? "on" : "off");
 }
 
 /** Convenience gate for the modern additions (brain gifting, online, …). The

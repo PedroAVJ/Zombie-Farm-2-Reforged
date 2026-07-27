@@ -155,7 +155,6 @@ export class Hud {
   private questViews: QuestView[] = [];
   private tools: Record<string, HTMLButtonElement> = {};
   private menuCol!: HTMLElement;
-  private environmentBar!: HTMLElement;
   private toolsBar!: HTMLElement;
   private fab!: HTMLButtonElement;
   private fabImg!: HTMLImageElement;
@@ -191,7 +190,6 @@ export class Hud {
     this.buildTopBar();
     this.buildQuests();
     this.buildMenu();
-    this.buildEnvironmentControls();
     this.buildTools();
     this.buildFab();
     this.buildTouchCancel();
@@ -676,60 +674,6 @@ export class Hud {
       col.appendChild(btn);
     }
     this.el.appendChild(col);
-  }
-
-  private buildEnvironmentControls() {
-    const bar = document.createElement("div");
-    bar.className = "environment-bar";
-    this.environmentBar = bar;
-
-    const light = document.createElement("button");
-    light.className = "environment-btn";
-    light.dataset.environment = "lighting";
-    light.onclick = () => {
-      const current = this.getDayNightMode?.() ?? "auto";
-      const next: DayNightMode =
-        current === "auto" ? "day" : current === "day" ? "night" : "auto";
-      this.onSetDayNightMode?.(next);
-      this.refreshEnvironmentControls();
-    };
-
-    const weather = document.createElement("button");
-    weather.className = "environment-btn";
-    weather.dataset.environment = "weather";
-    weather.onclick = () => {
-      this.onSetWeather?.(!(this.getWeather?.() ?? false));
-      this.refreshEnvironmentControls();
-    };
-
-    bar.append(light, weather);
-    this.el.appendChild(bar);
-    this.refreshEnvironmentControls();
-  }
-
-  refreshEnvironmentControls() {
-    if (!this.environmentBar) return;
-    const mode = this.getDayNightMode?.() ?? "auto";
-    const light = this.environmentBar.querySelector<HTMLButtonElement>(
-      '[data-environment="lighting"]'
-    );
-    const weather = this.environmentBar.querySelector<HTMLButtonElement>(
-      '[data-environment="weather"]'
-    );
-    if (light) {
-      light.textContent = mode === "auto" ? "◐ Auto" : mode === "day" ? "☀ Day" : "☾ Night";
-      light.title = "Lighting: Auto follows your local clock. Click for Day/Night/Auto.";
-    }
-    if (weather) {
-      const on = this.getWeather?.() ?? false;
-      weather.textContent = on ? "☂ Rain" : "☁ Clear";
-      weather.classList.toggle("on", on);
-      weather.title = "Toggle rain ambience";
-    }
-  }
-
-  setWeatherVisual(on: boolean) {
-    this.el.classList.toggle("weather-rain", on);
   }
 
   /** Game-styled confirmation. Native browser confirm/prompt dialogs are never used. */
@@ -1251,10 +1195,6 @@ export class Hud {
   /** Player-facing lighting mode. Auto follows the device's local clock. */
   getDayNightMode: (() => DayNightMode) | null = null;
   onSetDayNightMode: ((mode: DayNightMode) => void) | null = null;
-  /** Optional visual rain ambience. */
-  getWeather: (() => boolean) | null = null;
-  onSetWeather: ((on: boolean) => void) | null = null;
-
   /** Current farm-background (foliage density) choice. */
   getFarmBackground: (() => FarmBackground) | null = null;
   /** Change the farm background — rebuilds the foliage ring live. */
