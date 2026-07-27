@@ -360,24 +360,22 @@ export class JobSystem {
         const online = !!this.state.onFarm;
         // Garden zombies fertilize a freshly-planted VEGGIE crop (zombie crops sell
         // for nothing, so they're never fertilized). A hit doubles the harvest.
-        // OFFLINE: the client owns the roll + its visual. ONLINE: the SERVER owns the
-        // fertilize roll (a client can't force it); the crop's fertilized visual is
-        // applied when the plant flushes and the server reports its decision (main.ts
-        // wires economy.onCropFertilized → field.markFertilized).
-        if (!cfg.isZombie && !online) {
+        // The client owns the roll in both modes so its visual appears immediately.
+        // Online play persists that result in the already-batched plant command.
+        let fertilized = false;
+        if (!cfg.isZombie) {
           const by = this.onCropPlanted(job.oc, job.or, cfg);
+          fertilized = !!by;
           if (by) {
             this.float(job.cx, job.cy - 18, `Fertilized by ${by}!`);
           }
         }
-        // ONLINE veggie crop: the server prices the seed cost exactly (net/economy →
-        // /farm/actions) and decides fertilization. Otherwise (offline, or a brains-cost
-        // zombie crop the server doesn't model) charge locally as before.
+        // ONLINE: the server prices the seed exactly and persists the client roll.
+        // OFFLINE: charge locally as before.
         if (online) {
-          // The server prices the seed cost exactly + (veggie) decides fertilization.
           // A zombie crop can cost BRAINS, so send the debit in the right currency.
           this.state.onFarm!(
-            { type: "plant", oc: job.oc, or: job.or, cropKey: cfg.key },
+            { type: "plant", oc: job.oc, or: job.or, cropKey: cfg.key, fertilized },
             cfg.brainsNeeded ? { brains: -cfg.cost } : { gold: -cfg.cost }
           );
           if (cfg.cost > 0) this.float(job.cx, job.cy, `-${cfg.cost}${cfg.brainsNeeded ? "b" : "g"}`);

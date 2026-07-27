@@ -4,7 +4,12 @@ import attacksJson from "../../public/assets/raids/attacks.json";
 import zombiesJson from "../../public/assets/zombies.json";
 import { BattleSim, type BattleSimSnapshot } from "../../src/raid/BattleSim";
 import { buildEnemyUnits, buildPlayerUnits } from "../../src/raid/CombatEngine";
-import { fightStage, minArmyFor, ARMY_CAP } from "../../src/raid/RaidCatalog";
+import {
+  fightStage,
+  minArmyFor,
+  bossThrowIntervalSecs,
+  ARMY_CAP,
+} from "../../src/raid/RaidCatalog";
 import { makeOwned } from "../../src/zombie/types";
 import { ABILITY_TIER, abilityTierOf } from "../../src/zombie/traits";
 import { advanceRaidSegment, replayRaid, RAID_RULESET_VERSION, type RaidReplayInput } from "../../src/raid/replay";
@@ -80,7 +85,11 @@ function findStageAction(stage: RaidStage, name: string) {
   return undefined;
 }
 
-function bossThrowOf(raid: RaidDef, stage: RaidStage): BossThrowConfig | null {
+function bossThrowOf(
+  raid: RaidDef,
+  stage: RaidStage,
+  priorWins: number
+): BossThrowConfig | null {
   if (!stage.bossKey || stage.throwingDisabled) return null;
   const options = (enemyStats[stage.bossKey]?.bossActions ?? [])
     .filter((a) => a.name === "throw")
@@ -92,8 +101,8 @@ function bossThrowOf(raid: RaidDef, stage: RaidStage): BossThrowConfig | null {
     }))
     .filter((o) => o.sprite);
   if (!options.length) return null;
-  const secs = stage.throwSpeed ?? raid.throwSpeed;
-  return { intervalMs: (secs > 0 ? secs : 2) * 1000, options };
+  const secs = bossThrowIntervalSecs(raid, stage, priorWins);
+  return { intervalMs: secs * 1000, options };
 }
 
 function bossSpecialsOf(stage: RaidStage): BossSpecial[] {
@@ -226,7 +235,7 @@ export async function buildPinnedRaid(
       rosterIds: ids,
       playerUnits: buildPlayerUnits(party, { concentration, abilityUnlocked, playerLevel: level }),
       enemyUnits,
-      bossThrow: bossThrowOf(raid, stage),
+      bossThrow: bossThrowOf(raid, stage, wins.get(raidId) ?? 0),
       bossSpecials: bossSpecialsOf(stage),
       ...summonWallTemplates(stage, enemyUnits),
       grabber: grabberOf(raid),
@@ -324,7 +333,7 @@ export async function buildPinnedV3Raid(
         farmerLifeMult: farmerMultiplier(Number(core.farmerHeadId ?? 1), "zombieLife"),
       }),
       enemyUnits,
-      bossThrow: bossThrowOf(raid, stage),
+      bossThrow: bossThrowOf(raid, stage, winsObject[String(raidId)] ?? 0),
       bossSpecials: bossSpecialsOf(stage),
       ...summonWallTemplates(stage, enemyUnits),
       grabber: grabberOf(raid),

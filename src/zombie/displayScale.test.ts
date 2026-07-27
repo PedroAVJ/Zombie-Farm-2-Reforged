@@ -23,4 +23,23 @@ describe("zombie display sizing", () => {
     expect(zombieRaidHeightScale("Garden", "Green", "ZombieActorGardenTier1"))
       .toBeCloseTo(0.7 / 0.9);
   });
+
+  it("carries every farm family size into raids relative to the regular baseline", () => {
+    const cases = [
+      ["Regular", "Green", "ZombieActorRegularTier1"],
+      ["Large", "Green", "ZombieActorLargeTier1"],
+      ["Headless", "Green", "ZombieActorHeadlessTier1"],
+      ["Female", "Green", "ZombieActorGirlTier1"],
+      ["Garden", "Green", "ZombieActorGardenTier1"],
+      ["Small", "Green", "ZombieActorSmallTier1"],
+      ["Small", "Special", "ZombieActorSmallTier5"],
+      ["Girl", "Special", "ZombieActorGirlTier5"],
+      ["Headless", "Special", "ZombieActorHeadlessTier5"],
+    ] as const;
+
+    for (const [group, className, key] of cases) {
+      expect(zombieRaidHeightScale(group, className, key))
+        .toBeCloseTo(zombieFarmScale(group, className, key) / 0.9);
+    }
+  });
 });

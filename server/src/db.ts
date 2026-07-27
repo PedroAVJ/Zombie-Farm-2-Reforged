@@ -19,7 +19,7 @@ import { raidLoot, dropEcon, MAX_SEED_ITEMS } from "./raidLootCatalog";
 import { rollLoot, resolveLoot, type LootGrant } from "./loot";
 import { rollBrainDrop } from "../../src/raid/brainDrops";
 import { planBuy, planUse, planGiftRedeem, type InventoryAction } from "./inventory";
-import { zombieSell, fertilizeProbability, isKnownZombie, MAX_MUTATION } from "./rosterCatalog";
+import { zombieSell, isKnownZombie, MAX_MUTATION } from "./rosterCatalog";
 import { validateUnit, type RosterAction } from "./roster";
 import { BASE_FARM_SIZE, sizeTier, nextSize, climateCost } from "./shopCatalog";
 import { levelForXp } from "./levels";
@@ -1270,7 +1270,7 @@ export interface FarmResult {
   error?: string;
   gold?: number;
   xp?: number;
-  fertilized?: boolean; // plant only: whether the SERVER rolled the crop fertilized
+  fertilized?: boolean; // plant only: the client's immediate Garden-zombie result
   /** Authoritative catalog subject for quest events emitted after a harvest. */
   subject?: string;
   zombie?: boolean;
@@ -1358,17 +1358,6 @@ export async function applyFarmActions(
   const bal = await getOrSeedBalance(db, accountId, { gold: 0, brains: 0, xp: 0 });
   const results: FarmResult[] = [];
 
-  // Fertilize probability from the player's OWNED Garden zombies (server-owned roll,
-  // so a modified client can't force the 2x harvest). Read once — the roster doesn't
-  // change within a farm batch. Rolled per plant below. (Fidelity note: this counts
-  // all owned Garden units; the client only rolls DEPLOYED ones, so this can fertilize
-  // slightly more often — player-favourable, never an exploit.)
-  let fertP = 0;
-  if (actions.some((a) => a?.type === "plant")) {
-    const gk = await db.prepare("SELECT key FROM roster WHERE account_id = ?").bind(accountId).all<{ key: string }>();
-    fertP = fertilizeProbability((gk.results ?? []).map((r) => r.key));
-  }
-
   // Server-owned facts every plant/plow is judged against. Read once per batch: neither
   // can change within it (a plant can't buy land, and the level-up a plant's xp might
   // trigger is credited after — it can't unlock a crop earlier in the same batch).
@@ -1445,9 +1434,8 @@ export async function applyFarmActions(
       results.push({ id: a.id, status: "applied", gold: plan.currency === "gold" ? -plan.cost : 0 });
     } else if (a.type === "plant") {
       const occupied = !!(await getCropPlot(db, accountId, a.oc, a.or));
-      const fertilized = Math.random() < fertP; // SERVER-owned fertilize roll
       const ctx: PlantContext = { size, level, plowed: await isPlowed(db, accountId, a.oc, a.or) };
-      const plan = planPlant(a, cropEcon(a.cropKey), occupied, bal, now, fertilized, ctx);
+      const plan = planPlant(a, cropEcon(a.cropKey), occupied, bal, now, a.fertilized === true, ctx);
       if (!plan.ok) {
         results.push({ id: a.id, status: "rejected", error: plan.error });
         continue;

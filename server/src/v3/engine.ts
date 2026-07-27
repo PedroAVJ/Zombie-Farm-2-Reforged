@@ -18,7 +18,7 @@ import { levelForXp, levelUpBrains } from "../levels";
 import { objectBuyXp, objectEcon, objectRefund } from "../objectCatalog";
 import { planClaim } from "../storage";
 import { QUEST_DEFINITIONS, QUEST_REWARD } from "../questCatalog";
-import { fertilizeProbability, zombieSell } from "../rosterCatalog";
+import { zombieSell } from "../rosterCatalog";
 import { climateCost, nextSize, sizeTier } from "../shopCatalog";
 import { zombieCropEcon } from "../zombieCropCatalog";
 import { farmerGold, farmerZombieGrowMs } from "../../../src/farmer";
@@ -336,7 +336,9 @@ function applyOne(
       const cost = veg?.cost ?? zombie?.cost ?? 0;
       if (state.balance[currency] < cost) return reject(sequence, "insufficient");
       state.balance[currency] -= cost;
-      const fertilized = !!veg && options.random() < fertilizeProbability(state.roster.filter((u) => !u.stored).map((u) => u.key));
+      // Roll this on the live client so the actor animation and leaf effect appear
+      // immediately. It remains limited to vegetables and the existing 2x payout.
+      const fertilized = !!veg && command.fertilized === true;
       state.farm.plots[key] = {
         state: "planted",
         cropKey: command.cropKey,

@@ -46,8 +46,8 @@ describe("planPlant — exact seed cost + plot record", () => {
     }
   });
 
-  it("records fertilization from the SERVER-decided flag, not the client action", () => {
-    // fertilized is the 6th arg (the db layer's Garden-roster roll), not a.fertilized.
+  it("records the supplied fertilization result", () => {
+    // The db layer passes the client's boolean as the normalized sixth argument.
     const r = planPlant(plant({ fertilized: false }), cropEcon("carrot"), false, bal(100), NOW, true, ctx());
     expect(r.ok && r.plot.fertilized).toBe(1);
   });

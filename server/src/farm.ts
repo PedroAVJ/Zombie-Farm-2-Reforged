@@ -103,9 +103,8 @@ export type PlantPlan =
 
 /** Plan a plant: crop must exist and be unlocked at the player's (server-derived) level,
  *  the plot must sit on PLOWED soil inside the OWNED farm, be free, and the player must
- *  afford the exact seed cost. `fertilized` is decided by the SERVER (a roll over the
- *  player's Garden-zombie roster in the db layer), NOT the client's assertion — so a
- *  modified client can't force the 2x harvest. */
+ *  afford the exact seed cost. `fertilized` is the client's immediate Garden-zombie
+ *  result, capped here to the existing 2x harvest multiplier. */
 export function planPlant(
   a: Extract<FarmAction, { type: "plant" }>,
   crop: CropEcon | undefined,

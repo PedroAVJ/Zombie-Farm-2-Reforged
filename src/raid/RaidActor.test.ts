@@ -76,6 +76,24 @@ describe("RaidActor mutation rendering", () => {
     expect(eyes.every(({ sp }) => sp.scale.y === 1)).toBe(true);
   });
 
+  it("matches the farm's layered one-fifth-size eyes for Large zombies", () => {
+    const actor = new RaidActor(assets(), "test", 0, "Large");
+    const eyes = (actor as unknown as {
+      eyes: { sp: { scale: { x: number; y: number }; tint: number } }[];
+    }).eyes;
+
+    expect(eyes).toHaveLength(4);
+    expect(eyes.filter(({ sp }) => sp.scale.x === 0.2 && sp.scale.y === 0.2))
+      .toHaveLength(2);
+    expect(eyes.filter(({ sp }) => sp.scale.x === 0.2).every(({ sp }) => sp.tint === 0xffffff))
+      .toBe(true);
+
+    actor.update(1, false, true);
+    for (const { sp } of eyes.filter(({ sp }) => sp.scale.x === 0.2)) {
+      expect(sp.scale.y).toBeCloseTo(0.152);
+    }
+  });
+
   it("uses the recovered bite head, jaw, eye, and two-arm pose", () => {
     const actor = new RaidActor(assets(), "test");
     const head = (actor as unknown as { headParts: { sp: { x: number } }[] }).headParts;

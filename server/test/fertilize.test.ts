@@ -1,11 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { gardenChance, fertilizeProbability } from "../src/rosterCatalog";
 
-// P13 — server owns the Garden-zombie fertilize roll. The probability that a freshly
-// planted crop comes up fertilized (2x harvest) is 1 - Π(1 - chance_i) over the
-// player's owned Garden units. This is the pure math the /farm plant path rolls against
-// (db.applyFarmActions: `Math.random() < fertilizeProbability(gardenKeys)`), so the
-// bounds here directly gate how much free gold fertilization can produce.
+// The live client rolls deployed Garden zombies immediately so the animation is not
+// delayed by command batching. These server-side catalog helpers retain the same
+// ground-truth probability math for auditing and non-visual simulations.
 
 const approx = (a: number, b: number) => expect(a).toBeCloseTo(b, 10);
 

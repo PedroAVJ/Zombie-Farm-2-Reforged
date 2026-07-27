@@ -132,8 +132,8 @@ export class ZombieField {
     return { group: unit.group, key: unit.typeKey };
   }
 
-  /** Play a server-confirmed fertilization. The server owns the aggregate chance
-   *  but does not name the actor, so an eligible deployed Garden zombie performs it. */
+  /** Play fertilization adopted from a restored/remote server projection. That
+   *  projection does not name the actor, so an eligible Garden zombie performs it. */
   animateFertilize(oc: number, or: number): string | null {
     const gardens = this.units.filter((u) => u.group === "Garden");
     if (!gardens.length) return null;

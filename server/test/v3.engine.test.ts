@@ -211,6 +211,20 @@ describe("protocol v3 command engine", () => {
     });
   });
 
+  it("persists the client fertilization result for vegetables only", () => {
+    const state = freshGameplayState();
+    const result = applyCommandBatch(state, commands(
+      { type: "farm.plow", oc: 0, or: 0 },
+      { type: "farm.plant", oc: 0, or: 0, cropKey: "carrot", fertilized: true },
+      { type: "farm.plow", oc: 4, or: 0 },
+      { type: "farm.plant", oc: 4, or: 0, cropKey: "ZombieActorRegularTier1", fertilized: true },
+    ), { now: 1_000, random: () => 1 });
+
+    expect(result.results.every((entry) => entry.status === "applied")).toBe(true);
+    expect(result.state.farm.plots["0:0"]).toMatchObject({ fertilized: true, zombie: false });
+    expect(result.state.farm.plots["4:0"]).toMatchObject({ fertilized: false, zombie: true });
+  });
+
   it("accepts every seasonal crop shipped in the client catalog", () => {
     for (const crop of plantRows.filter((entry) => entry.seasonal)) {
       const state = freshGameplayState();

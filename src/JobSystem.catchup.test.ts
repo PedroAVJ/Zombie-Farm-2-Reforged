@@ -198,6 +198,40 @@ describe("JobSystem elapsed-time catch-up", () => {
     expect(plantedAt[1]).toBeLessThan(now - 5_000);
   });
 
+  it("rolls online fertilization immediately and includes it in the plant action", () => {
+    const walk = new FakeWalk();
+    const farmActions: unknown[] = [];
+    const fertilize = vi.fn(() => "Zombee");
+    const field = {
+      highlightLayer: new Container(), plowHighlightLayer: new Container(), labelLayer: new Container(),
+      plotOriginAt: (col: number, row: number) => ({ oc: col, or: row }),
+      canPlant: () => true, isRipe: () => false,
+      plotCenterOf: (col: number, row: number) => ({ x: col, y: row }),
+      hasFastWork: () => false,
+      plantAt: () => true,
+    };
+    const state = {
+      gold: 100, brains: 0, level: 1,
+      onFarm: (action: unknown) => farmActions.push(action),
+      onTreeHarvest: null, canMutateOnline: () => true,
+    };
+    const jobs = new JobSystem(
+      field as never, { setWorking: () => {} } as never, walk as never, state as never,
+      () => {}, () => {}, undefined, undefined, fertilize,
+    );
+
+    expect(jobs.enqueue("plant", 0, 0, {
+      key: "carrot", name: "Carrot", stages: [], growMs: 1, cost: 1, sell: 1, xp: 1,
+      unlockLevel: 1,
+    })).toBe(true);
+    jobs.advanceElapsed(3);
+
+    expect(fertilize).toHaveBeenCalledWith(0, 0, expect.objectContaining({ key: "carrot" }));
+    expect(farmActions).toEqual([
+      { type: "plant", oc: 0, or: 0, cropKey: "carrot", fertilized: true },
+    ]);
+  });
+
   it("reports the currency needed when an affordable-looking action is rejected", () => {
     const notices: [string, number][] = [];
     const field = {

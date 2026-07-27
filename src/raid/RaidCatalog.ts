@@ -25,6 +25,23 @@ export function minArmyFor(raid: RaidDef, priorWins: number): number {
   return MIN_ARMY;
 }
 
+/** Ease Old McDonnell's projectile cadence over his first two clears, in step
+ *  with the tutorial army ramp above. A larger interval means fewer throws:
+ *  half speed before the first win, two-thirds speed after it, then the stage's
+ *  authored full-strength cadence from the third fight onward. */
+export function bossThrowIntervalSecs(
+  raid: RaidDef,
+  stage: RaidStage,
+  priorWins: number
+): number {
+  const rawSecs = stage.throwSpeed ?? raid.throwSpeed;
+  const authoredSecs = rawSecs > 0 ? rawSecs : 2;
+  if (raid.id !== MCDONNELL_ID) return authoredSecs;
+  if (priorWins <= 0) return authoredSecs * 2;
+  if (priorWins === 1) return authoredSecs * 1.5;
+  return authoredSecs;
+}
+
 /** Real between-invasions cooldown (Help.json: "wait two hours between invasions,
  *  unless you purchase an Invasion Voucher"). Playtest-scaled in main.ts. */
 export const RAID_COOLDOWN_MS = 2 * 60 * 60 * 1000;

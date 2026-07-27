@@ -132,11 +132,11 @@ export function isTradableZombie(key: string): boolean {
   return TRADABLE_ZOMBIES.has(key);
 }
 
-// ---- Garden-zombie fertilization (server-owned roll) --------------------
+// ---- Garden-zombie fertilization probability ----------------------------
 // A deployed Garden zombie has a per-tier chance to fertilize a freshly-planted veggie
 // crop (2x harvest). GROUND TRUTH: fertilizeChance by combat tier — t1 .04, t2 .06,
-// t3/t4 .08, t5 .12 (client ZombieField.FERTILIZE_BY_TIER). The server owns the roll
-// so a modified client can't force fertilization.
+// t3/t4 .08, t5 .12 (client ZombieField.FERTILIZE_BY_TIER). The live client owns
+// the roll so the farm animation is immediate; these helpers retain the shared math.
 const GARDEN_TIER: Readonly<Record<string, number>> = {
   ZombieActorGardenTier1: 1,
   ZombieActorGardenTier2: 2,

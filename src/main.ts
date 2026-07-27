@@ -1111,8 +1111,8 @@ async function main() {
     // currency, so the blob's boost list becomes an ignored cache.
     state.onInventory = (action, optimistic) => economy!.submitInventory(action, optimistic);
     state.onTreeHarvest = (instanceId, gold, xp) => economy!.submitTreeHarvest([instanceId], gold, xp);
-    // The server owns the Garden-zombie fertilize roll; when a freshly-planted crop
-    // comes back fertilized, apply the 2x visual (leaf FX) to that plot.
+    // Reconciliation also adopts fertilization from another/restored client. A crop
+    // rolled here is already marked, so markFertilized prevents duplicate FX.
     economy.onCropFertilized = (oc, or) => {
       if (field.markFertilized(oc, or)) {
         zombies.animateFertilize(oc, or);

@@ -6,7 +6,12 @@ import { Container, Sprite } from "pixi.js";
 import { GameAssets, ZombieModel } from "../assets";
 import { bitsOf, slotOf } from "../zombie/mutations";
 import type { MutationReplacement } from "../zombie/mutationVisual";
-import { zombiePartTint } from "../zombie/appearance";
+import {
+  BRUTE_EYEBALL_SCALE,
+  DEFAULT_ZOMBIE_EYE_TINT,
+  isBruteEyeball,
+  zombiePartTint,
+} from "../zombie/appearance";
 import { SpecialHeadFx, specialHeadFxKind } from "../zombie/specialHeadFx";
 
 const MODEL_BASE = 0.95;
@@ -158,6 +163,22 @@ export class RaidActor {
       else if (p.group === "footB") { this.footB = sp; this.footBBaseY = p.py; }
       // Arms live in the "root" group; grab them by filename for the wind-up.
       else if (/Arm[FB](?:\.png)?$/i.test(p.file)) this.arms.push(sp);
+
+      // Match the farm rig: Large zombies retain their dark full-size eye disks
+      // with a light authored eyeball centered inside at one-fifth scale. Register
+      // the overlay as both a head part and an eye so raid tilt, death, focus, bite,
+      // and scratch animations keep the two layers together.
+      if (isBruteEyeball(group, p.file)) {
+        const eyeball = new Sprite(tex);
+        eyeball.anchor.set(p.ax, p.ay);
+        eyeball.position.set(p.px, p.py);
+        eyeball.scale.set((p.scale ?? 1) * BRUTE_EYEBALL_SCALE);
+        eyeball.tint = DEFAULT_ZOMBIE_EYE_TINT;
+        eyeball.zIndex = p.z + 0.1;
+        this.root.addChild(eyeball);
+        this.headParts.push({ sp: eyeball, bx: p.px, by: p.py });
+        this.eyes.push({ sp: eyeball, baseScaleY: eyeball.scale.y });
+      }
     }
     // Raid zombies use the same mutation overlays as their farm actors. The mask is
     // owned-unit state, not something that can be inferred from the species key after

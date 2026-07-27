@@ -12,6 +12,7 @@ import { OwnedZombie } from "../zombie/types";
 import { buildEnemyUnits, buildPlayerUnits, resolveRaid } from "./CombatEngine";
 import {
   ARMY_CAP,
+  bossThrowIntervalSecs,
   CONCENTRATION_KEY,
   DICE_KEY,
   MIN_ARMY,
@@ -378,7 +379,11 @@ export class RaidManager {
         farmerLifeMult: this.state.farmerZombieLifeMult(),
       }),
       enemyUnits,
-      bossThrow: this.bossThrowOf(raid, stage),
+      bossThrow: this.bossThrowOf(
+        raid,
+        stage,
+        this.state.raidWins(String(raid.id))
+      ),
       bossSpecials: this.bossSpecialsOf(stage),
       grabber: this.grabberOf(raid),
       crab: this.crabOf(raid),
@@ -519,7 +524,11 @@ export class RaidManager {
    *  the stage has no boss OR throwing is disabled on it (early boss waves let the
    *  boss come down to fight without throwing — verified in the real game). The
    *  throw interval comes from the stage's throwSpeed, else the raid default. */
-  private bossThrowOf(raid: RaidDef, stage: RaidStage): BossThrowConfig | null {
+  private bossThrowOf(
+    raid: RaidDef,
+    stage: RaidStage,
+    priorWins: number
+  ): BossThrowConfig | null {
     if (!stage.bossKey || stage.throwingDisabled) return null;
     const actions = this.assets.enemyStats[stage.bossKey]?.bossActions ?? [];
     const options = actions
@@ -533,8 +542,8 @@ export class RaidManager {
       .filter((o) => o.sprite);
     if (!options.length) return null;
     // `throwSpeed` is authored in seconds (ZFFightMan's projectile timer).
-    const secs = stage.throwSpeed ?? raid.throwSpeed;
-    return { intervalMs: (secs > 0 ? secs : 2) * 1000, options };
+    const secs = bossThrowIntervalSecs(raid, stage, priorWins);
+    return { intervalMs: secs * 1000, options };
   }
 
   /** Apply the result of a played-out raid: veterancy credit, win rewards, the

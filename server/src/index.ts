@@ -633,7 +633,8 @@ const validGameplayCommand = (value: unknown): value is GameplayCommand => {
     case "farm.plow": case "farm.harvest": case "farm.remove":
       return commandInt(command.oc) && commandInt(command.or);
     case "farm.plant":
-      return commandInt(command.oc) && commandInt(command.or) && commandString(command.cropKey);
+      return commandInt(command.oc) && commandInt(command.or) && commandString(command.cropKey) &&
+        (command.fertilized === undefined || typeof command.fertilized === "boolean");
     case "power.buy": return commandString(command.key);
     case "power.use":
       return commandString(command.key) && (command.oc === undefined || commandInt(command.oc)) &&

@@ -253,7 +253,13 @@ export class EconomyClient {
 
   submitFarm(input: FarmActionInput, optimistic: { gold?: number; brains?: number; xp?: number }): void {
     const command: GameplayCommand = input.type === "plant"
-      ? { type: "farm.plant", oc: input.oc, or: input.or, cropKey: input.cropKey ?? "" }
+      ? {
+          type: "farm.plant",
+          oc: input.oc,
+          or: input.or,
+          cropKey: input.cropKey ?? "",
+          fertilized: !!input.fertilized,
+        }
       : input.type === "harvest"
         ? { type: "farm.harvest", oc: input.oc, or: input.or }
         : input.type === "remove"

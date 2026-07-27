@@ -639,7 +639,7 @@ export interface FarmResult {
   error?: string;
   gold?: number;
   xp?: number;
-  fertilized?: boolean; // plant only: the SERVER's fertilize decision
+  fertilized?: boolean; // plant only: the server-persisted fertilize result
 }
 
 export interface FarmState {

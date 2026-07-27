@@ -23,6 +23,19 @@ const memoryStorage = () => {
 };
 
 describe("v3 raid dependency ids", () => {
+  it("carries the immediate fertilization result in the existing plant command", () => {
+    const economy = new EconomyClient(new GameState(), "fertilized-plant");
+
+    economy.submitFarm(
+      { type: "plant", oc: 4, or: 4, cropKey: "carrot", fertilized: true },
+      { gold: -10 },
+    );
+
+    expect((economy as any).queue.pending[0].command).toEqual({
+      type: "farm.plant", oc: 4, or: 4, cropKey: "carrot", fertilized: true,
+    });
+  });
+
   it("flushes a zombie harvest immediately so its server-owned mutation is visible", () => {
     const economy = new EconomyClient(new GameState(), "zombie-harvest-flush");
     const flush = vi.spyOn((economy as any).queue, "flush").mockResolvedValue(undefined);

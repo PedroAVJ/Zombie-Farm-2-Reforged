@@ -40,11 +40,26 @@ const TILT_BACK_FRAC = 0.6;
 const STEP_SPEED = 4.5;
 const STEP_LIFT = 2.5;
 const STEP_ANGLE = 0.18;
+const IDLE_PAUSE_MIN_MS = 2500;
+const IDLE_PAUSE_RANGE_MS = 3500;
+const ARM_TRANSITION_SECONDS = 0.3;
 const FERTILIZE_CAST_MS = 1100;
 const FERTILIZE_RAISE_MS = 220;
 const FERTILIZE_LOWER_MS = 220;
 const ARM_RAISE_ANGLE = -2.5;
 const ARM_REST_ANGLE = -1.5;
+
+export function advanceZombieWalkBlend(
+  current: number,
+  walking: boolean,
+  dt: number,
+): number {
+  const target = walking ? 1 : 0;
+  const step = Math.max(0, dt) / ARM_TRANSITION_SECONDS;
+  return target > current
+    ? Math.min(target, current + step)
+    : Math.max(target, current - step);
+}
 
 export class ZombieUnit {
   readonly container = new Container();
@@ -70,11 +85,12 @@ export class ZombieUnit {
   private wx = 0;
   private wy = 0;
   private path: { x: number; y: number }[] = []; // remaining tile-center waypoints
-  private pauseMs = 1500;
+  private pauseMs = IDLE_PAUSE_MIN_MS;
   private sleeping = false; // gathered on the Zombie Patch: stay put, don't wander
   private facing = 1;
   private tiltPhase = 0;
   private stepPhase = 0;
+  private armWalkBlend = 0;
   // Half the sprite's rendered footprint, for click hit-testing.
   private hitHalfW = 24;
   private hitH = 60;
@@ -216,6 +232,7 @@ export class ZombieUnit {
     // Independent of species: a combined zombie shows exactly the mutations it
     // carries. Head parts join headParts (tilt with the head-nod); the rest sit flat.
     this.addMutations(assets, m, replaceable);
+    this.applyArmPose();
     this.buildFarmEffects();
     const headFxKind = specialHeadFxKind(this.data.key);
     if (headFxKind) {
@@ -334,7 +351,7 @@ export class ZombieUnit {
   // Wake up and resume wandering.
   wake() {
     this.sleeping = false;
-    this.pauseMs = 500 + Math.random() * 1500;
+    this.pauseMs = this.nextIdlePause();
   }
   get isSleeping(): boolean {
     return this.sleeping;
@@ -354,6 +371,10 @@ export class ZombieUnit {
         return;
       }
     }
+  }
+
+  private nextIdlePause(): number {
+    return IDLE_PAUSE_MIN_MS + Math.random() * IDLE_PAUSE_RANGE_MS;
   }
 
   private tilt(dt: number, moving: boolean) {
@@ -394,11 +415,16 @@ export class ZombieUnit {
     }
   }
 
-  private poseArms(moving: boolean) {
-    if (this.fertilizeCastMs > 0) return;
+  private applyArmPose() {
     for (const arm of this.arms) {
-      arm.sp.rotation = arm.baseRotation + (moving ? 0 : ARM_REST_ANGLE);
+      arm.sp.rotation = arm.baseRotation + ARM_REST_ANGLE * (1 - this.armWalkBlend);
     }
+  }
+
+  private poseArms(walking: boolean, dt: number) {
+    if (this.fertilizeCastMs > 0) return;
+    this.armWalkBlend = advanceZombieWalkBlend(this.armWalkBlend, walking, dt);
+    this.applyArmPose();
   }
 
   private updateFarmEffects(dt: number) {
@@ -419,7 +445,10 @@ export class ZombieUnit {
   }
 
   update(dt: number) {
-    let moving = false;
+    // Animation follows the route, not displacement in just this frame. Reaching a
+    // waypoint can consume a frame without translating; treating that as idle made
+    // the arms and feet flash down between every pair of path cells.
+    let walking = this.path.length > 0;
     if (this.fertilizeCastMs > 0) {
       this.fertilizeCloud.visible = true;
       this.fertilizeCastMs = Math.max(0, this.fertilizeCastMs - dt * 1000);
@@ -447,9 +476,8 @@ export class ZombieUnit {
         this.wx = t.x;
         this.wy = t.y;
         this.path.shift();
-        if (!this.path.length) this.pauseMs = 1500 + Math.random() * 3000;
+        if (!this.path.length) this.pauseMs = this.nextIdlePause();
       } else {
-        moving = true;
         this.wx += (dx / dist) * step;
         this.wy += (dy / dist) * step;
         if (dx > 0.1) this.facing = -1;
@@ -458,11 +486,14 @@ export class ZombieUnit {
     } else if (!this.sleeping) {
       // Napping units stay put; only wandering units pick a new destination.
       this.pauseMs -= dt * 1000;
-      if (this.pauseMs <= 0) this.repath();
+      if (this.pauseMs <= 0) {
+        this.repath();
+        walking = this.path.length > 0;
+      }
     }
-    this.tilt(dt, moving);
-    this.legs(moving, dt);
-    this.poseArms(moving);
+    this.tilt(dt, walking);
+    this.legs(walking, dt);
+    this.poseArms(walking, dt);
     this.updateFarmEffects(dt);
     this.specialHeadFx?.update(dt);
     this.root.scale.set(this.renderScale * this.facing, this.renderScale);

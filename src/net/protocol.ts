@@ -1,7 +1,7 @@
 /** Wire contract for the authoritative gameplay protocol. Keep this module free of
  * browser and Worker dependencies so both sides compile against the same shapes. */
 export const GAMEPLAY_PROTOCOL = 3 as const;
-export const CLIENT_INTEGRITY_VERSION = 4 as const;
+export const CLIENT_INTEGRITY_VERSION = 5 as const;
 export const COMMAND_BATCH_LIMIT = 64;
 // Mutations coalesce into one /commands POST per window. Widened from 10s to 30s to
 // cut request volume while actively farming (~3x fewer batches). Safe because the
@@ -26,7 +26,7 @@ export interface CommandResult {
 export type GameplayCommand =
   | { type: "writer.claim" }
   | { type: "farm.plow"; oc: number; or: number }
-  | { type: "farm.plant"; oc: number; or: number; cropKey: string }
+  | { type: "farm.plant"; oc: number; or: number; cropKey: string; fertilized?: boolean }
   | { type: "farm.harvest"; oc: number; or: number }
   | { type: "farm.remove"; oc: number; or: number }
   | { type: "power.buy"; key: string }
