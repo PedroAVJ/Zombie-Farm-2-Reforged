@@ -59,6 +59,7 @@ export interface CropConfig {
   unlockGrave?: "Blue" | "Red" | "Silver"; // zombie: needs this colored grave placed
   isZombie?: boolean; // harvest leaves a hole (vs. a dirt square)
   isMutant?: boolean; // mutant-tier zombie: grows in half the time with a Mutant Monolith
+  harvestIcon?: string; // standalone produce art; full stages are farm-only
 }
 
 export interface ZombieMutationContext {
@@ -73,7 +74,7 @@ export interface HarvestResult {
   name: string;
   isZombie: boolean;
   fertilized: boolean;
-  /** Ripe crop-stage texture used by the collection fly-up animation. */
+  /** Standalone produce texture used by the collection fly-up animation. */
   icon: string;
   zombieKey?: string;
   mutationContext?: ZombieMutationContext;
@@ -87,6 +88,7 @@ export const CARROT: CropConfig = {
   sell: 16,
   xp: 1,
   unlockLevel: 1,
+  harvestIcon: "stex0006.png",
 };
 
 type PlotState = "plowed" | "planted" | "dirt" | "hole";
@@ -707,7 +709,7 @@ export class Field {
     p.state = cfg.isZombie ? "hole" : "dirt";
     this.fit(p.soil, this.assets.soil[cfg.isZombie ? HOLE_FILE : DIRT_FILE], oc, or, PLOT);
     return { sell, xp: cfg.xp, growMs: cfg.growMs, name: cfg.name, isZombie: !!cfg.isZombie,
-      fertilized, icon: cfg.stages[cfg.stages.length - 1],
+      fertilized, icon: cfg.harvestIcon ?? cfg.stages[cfg.stages.length - 1],
       zombieKey: cfg.isZombie ? cfg.key : undefined, mutationContext };
   }
 

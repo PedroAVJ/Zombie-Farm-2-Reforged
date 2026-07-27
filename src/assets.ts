@@ -117,6 +117,7 @@ export interface PlantDef {
   xp: number; // xp granted on harvest
   stage1: string;
   stage2: string;
+  icon: string; // standalone produce sprite for Market cards and harvest pickups
   seasonal?: boolean;
 }
 
@@ -305,6 +306,7 @@ export interface GameAssets {
   soil: Record<string, Texture>; // plot filename -> texture
   crop: Record<string, Texture>; // crop-stage filename -> texture
   cropTop: Record<string, Texture>; // crop-stage filename -> plants-only texture (soil keyed out)
+  cropIcon: Record<string, Texture>; // standalone produce filename -> Market/harvest texture
   zombieModels: Record<string, ZombieModel>; // unitKey -> per-type model
   enemyModels: Record<string, EnemyModel>; // raid-enemy key -> animated rig
   zombiePartTex: Record<string, Texture>; // ZombieSheet part name -> sub-texture
@@ -570,6 +572,15 @@ export async function loadAssets(): Promise<GameAssets> {
   for (const [f, tex] of Object.entries(crop))
     cropTop[f] = f === SEED_FILE ? tex : makeCropTopTexture(tex, soil[PLOWED_FILE]);
 
+  // Standalone produce art is deliberately separate from the planted stage art.
+  // It is shared by Market cards and the crop-only harvest burst.
+  const cropIcon: Record<string, Texture> = {};
+  await mapConcurrent(
+    [...new Set(plants.map((p) => p.icon))], STARTUP_ASSET_CONCURRENCY, async (f) => {
+      cropIcon[f] = await Assets.load(`${BASE}assets/crop-icons/${f}`);
+    },
+  );
+
   // Per-type zombie models: one shared atlas (ZombieSheet.png) sliced into part
   // sub-textures via frames.json, plus models.json (composition per unit type).
   const [zombieModels, zombieFrames, mutationParts, sheet, enemyModels,
@@ -638,7 +649,7 @@ export async function loadAssets(): Promise<GameAssets> {
   );
 
   return {
-    field, groundIndex, rig, ground, player, farmer, pets, soil, crop, cropTop,
+    field, groundIndex, rig, ground, player, farmer, pets, soil, crop, cropTop, cropIcon,
     invasionBubble,
     zombieModels, enemyModels, zombiePartTex, mutationParts, plants, zombies, placeables, boosts, quests,
     raids, enemyStats, raidAttacks, drops, objects, background, scenery, upgrades,

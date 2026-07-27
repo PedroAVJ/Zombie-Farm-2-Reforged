@@ -129,12 +129,25 @@ export class ZombieUnit {
   private buildInvasionBubble(assets: GameAssets) {
     this.invasionBubble = new Sprite(assets.invasionBubble);
     this.invasionBubble.anchor.set(0.5, 1);
-    this.invasionBubble.scale.set(0.55);
-    this.invasionBubble.position.set(0, -this.hitH + 5);
     this.invasionBubble.visible = false;
     this.invasionBubble.zIndex = 10;
     this.container.sortableChildren = true;
     this.container.addChild(this.invasionBubble);
+    this.syncInvasionBubble();
+  }
+
+  private syncInvasionBubble() {
+    const scale = 0.55;
+    const width = this.invasionBubble.texture.width * scale;
+    const height = this.invasionBubble.texture.height * scale;
+    // `facing === 1` is the authored left-facing zombie. Keep the source bubble
+    // orientation there; mirror it for right-facing zombies. Shift one complete
+    // rendered bubble-width toward the zombie's gaze, and lower it by 15%.
+    this.invasionBubble.scale.set(scale * this.facing, scale);
+    this.invasionBubble.position.set(
+      -this.facing * width,
+      -this.hitH + 5 + height * 0.15,
+    );
   }
 
   private buildRing() {
@@ -210,7 +223,7 @@ export class ZombieUnit {
     this.fertilizeCloud.visible = false;
     this.root.addChild(this.fertilizeCloud);
 
-    if (this.data.group === "Large") {
+    if (this.data.group === "Large" && this.data.key !== "ZombieActorLargeTier1") {
       this.drool = new Graphics()
         .roundRect(-1.5, 0, 3, 13, 1.5).fill({ color: 0x8fe875, alpha: 0.72 })
         .circle(0, 14, 2.5).fill({ color: 0x8fe875, alpha: 0.8 });
@@ -435,6 +448,7 @@ export class ZombieUnit {
     this.updateFarmEffects(dt);
     this.specialHeadFx?.update(dt);
     this.root.scale.set(this.renderScale * this.facing, this.renderScale);
+    this.syncInvasionBubble();
     this.sync();
   }
 

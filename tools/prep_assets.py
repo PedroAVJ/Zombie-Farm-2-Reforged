@@ -275,6 +275,30 @@ def slice_crops():
     print(f"crops: sliced {n} crop-stage sprites")
 
 
+def slice_crop_icons():
+    """Copy the source Market's standalone produce sprites.
+
+    plants.json receives each authoritative sprite filename from prep_market.py.
+    These small icons are used by Market cards and harvest pickups; crop stage art
+    remains exclusive to planted farm plots.
+    """
+    plants = json.load(open(os.path.join(OUT, "plants.json"), encoding="utf-8"))
+    icon_out = os.path.join(OUT, "crop-icons")
+    os.makedirs(icon_out, exist_ok=True)
+    n = 0
+    for plant in plants:
+        name = plant.get("icon")
+        if not name:
+            continue
+        src = os.path.join(APP, name)
+        if not os.path.isfile(src):
+            print("   missing crop icon:", name)
+            continue
+        Image.open(src).convert("RGBA").save(os.path.join(icon_out, name))
+        n += 1
+    print(f"crop icons: copied {n} standalone Market sprites")
+
+
 # Storage-menu chrome from Storage.png: the wooden bar, the red STORAGE banner,
 # per-tab grass/flower flanks (items/pet/gift), and item/pet slot frames.
 STORAGE_FRAMES = [
@@ -614,6 +638,7 @@ if __name__ == "__main__":
     slice_ui()
     make_composites()
     slice_crops()
+    slice_crop_icons()
     slice_storage()
     portrait_dir = os.path.join(OUT, "zombie", "portrait")
     os.makedirs(portrait_dir, exist_ok=True)

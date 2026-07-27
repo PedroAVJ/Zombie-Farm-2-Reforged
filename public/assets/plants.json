@@ -8,7 +8,8 @@
   "stage1": "carrot_stage1.png",
   "stage2": "carrot_stage2.png",
   "level": 1,
-  "xp": 1
+  "xp": 1,
+  "icon": "stex0006.png"
  },
  {
   "key": "onion",
@@ -19,7 +20,8 @@
   "stage1": "onion_stage1.png",
   "stage2": "onion_stage2.png",
   "level": 1,
-  "xp": 2
+  "xp": 2,
+  "icon": "stex0005.png"
  },
  {
   "key": "tomato",
@@ -30,7 +32,8 @@
   "stage1": "Tomato_stage1.png",
   "stage2": "Tomato_stage2.png",
   "level": 1,
-  "xp": 1
+  "xp": 1,
+  "icon": "stex0004.png"
  },
  {
   "key": "turnip",
@@ -41,7 +44,8 @@
   "stage1": "turnip_stage1.png",
   "stage2": "turnip_stage2.png",
   "level": 3,
-  "xp": 1
+  "xp": 1,
+  "icon": "stex0009.png"
  },
  {
   "key": "breadfruit",
@@ -52,7 +56,8 @@
   "stage1": "breadfruit_stage1.png",
   "stage2": "breadfruit_stage2.png",
   "level": 5,
-  "xp": 1
+  "xp": 1,
+  "icon": "stex0015.png"
  },
  {
   "key": "potato",
@@ -63,7 +68,8 @@
   "stage1": "potato_stage1.png",
   "stage2": "potato_stage2.png",
   "level": 6,
-  "xp": 1
+  "xp": 1,
+  "icon": "stex0008.png"
  },
  {
   "key": "sampaguita",
@@ -74,7 +80,8 @@
   "stage1": "sampaguita_stage1.png",
   "stage2": "sampaguita_stage2.png",
   "level": 8,
-  "xp": 1
+  "xp": 1,
+  "icon": "stex0017.png"
  },
  {
   "key": "coffee",
@@ -85,7 +92,8 @@
   "stage1": "coffee_stage1.png",
   "stage2": "coffee_stage2.png",
   "level": 9,
-  "xp": 1
+  "xp": 1,
+  "icon": "stex0010.png"
  },
  {
   "key": "candycorn",
@@ -96,7 +104,8 @@
   "stage1": "corn_stage1.png",
   "stage2": "corn_stage2.png",
   "level": 10,
-  "xp": 1
+  "xp": 1,
+  "icon": "stex0020.png"
  },
  {
   "key": "venus_flytrap",
@@ -107,7 +116,8 @@
   "stage1": "venusflytrap_stage1.png",
   "stage2": "venusflytrap_stage2.png",
   "level": 11,
-  "xp": 1
+  "xp": 1,
+  "icon": "stex0016.png"
  },
  {
   "key": "celery",
@@ -118,7 +128,8 @@
   "stage1": "celerey_stage1.png",
   "stage2": "celerey_stage2.png",
   "level": 12,
-  "xp": 1
+  "xp": 1,
+  "icon": "stex0007.png"
  },
  {
   "key": "Spineapple",
@@ -129,7 +140,8 @@
   "stage1": "Spineapple_stage1.png",
   "stage2": "Spineapple_stage2.png",
   "level": 14,
-  "xp": 1
+  "xp": 1,
+  "icon": "stex0018.png"
  },
  {
   "key": "broccoli",
@@ -140,7 +152,8 @@
   "stage1": "broccoli_stage1.png",
   "stage2": "broccoli_stage2.png",
   "level": 15,
-  "xp": 1
+  "xp": 1,
+  "icon": "stex0011.png"
  },
  {
   "key": "garlic",
@@ -151,7 +164,8 @@
   "stage1": "garlic_stage1.png",
   "stage2": "garlic_stage2.png",
   "level": 16,
-  "xp": 1
+  "xp": 1,
+  "icon": "stex0013.png"
  },
  {
   "key": "Bloodberry",
@@ -162,7 +176,8 @@
   "stage1": "Bloodberry_stage1.png",
   "stage2": "Bloodberry_stage2.png",
   "level": 17,
-  "xp": 1
+  "xp": 1,
+  "icon": "stex0043.png"
  },
  {
   "key": "cauliflower",
@@ -173,7 +188,8 @@
   "stage1": "cauliflower_stage1.png",
   "stage2": "cauliflower_stage2.png",
   "level": 18,
-  "xp": 1
+  "xp": 1,
+  "icon": "stex0012.png"
  },
  {
   "key": "skellyberry",
@@ -184,7 +200,8 @@
   "stage1": "Skellyberry_stage1.png",
   "stage2": "Skellyberry_stage2.png",
   "level": 19,
-  "xp": 1
+  "xp": 1,
+  "icon": "stex0044.png"
  },
  {
   "key": "lima_beans",
@@ -195,7 +212,8 @@
   "stage1": "limabean_stage1.png",
   "stage2": "limabean_stage2.png",
   "level": 20,
-  "xp": 1
+  "xp": 1,
+  "icon": "stex0014.png"
  },
  {
   "key": "sun_glower",
@@ -206,7 +224,8 @@
   "stage1": "Sun_Glower_stage1.png",
   "stage2": "Sun_Glower_stage2.png",
   "level": 21,
-  "xp": 1
+  "xp": 1,
+  "icon": "stex0045.png"
  },
  {
   "key": "dragon_fruit",
@@ -217,7 +236,8 @@
   "stage1": "dragonfruit_stage1.png",
   "stage2": "dragonfruit_stage2.png",
   "level": 22,
-  "xp": 1
+  "xp": 1,
+  "icon": "stex0025.png"
  },
  {
   "key": "pumpking",
@@ -228,7 +248,8 @@
   "stage1": "Pumpking_stage1.png",
   "stage2": "Pumpking_stage2.png",
   "level": 23,
-  "xp": 1
+  "xp": 1,
+  "icon": "stex0042.png"
  },
  {
   "key": "corpse_flower",
@@ -239,7 +260,8 @@
   "stage1": "corpseflower_stage1.png",
   "stage2": "corpseflower_stage2.png",
   "level": 24,
-  "xp": 1
+  "xp": 1,
+  "icon": "stex0026.png"
  },
  {
   "key": "meat_flower",
@@ -250,7 +272,8 @@
   "stage1": "meatflower_stage1.png",
   "stage2": "meatflower_stage2.png",
   "level": 25,
-  "xp": 1
+  "xp": 1,
+  "icon": "stex0027.png"
  },
  {
   "key": "eyebiscus",
@@ -261,7 +284,8 @@
   "stage1": "eyebiscus_stage1.png",
   "stage2": "eyebiscus_stage2.png",
   "level": 41,
-  "xp": 1
+  "xp": 1,
+  "icon": "icon_crop_eyebiscus.png"
  },
  {
   "key": "heartichoke",
@@ -272,7 +296,8 @@
   "stage1": "heartichoke_stage1.png",
   "stage2": "heartichoke_stage2.png",
   "level": 43,
-  "xp": 1
+  "xp": 1,
+  "icon": "icon_crop_heartichoke.png"
  },
  {
   "key": "firecracker",
@@ -284,7 +309,8 @@
   "stage2": "firecracker_stage2.png",
   "level": -4,
   "xp": 1,
-  "seasonal": true
+  "seasonal": true,
+  "icon": "Fire_Cracker_Crop_Icon_Market.png"
  },
  {
   "key": "water_lily",
@@ -296,7 +322,8 @@
   "stage2": "water_lily_stage2.png",
   "level": -4,
   "xp": 1,
-  "seasonal": true
+  "seasonal": true,
+  "icon": "Lake_WAterLillyCrop_icon.png"
  },
  {
   "key": "cupcakes",
@@ -308,7 +335,8 @@
   "stage2": "cupcakes_stage2.png",
   "level": 1,
   "xp": 1,
-  "seasonal": true
+  "seasonal": true,
+  "icon": "stex1009.png"
  },
  {
   "key": "eggplant",
@@ -320,7 +348,8 @@
   "stage2": "eggplant_stage2.png",
   "level": 1,
   "xp": 1,
-  "seasonal": true
+  "seasonal": true,
+  "icon": "eggplant_icon.png"
  },
  {
   "key": "rainbow",
@@ -332,7 +361,8 @@
   "stage2": "rainbow_stage2.png",
   "level": 1,
   "xp": 1,
-  "seasonal": true
+  "seasonal": true,
+  "icon": "rainbow_crop_avatar.png"
  },
  {
   "key": "starfruit",
@@ -344,7 +374,8 @@
   "stage2": "starfruit1_stage2.png",
   "level": 1,
   "xp": 1,
-  "seasonal": true
+  "seasonal": true,
+  "icon": "icon_crop_starfruit.png"
  },
  {
   "key": "kelp",
@@ -356,7 +387,8 @@
   "stage2": "kelp_stage2.png",
   "level": 1,
   "xp": 1,
-  "seasonal": true
+  "seasonal": true,
+  "icon": "Icon_MarketItems_KELP_CROP.png"
  },
  {
   "key": "marigold",
@@ -368,7 +400,8 @@
   "stage2": "marigold_stage2.png",
   "level": 3,
   "xp": 1,
-  "seasonal": true
+  "seasonal": true,
+  "icon": "Icon_crop_MarigoldSkull.png"
  },
  {
   "key": "hollyberry",
@@ -380,7 +413,8 @@
   "stage2": "holly_stage2.png",
   "level": 5,
   "xp": 1,
-  "seasonal": true
+  "seasonal": true,
+  "icon": "stex0048.png"
  },
  {
   "key": "candy_corn",
@@ -392,6 +426,7 @@
   "stage2": "candycorn_stage2.png",
   "level": 13,
   "xp": 1,
-  "seasonal": true
+  "seasonal": true,
+  "icon": "stex0046.png"
  }
 ]

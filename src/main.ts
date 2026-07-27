@@ -153,13 +153,13 @@ async function main() {
     const cfg: CropConfig = {
       key: p.key, name: p.name, stages: [SEED_FILE, p.stage1, p.stage2],
       growMs: p.growMs, cost: p.cost, sell: p.sell, xp: p.xp,
-      unlockLevel: p.level,
+      unlockLevel: p.level, harvestIcon: p.icon,
     };
     catalog.set(cfg.key, cfg);
     return {
       name: p.name, cost: p.cost, sell: p.sell, timeLabel: fmtTime(p.growMs),
       level: p.level, seasonal: p.seasonal,
-      portrait: `${BASE}assets/crops/${p.stage2}`, cfg,
+      portrait: `${BASE}assets/crop-icons/${p.icon}`, cfg,
     };
   });
   // Zombie type catalog by key, so a harvested zombie crop can look up its full
@@ -629,22 +629,36 @@ async function main() {
   };
 
   // The harvested crop itself pops free and flies upward, echoing the original
-  // game's collection feedback. Each crop uses its own ripe icon/portrait.
-  const harvestFx: { view: Sprite; age: number; x: number; y: number }[] = [];
+  // game's collection feedback. Zombie harvests already visibly produce the new
+  // full-size unit, so this collection fly-up is reserved for vegetable crops.
+  const harvestFx: {
+    view: Sprite; age: number; x: number; y: number;
+    dx: number; rise: number; spin: number; baseScale: number;
+  }[] = [];
   const popHarvestIcon = (result: import("./Field").HarvestResult, x: number, y: number) => {
-    const add = (texture: Texture) => {
+    if (result.zombieKey) return;
+    const texture = assets.cropIcon[result.icon];
+    if (!texture) return;
+    const count = Math.random() < 0.5 ? 4 : 5;
+    for (let i = 0; i < count; i++) {
       const view = new Sprite(texture);
       view.anchor.set(0.5);
       const maxSide = Math.max(texture.width, texture.height, 1);
-      view.scale.set(54 / maxSide);
-      view.position.set(x, y);
+      const baseScale = (34 + Math.random() * 6) / maxSide;
+      view.scale.set(baseScale);
+      const centered = i - (count - 1) / 2;
+      const startX = x + centered * 5 + (Math.random() - 0.5) * 5;
+      const startY = y + Math.abs(centered) * 2 + (Math.random() - 0.5) * 4;
+      view.position.set(startX, startY);
+      view.rotation = (Math.random() - 0.5) * 0.3;
       field.labelLayer.addChild(view);
-      harvestFx.push({ view, age: 0, x, y });
-    };
-    if (result.zombieKey) {
-      void Assets.load<Texture>(zombiePortrait(result.zombieKey)).then(add).catch(() => {});
-    } else {
-      add(assets.cropTop[result.icon] ?? assets.crop[result.icon]);
+      harvestFx.push({
+        view, age: 0, x: startX, y: startY,
+        dx: centered * 15 + (Math.random() - 0.5) * 10,
+        rise: 105 + Math.random() * 25,
+        spin: (Math.random() - 0.5) * 2.2,
+        baseScale,
+      });
     }
   };
 
@@ -3586,10 +3600,11 @@ async function main() {
       const p = Math.min(1, fx.age / 1.05);
       const eased = 1 - Math.pow(1 - p, 3);
       fx.view.position.set(
-        fx.x + Math.sin(p * Math.PI) * 18,
-        fx.y - 118 * eased
+        fx.x + fx.dx * p + Math.sin(p * Math.PI) * Math.sign(fx.dx || 1) * 5,
+        fx.y - fx.rise * eased,
       );
-      fx.view.scale.set(fx.view.scale.x * (1 + dt * 0.7));
+      fx.view.rotation += fx.spin * dt;
+      fx.view.scale.set(fx.baseScale * (1 + p * 0.32));
       fx.view.alpha = p < 0.68 ? 1 : 1 - (p - 0.68) / 0.32;
       if (p < 1) continue;
       fx.view.destroy();

@@ -113,6 +113,9 @@ def main():
         p["growMs"] = (s.get("growTime") or 900) * 1000
         p["level"] = s.get("level", 1)
         p["xp"] = s.get("xp", 1)
+        # Standalone 27-58px produce art used by the source Market and harvest
+        # pickup animation. This is intentionally distinct from the full plot art.
+        p["icon"] = s["spriteSheet"]
 
     # ---- zombies: join by unitKey (== catalog key) ----
     zombies = load(ZOMBIES)
