@@ -555,6 +555,18 @@ export class Hud {
         row.textContent = `${o.done ? "✓" : "◆"} ${o.text}  (${Math.min(o.count, o.total)}/${o.total})`;
         body.appendChild(row);
       }
+      if (q.reward) {
+        const reward = document.createElement("div");
+        reward.className = "qlog-reward";
+        const rewardIcon = document.createElement("img");
+        rewardIcon.src = UI(q.reward.icon);
+        rewardIcon.alt = "";
+        rewardIcon.onerror = () => { rewardIcon.style.visibility = "hidden"; };
+        const rewardLabel = document.createElement("span");
+        rewardLabel.textContent = `Reward: ${q.reward.label}`;
+        reward.append(rewardIcon, rewardLabel);
+        body.appendChild(reward);
+      }
       item.append(img, body);
       list.appendChild(item);
     }

@@ -84,13 +84,16 @@
   display: flex; flex-direction: column; gap: 8px; padding-right: 4px; }
 #hud .qlog-item { display: flex; gap: 10px; padding: 8px 10px; border-radius: 10px;
   background: rgba(0,0,0,.22); }
-#hud .qlog-item img { width: 40px; height: 40px; object-fit: contain; flex: 0 0 auto; }
+#hud .qlog-item > img { width: 40px; height: 40px; object-fit: contain; flex: 0 0 auto; }
 #hud .qlog-body { flex: 1 1 auto; min-width: 0; }
 #hud .qlog-title { display: flex; justify-content: space-between; gap: 8px;
   font-weight: 700; color: #f4e9cf; font-size: 14px; }
 #hud .qlog-title .qlog-prog { color: #8fdc5a; font-size: 12px; flex: 0 0 auto; }
 #hud .qlog-obj { font-size: 12px; color: #d8ccaa; margin-top: 2px; }
 #hud .qlog-obj.done { color: #8fdc5a; }
+#hud .qlog-reward { display: flex; align-items: center; gap: 5px; margin-top: 5px;
+  color: #ffd98a; font-size: 12px; font-weight: 700; }
+#hud .qlog-reward img { width: 22px; height: 22px; object-fit: contain; flex: 0 0 auto; }
 #hud .qlog-empty { color: #cbb98f; font-style: italic; padding: 8px; }
 /* profile manager */
 #hud .panel.profiles { width: min(440px, 92vw); text-align: left; }
@@ -141,10 +144,10 @@
   opacity: 0; transition: opacity .35s, transform .35s; z-index: 50; }
 #hud .qtoast.show { opacity: 1; transform: translate(-50%, 0); }
 
-/* Secondary destinations live in one compact wooden dock at the lower-right,
-   leaving the middle-right farm visible. Icons use the game's existing UI art. */
-#hud .menucol { position: fixed; right: 12px; bottom: 86px; display: grid;
-  grid-template-columns: repeat(2, 72px); gap: 5px; padding: 8px;
+/* Secondary destinations live in one wooden dock, vertically centered at the
+   right edge. Icons use the game's existing UI art. */
+#hud .menucol { position: fixed; right: 12px; top: 50%; transform: translateY(-50%);
+  display: flex; flex-direction: column; width: 72px; gap: 5px; padding: 8px;
   pointer-events: auto; border: 2px solid #2f1d0d; border-radius: 16px;
   background: linear-gradient(#6e4425ee, #492b16ee);
   box-shadow: 0 3px 8px rgba(0,0,0,.45); }
@@ -157,10 +160,6 @@
   margin: -2px auto -1px; filter: drop-shadow(0 1px 1px #1d1108); }
 #hud .mbtn .gbtn { display: block; text-align: center; color: #fff; font-weight: 800;
   font-size: 11px; line-height: 14px; text-shadow: 0 1px 2px #1d1108; }
-#hud .mbtn[data-menu="Social"] { grid-column: 1 / -1; height: 43px; display: flex;
-  align-items: center; justify-content: center; gap: 5px; }
-#hud .mbtn[data-menu="Social"] .micon { width: 29px; height: 29px; margin: 0; }
-#hud .mbtn[data-menu="Social"] .gbtn { font-size: 12px; }
 #hud .mbtn .ready { position: absolute; top: -15px; left: 10px; z-index: -1;
   padding: 2px 14px 6px; background: linear-gradient(#a3213a,#6c1122);
   border: 2px solid #490c17; border-radius: 10px 10px 0 0; color: #fff;
@@ -1133,8 +1132,8 @@
   #hud .gear { width: 40px; height: 40px; }
   #hud .touch-cancel.active { display: block; }
 
-  /* Compact dock stays clear of the active-tool button. */
-  #hud .menucol { grid-template-columns: repeat(2, 62px); gap: 4px; bottom: 80px; }
+  /* Keep the centered vertical dock compact on touch screens. */
+  #hud .menucol { width: 62px; gap: 4px; }
   #hud .mbtn { width: auto; }
   #hud .mbtn .gbtn { font-size: 10px; }
 
