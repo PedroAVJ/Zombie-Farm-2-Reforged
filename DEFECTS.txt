@@ -4,3 +4,8 @@ Deferred investigation
   seconds remaining before becoming fully grown again. Confirm whether this is
   limited to online/server reconciliation before changing it.
 
+Deferred polish
+
+- Farmer plowing animation needs a visual touch-up. Alpha testers explicitly
+  requested that this remain out of the current environment/UI feedback pass.
+

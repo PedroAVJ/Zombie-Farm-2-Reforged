@@ -17,7 +17,7 @@ import { bitsOf, slotOf } from "./mutations";
 import { matchesMutationReplacement, type MutationReplacement } from "./mutationVisual";
 import { zombiePartTint } from "./appearance";
 import { SpecialHeadFx, specialHeadFxKind } from "./specialHeadFx";
-import { HEADLESS_HEIGHT_SCALE } from "./displayScale";
+import { zombieFarmScale } from "./displayScale";
 
 // Head replacements draw over the base skull but under facial parts, so eyes stay
 // visible on Onion/Tomato/etc. Hair/eye mutations draw above the face.
@@ -26,30 +26,6 @@ const MUT_FACE_OVERLAY_Z = 20;
 
 const SPEED_PX = 34; // slow amble
 const WANDER_RADIUS = 5; // tiles from current spot to pick a new target
-// Farm zombies share the regular zombie's default rendered height. Model files
-// retain their source-authored group scales for other renderers, but the farm no
-// longer makes Small/Large groups shorter or taller than the standard unit.
-function modelHeight(assets: GameAssets, model: ZombieModel): number {
-  let top = Infinity;
-  let bottom = -Infinity;
-  for (const part of model.parts) {
-    const tex = assets.zombiePartTex[part.file];
-    if (!tex) continue;
-    const scale = part.scale ?? 1;
-    const partTop = part.py - part.ay * tex.height * scale;
-    top = Math.min(top, partTop);
-    bottom = Math.max(bottom, partTop + tex.height * scale);
-  }
-  return Number.isFinite(top) && Number.isFinite(bottom) ? Math.max(1, bottom - top) : 1;
-}
-
-function defaultFarmScale(assets: GameAssets, model: ZombieModel): number {
-  const regular = assets.zombieModels["ZombieActorRegularTier1"];
-  if (!regular) return 1;
-  const defaultHeight = modelHeight(assets, regular) * (regular.scale ?? 1);
-  return defaultHeight / modelHeight(assets, model);
-}
-
 const TILT_AMP_MOVE = 0.1;
 const TILT_AMP_IDLE = 0.05;
 const TILT_PERIOD_MOVE = 2.0;
@@ -63,6 +39,7 @@ const FERTILIZE_CAST_MS = 1100;
 const FERTILIZE_RAISE_MS = 220;
 const FERTILIZE_LOWER_MS = 220;
 const ARM_RAISE_ANGLE = -2.5;
+const ARM_REST_ANGLE = -1.5;
 
 export class ZombieUnit {
   readonly container = new Container();
@@ -97,6 +74,10 @@ export class ZombieUnit {
   private hitHalfW = 24;
   private hitH = 60;
   private fertilizeCastMs = 0;
+  private fertilizeCloud = new Graphics();
+  private drool: Graphics | null = null;
+  private droolPhase = Math.random() * Math.PI * 2;
+  private invasionBubble!: Sprite;
   private specialHeadFx: SpecialHeadFx | null = null;
 
   constructor(assets: GameAssets, field: Field, data: OwnedZombie) {
@@ -106,6 +87,7 @@ export class ZombieUnit {
     this.buildRing();
     this.build(assets);
     this.container.addChild(this.root);
+    this.buildInvasionBubble(assets);
     const c = tileCenter(data.col, data.row);
     this.wx = c.x;
     this.wy = c.y;
@@ -144,6 +126,17 @@ export class ZombieUnit {
     this.sync();
   }
 
+  private buildInvasionBubble(assets: GameAssets) {
+    this.invasionBubble = new Sprite(assets.invasionBubble);
+    this.invasionBubble.anchor.set(0.5, 1);
+    this.invasionBubble.scale.set(0.55);
+    this.invasionBubble.position.set(0, -this.hitH + 5);
+    this.invasionBubble.visible = false;
+    this.invasionBubble.zIndex = 10;
+    this.container.sortableChildren = true;
+    this.container.addChild(this.invasionBubble);
+  }
+
   private buildRing() {
     // No ground shadow: ZF2 renders none for characters (binary-verified), so the
     // zombie casts none too. Only the select ring below is drawn.
@@ -162,12 +155,11 @@ export class ZombieUnit {
       assets.zombieModels["ZombieActorRegularTier1"];
     const [r, g, b] = this.data.color ?? m.color;
     const tint = (r << 16) | (g << 8) | b; // authentic Market colour
-    const scale = defaultFarmScale(assets, m) *
-      (this.data.group === "Headless" ? HEADLESS_HEIGHT_SCALE : 1);
+    const scale = zombieFarmScale(this.data.group, this.data.className, this.data.key);
     this.renderScale = scale;
     this.root.sortableChildren = true;
     this.neck = { x: m.neck.x, y: m.neck.y };
-    const replaceable: Record<MutationReplacement, Sprite[]> = { body: [], armF: [] };
+    const replaceable: Record<MutationReplacement, Sprite[]> = { body: [], armF: [], head: [] };
 
     for (const p of m.parts) {
       const tex = assets.zombiePartTex[p.file];
@@ -177,11 +169,12 @@ export class ZombieUnit {
       sp.position.set(p.px, p.py);
       sp.scale.set(p.scale ?? 1);
       sp.zIndex = p.z;
-      if (p.tint) sp.tint = zombiePartTint(p.file, tint);
+      if (p.tint) sp.tint = zombiePartTint(p.file, tint, this.data.group);
       this.parts.push(sp);
       this.root.addChild(sp);
       if (matchesMutationReplacement(p.file, "body")) replaceable.body.push(sp);
       if (matchesMutationReplacement(p.file, "armF")) replaceable.armF.push(sp);
+      if (p.group === "head") replaceable.head.push(sp);
       if (p.group === "head") {
         this.headParts.push({ sp, bx: p.px, by: p.py }); // tilts with the head-nod
       } else if (p.group === "footF") { this.footF = sp; this.footFBaseY = p.py; }
@@ -192,6 +185,7 @@ export class ZombieUnit {
     // Independent of species: a combined zombie shows exactly the mutations it
     // carries. Head parts join headParts (tilt with the head-nod); the rest sit flat.
     this.addMutations(assets, m, replaceable);
+    this.buildFarmEffects();
     const headFxKind = specialHeadFxKind(this.data.key);
     if (headFxKind) {
       this.specialHeadFx = new SpecialHeadFx(headFxKind);
@@ -204,6 +198,26 @@ export class ZombieUnit {
     const bounds = this.root.getLocalBounds();
     this.hitHalfW = (bounds.width * scale) / 2 + 4;
     this.hitH = bounds.height * scale + 4;
+  }
+
+  private buildFarmEffects() {
+    this.fertilizeCloud
+      .circle(-10, 0, 9).fill({ color: 0x70c94b, alpha: 0.34 })
+      .circle(0, -4, 12).fill({ color: 0x91db58, alpha: 0.3 })
+      .circle(12, 1, 8).fill({ color: 0x55a93c, alpha: 0.3 });
+    this.fertilizeCloud.position.set(6, -23);
+    this.fertilizeCloud.zIndex = 25;
+    this.fertilizeCloud.visible = false;
+    this.root.addChild(this.fertilizeCloud);
+
+    if (this.data.group === "Large") {
+      this.drool = new Graphics()
+        .roundRect(-1.5, 0, 3, 13, 1.5).fill({ color: 0x8fe875, alpha: 0.72 })
+        .circle(0, 14, 2.5).fill({ color: 0x8fe875, alpha: 0.8 });
+      this.drool.position.set(this.neck.x - 8, this.neck.y + 15);
+      this.drool.zIndex = 22;
+      this.root.addChild(this.drool);
+    }
   }
 
   // Attach crop-mutation parts for this unit's mutation mask. Each bit maps to a
@@ -229,8 +243,10 @@ export class ZombieUnit {
       const px = mp.ox + (mp.headRel ? neck.x : 0);
       const py = -mp.oy + (mp.headRel ? neck.y : 0);
       sp.position.set(px, py);
-      if (mp.replaces) {
-        for (const basePart of replaceable[mp.replaces]) basePart.visible = false;
+      const replacement: MutationReplacement | undefined =
+        mp.replaces ?? (slotOf(bit) === "head" ? "head" : undefined);
+      if (replacement) {
+        for (const basePart of replaceable[replacement]) basePart.visible = false;
       }
       this.root.addChild(sp);
       if (mp.group === "head") {
@@ -238,7 +254,7 @@ export class ZombieUnit {
         this.headParts.push({ sp, bx: px, by: py }); // tilts with the head-nod
       } else {
         sp.zIndex = mp.z; // arms/body/collar keep their authored layering
-        if (mp.replaces === "armF") {
+        if (replacement === "armF") {
           this.arms.push({ sp, baseRotation: sp.rotation });
         }
       }
@@ -248,6 +264,10 @@ export class ZombieUnit {
 
   setSelected(on: boolean) {
     this.ring.visible = on;
+  }
+
+  setInvasionReady(on: boolean) {
+    this.invasionBubble.visible = on;
   }
 
   // Is world point (wx,wy) within this zombie's rendered sprite box? Used to pick
@@ -343,9 +363,34 @@ export class ZombieUnit {
     }
   }
 
+  private poseArms(moving: boolean) {
+    if (this.fertilizeCastMs > 0) return;
+    for (const arm of this.arms) {
+      arm.sp.rotation = arm.baseRotation + (moving ? 0 : ARM_REST_ANGLE);
+    }
+  }
+
+  private updateFarmEffects(dt: number) {
+    if (this.fertilizeCloud.visible) {
+      const progress = 1 - this.fertilizeCastMs / FERTILIZE_CAST_MS;
+      this.fertilizeCloud.alpha = Math.sin(Math.min(1, progress) * Math.PI);
+      const scale = 0.65 + progress * 1.15;
+      this.fertilizeCloud.scale.set(scale);
+      this.fertilizeCloud.y = -23 - progress * 13;
+      if (this.fertilizeCastMs <= 0) this.fertilizeCloud.visible = false;
+    }
+    if (this.drool) {
+      this.droolPhase = (this.droolPhase + dt * 1.8) % (Math.PI * 2);
+      const stretch = 0.72 + (Math.sin(this.droolPhase) + 1) * 0.28;
+      this.drool.scale.y = stretch;
+      this.drool.alpha = 0.58 + (Math.sin(this.droolPhase) + 1) * 0.16;
+    }
+  }
+
   update(dt: number) {
     let moving = false;
     if (this.fertilizeCastMs > 0) {
+      this.fertilizeCloud.visible = true;
       this.fertilizeCastMs = Math.max(0, this.fertilizeCastMs - dt * 1000);
       const elapsed = FERTILIZE_CAST_MS - this.fertilizeCastMs;
       const raise = elapsed < FERTILIZE_RAISE_MS
@@ -354,7 +399,9 @@ export class ZombieUnit {
           ? this.fertilizeCastMs / FERTILIZE_LOWER_MS
           : 1;
       for (const arm of this.arms) {
-        arm.sp.rotation = arm.baseRotation + ARM_RAISE_ANGLE * Math.max(0, Math.min(1, raise));
+        const t = Math.max(0, Math.min(1, raise));
+        arm.sp.rotation = arm.baseRotation + ARM_REST_ANGLE +
+          (ARM_RAISE_ANGLE - ARM_REST_ANGLE) * t;
       }
       if (this.fertilizeCastMs <= 0) {
         for (const arm of this.arms) arm.sp.rotation = arm.baseRotation;
@@ -384,6 +431,8 @@ export class ZombieUnit {
     }
     this.tilt(dt, moving);
     this.legs(moving, dt);
+    this.poseArms(moving);
+    this.updateFarmEffects(dt);
     this.specialHeadFx?.update(dt);
     this.root.scale.set(this.renderScale * this.facing, this.renderScale);
     this.sync();

@@ -141,6 +141,9 @@ export interface CombatUnit {
   mutation?: number;
   team: "player" | "enemy";
   name: string;
+  /** Player zombie taxonomy, carried for presentation sizing. Enemies omit it. */
+  group?: string;
+  className?: string;
   str: number;
   dex: number;
   con: number;

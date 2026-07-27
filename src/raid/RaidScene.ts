@@ -19,7 +19,7 @@ import { ABILITY_POOL } from "../zombie/traits";
 import { BossSpecial, BossThrowConfig, CombatUnit, CrabConfig, GrabberConfig, RaidDef, RaidLevelAsset, RaidOutcome } from "./types";
 import { RAID_TICK_MS, type RaidReplayInput } from "./replay";
 import { extrapolatePosition, interpolatePosition, visualCountdown } from "./renderInterpolation";
-import { HEADLESS_HEIGHT_SCALE } from "../zombie/displayScale";
+import { zombieRaidHeightScale } from "../zombie/displayScale";
 import { zombieBasicAttackName } from "./zombieAttackPresentation";
 
 type RaidInputDraft =
@@ -60,7 +60,12 @@ export interface RaidSceneParams {
   confirmRetreat?: () => Promise<boolean>;
   onCheckpoint?: (finalTick: number, inputs: RaidReplayInput[]) => Promise<void>;
   /** Presentation-only authored attack cue; combat remains deterministic without it. */
-  onStrike?: (strike: { team: "player" | "enemy"; attackName?: string }) => void;
+  onStrike?: (strike: {
+    team: "player" | "enemy";
+    attackName?: string;
+    impact?: "projectile";
+    sfxFile?: string;
+  }) => void;
   /** Presentation-only zombie bark when its full-focus brain bubble sends it forward. */
   onBrainRelease?: (sourceKey: string) => void;
   onFinish: (outcome: RaidOutcome, finalTick: number, inputs: RaidReplayInput[]) => void;
@@ -284,7 +289,12 @@ export class RaidScene {
   private raid: RaidDef;
   private onFinish: (o: RaidOutcome, finalTick: number, inputs: RaidReplayInput[]) => void;
   private onCheckpoint: ((finalTick: number, inputs: RaidReplayInput[]) => Promise<void>) | null;
-  private onStrike: ((strike: { team: "player" | "enemy"; attackName?: string }) => void) | null;
+  private onStrike: ((strike: {
+    team: "player" | "enemy";
+    attackName?: string;
+    impact?: "projectile";
+    sfxFile?: string;
+  }) => void) | null;
   private onBrainRelease: ((sourceKey: string) => void) | null;
   private lastCheckpointTick = 0;
   private checkpointing = false;
@@ -728,9 +738,13 @@ export class RaidScene {
     if (u.team === "player") {
       // Real farm-style zombie rig (with the walk animation), restored to the
       // standard raid height regardless of the model's authored group scale.
-      actor = new RaidActor(this.assets, u.sourceKey, u.mutation);
+      actor = new RaidActor(this.assets, u.sourceKey, u.mutation, u.group);
       const b = actor.getSizingBounds();
-      const heightScale = u.isHeadless ? HEADLESS_HEIGHT_SCALE : 1;
+      const heightScale = zombieRaidHeightScale(
+        u.group ?? (u.isHeadless ? "Headless" : u.isGarden ? "Garden" : "Regular"),
+        u.className ?? "Green",
+        u.sourceKey,
+      );
       const targetHeight = ZOMBIE_H * heightScale;
       const s = targetHeight / Math.max(1, b.height);
       actor.container.scale.set(s);
@@ -1928,10 +1942,13 @@ export class RaidScene {
           }
           // Collapse simultaneous hits to one cue so a large army does not stack
           // a painfully loud group of identical one-shots.
-          if (strike) {
+          if (this.sim.projectileImpactsThisTick > 0) {
+            this.onStrike?.({ team: "enemy", impact: "projectile" });
+          } else if (strike) {
             this.onStrike?.({
               team: strike.unit.team,
               attackName: strike.attackName,
+              sfxFile: this.assets.raidAttacks[strike.attackName]?.sfxID,
             });
           }
         }

@@ -182,6 +182,8 @@ export function buildPlayerUnits(
       mult, false,
       z.group === "Garden", z.group === "Headless"
     );
+    u.group = z.group;
+    u.className = z.className;
     u.mutation = z.mutation;
     u.maxHp = Math.max(1, Math.round(u.maxHp * armyHpMult));
     u.hp = u.maxHp;

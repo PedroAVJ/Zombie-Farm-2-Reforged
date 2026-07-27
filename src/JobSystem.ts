@@ -4,7 +4,7 @@
 // appears under that plot and fills green, then the action applies and the marker
 // clears. Queue is FIFO so you can line up several actions at once.
 import { Container, Graphics, Text } from "pixi.js";
-import { CARROT, CropConfig, Field, PLOT, ZombieMutationContext } from "./Field";
+import { CARROT, CropConfig, Field, HarvestResult, PLOT, ZombieMutationContext } from "./Field";
 import { Actor } from "./Actor";
 import { WalkController } from "./WalkController";
 import { GameState } from "./GameState";
@@ -84,7 +84,9 @@ export class JobSystem {
     private onCropHarvested: (growMs: number, value: number, x: number, y: number) => boolean = () => false,
     // Immediate affordability feedback. Queue validation used to fail silently,
     // making a valid plot look unresponsive when the player lacked currency.
-    private onInsufficientFunds: (currency: JobCurrency, needed: number) => void = () => {}
+    private onInsufficientFunds: (currency: JobCurrency, needed: number) => void = () => {},
+    // Visual-only collection feedback. Called after a successful crop harvest.
+    private onHarvestFx: (result: HarvestResult, x: number, y: number) => void = () => {}
   ) {}
 
   private key(kind: JobKind, oc: number, or: number) {
@@ -390,6 +392,7 @@ export class JobSystem {
     } else {
       const r = this.field.harvestAt(job.oc, job.or);
       if (r) {
+        this.onHarvestFx(r, job.cx, job.cy);
         if (!r.zombieKey) r.sell = this.state.farmerHarvestGold(r.sell);
         const xp = harvestXp(r.xp, this.field.hasPlowFree());
         const online = !!this.state.onFarm;

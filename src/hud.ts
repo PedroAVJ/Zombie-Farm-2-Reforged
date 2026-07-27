@@ -16,7 +16,7 @@ import type { RaidCardView, RaidPartyView, RaidResultView, RaidLaunchOpts, LootD
 import type { ProfileIndex } from "./save/profiles";
 import { canGiftBrain, type Friend } from "./social/friends";
 import { isMobile } from "./platform";
-import { type FarmBackground } from "./prefs";
+import { type DayNightMode, type FarmBackground } from "./prefs";
 import { fmtCooldown, MCDONNELL_ID, VOUCHER_KEY } from "./raid/RaidCatalog";
 import { marketPageSize } from "./marketPageSize";
 import { STATS, veterancy, veterancyMultiplier, STAT_TILE, VALUE_FILL, VALUE_END, ABILITY_FRAME,
@@ -155,6 +155,7 @@ export class Hud {
   private questViews: QuestView[] = [];
   private tools: Record<string, HTMLButtonElement> = {};
   private menuCol!: HTMLElement;
+  private environmentBar!: HTMLElement;
   private toolsBar!: HTMLElement;
   private fab!: HTMLButtonElement;
   private fabImg!: HTMLImageElement;
@@ -190,6 +191,7 @@ export class Hud {
     this.buildTopBar();
     this.buildQuests();
     this.buildMenu();
+    this.buildEnvironmentControls();
     this.buildTools();
     this.buildFab();
     this.buildTouchCancel();
@@ -552,7 +554,7 @@ export class Hud {
       for (const o of q.objectives) {
         const row = document.createElement("div");
         row.className = "qlog-obj" + (o.done ? " done" : "");
-        row.textContent = `${o.done ? "✔" : "○"} ${o.text}  (${Math.min(o.count, o.total)}/${o.total})`;
+        row.textContent = `${o.done ? "✓" : "◆"} ${o.text}  (${Math.min(o.count, o.total)}/${o.total})`;
         body.appendChild(row);
       }
       item.append(img, body);
@@ -567,7 +569,7 @@ export class Hud {
     for (const o of q.objectives) {
       const row = document.createElement("div");
       row.className = "qobj" + (o.done ? " done" : "");
-      const mark = o.done ? "✔" : "○";
+      const mark = o.done ? "✓" : "◆";
       row.textContent = `${mark} ${o.text}  (${Math.min(o.count, o.total)}/${o.total})`;
       panel.appendChild(row);
     }
@@ -631,14 +633,15 @@ export class Hud {
     };
   }
 
-  // Each button is a colored frame around a grey glossy button (dark label).
+  // Compact icon dock: keeps these secondary destinations visually grouped and
+  // clears the middle-right playfield that the old stack of wide pills covered.
   private buildMenu() {
     const items = [
-      { label: "Zombies", fill: "#55972a", light: "#79c247", dark: "#2f5f10", shortcut: "Z" },
-      { label: "Boosts", fill: "#7a4bc9", light: "#9c74e0", dark: "#432379", shortcut: "B" },
-      { label: "Storage", fill: "#2f74bb", light: "#4f9bd8", dark: "#143f66", shortcut: "R" },
-      { label: "Market", fill: "#c9992e", light: "#e3bb52", dark: "#8a6512", shortcut: "M" },
-      { label: "Social", fill: "#2f9c8a", light: "#4fd0b8", dark: "#12564b", shortcut: "" },
+      { label: "Zombies", icon: UI("menu_zombies_icon.png"), shortcut: "Z" },
+      { label: "Boosts", icon: `${BASE}assets/boosts/insta_grow.png`, shortcut: "B" },
+      { label: "Storage", icon: UI("menu_storage_icon.png"), shortcut: "R" },
+      { label: "Market", icon: UI("button_market.png"), shortcut: "M" },
+      { label: "Social", icon: UI("button_friends.png"), shortcut: "" },
     ];
     const col = document.createElement("div");
     col.className = "menucol";
@@ -648,12 +651,14 @@ export class Hud {
       btn.className = "mbtn";
       btn.dataset.menu = m.label; // stable anchor for the tutorial arrow (menuButton())
       btn.title = m.shortcut ? `${m.label} (${m.shortcut})` : m.label;
-      btn.style.background = `linear-gradient(${m.light}, ${m.fill})`;
-      btn.style.borderColor = m.dark;
+      const icon = document.createElement("img");
+      icon.className = "micon";
+      icon.src = m.icon;
+      icon.alt = "";
       const g = document.createElement("span");
       g.className = "gbtn";
-      g.textContent = m.label === "Boosts" ? "⚡ Boosts" : m.label;
-      btn.appendChild(g);
+      g.textContent = m.label;
+      btn.append(icon, g);
       btn.onclick = () =>
         m.label === "Market"
           ? this.openMarket()
@@ -671,6 +676,60 @@ export class Hud {
       col.appendChild(btn);
     }
     this.el.appendChild(col);
+  }
+
+  private buildEnvironmentControls() {
+    const bar = document.createElement("div");
+    bar.className = "environment-bar";
+    this.environmentBar = bar;
+
+    const light = document.createElement("button");
+    light.className = "environment-btn";
+    light.dataset.environment = "lighting";
+    light.onclick = () => {
+      const current = this.getDayNightMode?.() ?? "auto";
+      const next: DayNightMode =
+        current === "auto" ? "day" : current === "day" ? "night" : "auto";
+      this.onSetDayNightMode?.(next);
+      this.refreshEnvironmentControls();
+    };
+
+    const weather = document.createElement("button");
+    weather.className = "environment-btn";
+    weather.dataset.environment = "weather";
+    weather.onclick = () => {
+      this.onSetWeather?.(!(this.getWeather?.() ?? false));
+      this.refreshEnvironmentControls();
+    };
+
+    bar.append(light, weather);
+    this.el.appendChild(bar);
+    this.refreshEnvironmentControls();
+  }
+
+  refreshEnvironmentControls() {
+    if (!this.environmentBar) return;
+    const mode = this.getDayNightMode?.() ?? "auto";
+    const light = this.environmentBar.querySelector<HTMLButtonElement>(
+      '[data-environment="lighting"]'
+    );
+    const weather = this.environmentBar.querySelector<HTMLButtonElement>(
+      '[data-environment="weather"]'
+    );
+    if (light) {
+      light.textContent = mode === "auto" ? "◐ Auto" : mode === "day" ? "☀ Day" : "☾ Night";
+      light.title = "Lighting: Auto follows your local clock. Click for Day/Night/Auto.";
+    }
+    if (weather) {
+      const on = this.getWeather?.() ?? false;
+      weather.textContent = on ? "☂ Rain" : "☁ Clear";
+      weather.classList.toggle("on", on);
+      weather.title = "Toggle rain ambience";
+    }
+  }
+
+  setWeatherVisual(on: boolean) {
+    this.el.classList.toggle("weather-rain", on);
   }
 
   /** Game-styled confirmation. Native browser confirm/prompt dialogs are never used. */
@@ -898,7 +957,7 @@ export class Hud {
   expand() {
     if (!this.collapsed) return;
     this.collapsed = false;
-    this.menuCol.style.display = "flex";
+    this.menuCol.style.display = "grid";
     this.toolsBar.style.display = "flex";
     this.fab.style.display = "none";
     this.refreshTouchCancel();
@@ -1189,6 +1248,12 @@ export class Hud {
   getNight: (() => boolean) | null = null;
   /** Toggle the night lighting layer (dev-only). */
   onSetNight: ((on: boolean) => void) | null = null;
+  /** Player-facing lighting mode. Auto follows the device's local clock. */
+  getDayNightMode: (() => DayNightMode) | null = null;
+  onSetDayNightMode: ((mode: DayNightMode) => void) | null = null;
+  /** Optional visual rain ambience. */
+  getWeather: (() => boolean) | null = null;
+  onSetWeather: ((on: boolean) => void) | null = null;
 
   /** Current farm-background (foliage density) choice. */
   getFarmBackground: (() => FarmBackground) | null = null;

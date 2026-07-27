@@ -230,6 +230,35 @@ export function openSettings(hud: Hud): void {
     );
   }
 
+  const ambienceBlock: HTMLElement[] = [];
+  if (hud.getDayNightMode && hud.onSetDayNightMode) {
+    ambienceBlock.push(
+      settingChoiceRow(
+        "Day / Night",
+        [
+          { id: "auto", label: "Auto" },
+          { id: "day", label: "Day" },
+          { id: "night", label: "Night" },
+        ],
+        hud.getDayNightMode(),
+        (v) => {
+          hud.onSetDayNightMode?.(v);
+          hud.refreshEnvironmentControls();
+        }
+      ),
+      noteEl("Auto follows this device's local clock (night from 7pm to 7am).")
+    );
+  }
+  if (hud.getWeather && hud.onSetWeather) {
+    ambienceBlock.push(
+      row("Rain", hud.getWeather(), (v) => {
+        hud.onSetWeather?.(v);
+        hud.refreshEnvironmentControls();
+      }),
+      noteEl("A visual and ambience effect only; rain does not change crop growth.")
+    );
+  }
+
   panel.append(
     row("Music", hud.audio.musicOn, (v) => hud.audio.setMusic(v)),
     volumeRow("Music Volume", hud.audio.musicVolume, (v) => hud.audio.setMusicVolume(v)),
@@ -245,6 +274,7 @@ export function openSettings(hud: Hud): void {
       ? "Press F to toggle fullscreen. Escape also exits."
       : "This browser doesn't support app-controlled fullscreen."),
     ...accountBlock,
+    ...ambienceBlock,
     ...bgBlock,
     spriteRow, spriteNote,
     editionRow, editionNote

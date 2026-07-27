@@ -347,6 +347,9 @@ def main():
             copy_img(ba.get("sprite", ""), missing)
 
     # Attack definitions for every attack the enemies use.
+    # Player presentation alternates these two ordinary attacks, so retain their
+    # authored timing/SFX alongside the enemy-used set.
+    used_attacks.update({"ZombieBite", "ZombieScratch"})
     attack_defs = {}
     for name in sorted(used_attacks):
         a = attacks.get(name)

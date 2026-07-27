@@ -260,6 +260,8 @@ export interface SimUnit {
   mutation: number;
   team: "player" | "enemy";
   name: string;
+  group?: string;
+  className?: string;
   isBoss: boolean;
   isGarden: boolean;
   isHeadless: boolean;
@@ -444,6 +446,8 @@ function toSim(u: CombatUnit, i: number): SimUnit {
     mutation: u.mutation ?? 0,
     team: u.team,
     name: u.name,
+    group: u.group,
+    className: u.className,
     isBoss: u.isBoss,
     isGarden: u.isGarden,
     isHeadless: u.isHeadless,
@@ -509,6 +513,8 @@ function toSim(u: CombatUnit, i: number): SimUnit {
 export class BattleSim {
   readonly units: SimUnit[];
   readonly projectiles: SimProjectile[] = [];
+  /** Presentation-only count; reset at the start of every fixed simulation step. */
+  projectileImpactsThisTick = 0;
   private players: SimUnit[];
   private enemies: SimUnit[];
   private boss: SimUnit | null;
@@ -1180,6 +1186,7 @@ export class BattleSim {
   step(dtMs: number): boolean {
     if (this.finished) return false;
     this.elapsed += dtMs;
+    this.projectileImpactsThisTick = 0;
     for (const u of this.units) {
       u.struckThisTick = false;
       u.prevX = u.x; // snapshot for this step's velocity measurement (see below)
@@ -1971,6 +1978,7 @@ export class BattleSim {
           // (stepCrabs), not projectiles — a projectile only ever deals damage.
           this.dealEnemyDamage(p, pr.damage);
           p.struckThisTick = true;
+          this.projectileImpactsThisTick++;
           pr.done = true;
           break;
         }

@@ -38,7 +38,8 @@ import { buyXp, sellBack, zombieSellValue } from "./economy";
 import { harvestXp } from "./farmRewards";
 import {
   DEFAULT_FARM_BACKGROUND, getFarmBackground, isFarmBackground, setFarmBackground,
-  FARM_BG_DENSITY, type FarmBackground,
+  FARM_BG_DENSITY, type FarmBackground, getDayNightMode, setDayNightMode,
+  isLocalNight, getWeatherEnabled, setWeatherEnabled, type DayNightMode,
 } from "./prefs";
 import { BASE } from "./base";
 import { TutorialController } from "./tutorial/TutorialController";
@@ -417,7 +418,10 @@ async function main() {
 
   // Owned zombies (Phase 3): grown from harvested zombie crops, they wander the
   // farm (routing around objects) and can be selected to inspect their stats.
-  const zombies = new ZombieField(assets, field, state, (key) => zombieDefs.get(key));
+  const zombies = new ZombieField(
+    assets, field, state, (key) => zombieDefs.get(key), () => audio.play("instaGrow")
+  );
+  audio.setZombieBarkSource(() => zombies.randomBrainBark());
 
   // Night lighting layer: a dark mask with the lights erased out of it (revealing
   // the daytime scene under each light — never a glare), above the farm/entities
@@ -441,8 +445,36 @@ async function main() {
     // screen, so it darkens this filler by the SAME amount as the hills; they read
     // as one continuous surface instead of the hills floating over a near-black void.
   };
-  // The night toggle now lives in the Developer menu (HUD hotspot) instead of the
-  // N key. Hooks are wired below once the HUD exists.
+  let dayNightMode: DayNightMode = getDayNightMode();
+  let weatherEnabled = getWeatherEnabled();
+  const syncEnvironment = () => {
+    setNight(dayNightMode === "night" || (dayNightMode === "auto" && isLocalNight()));
+    hud.setWeatherVisual(weatherEnabled);
+    audio.setRain(weatherEnabled);
+    hud.refreshEnvironmentControls();
+  };
+  hud.getNight = () => isNight;
+  hud.onSetNight = (on) => setNight(on); // retained for the developer menu
+  hud.getDayNightMode = () => dayNightMode;
+  hud.onSetDayNightMode = (mode) => {
+    dayNightMode = mode;
+    setDayNightMode(mode);
+    syncEnvironment();
+  };
+  hud.getWeather = () => weatherEnabled;
+  hud.onSetWeather = (on) => {
+    weatherEnabled = on;
+    setWeatherEnabled(on);
+    syncEnvironment();
+  };
+  syncEnvironment();
+  // Auto mode crosses the 7am/7pm boundary without requiring a reload.
+  window.setInterval(() => {
+    if (dayNightMode === "auto") syncEnvironment();
+  }, 60_000);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden && dayNightMode === "auto") syncEnvironment();
+  });
 
   // Job labels ("Plow/Plant/Harvest" pills) and the plot cursor render above the
   // field + entities so they're never hidden behind the farmer/zombie. The plow
@@ -566,20 +598,64 @@ async function main() {
     { passive: false }
   );
 
-  // ---- floating "+xp / -gold" popups (world-space) ----
-  const floats: { t: Text; ttl: number }[] = [];
+  // ---- floating reward/cost popups (world-space) ----
+  const feedbackIcons = {
+    gold: await Assets.load<Texture>(`${BASE}assets/ui/topbar_money_icon.png`),
+    brains: await Assets.load<Texture>(`${BASE}assets/ui/topbar_brain_icon.png`),
+    xp: await Assets.load<Texture>(`${BASE}assets/ui/topbar_exp_icon.png`),
+  };
+  const floats: { view: Container; ttl: number }[] = [];
   const floatText = (x: number, y: number, msg: string) => {
+    const currency = /[+-]\d+g\b/.test(msg) ? "gold"
+      : /[+-]\d+b\b/.test(msg) ? "brains"
+      : /[+-]\d+xp\b/.test(msg) ? "xp" : null;
+    const readable = msg
+      .replace(/([+-]\d+)g\b/g, "$1 gold")
+      .replace(/([+-]\d+)b\b/g, "$1 brains")
+      .replace(/([+-]\d+)xp\b/g, "$1 XP");
+    const view = new Container();
     const t = new Text({
-      text: msg,
+      text: readable,
       style: {
         fontFamily: "system-ui, sans-serif", fontSize: 20, fontWeight: "700",
         fill: 0xffd24a, stroke: { color: 0x3a2400, width: 4 },
       },
     });
     t.anchor.set(0.5, 0.5);
-    t.position.set(x, y);
-    world.addChild(t);
-    floats.push({ t, ttl: 1.1 });
+    if (currency) {
+      const icon = new Sprite(feedbackIcons[currency]);
+      icon.anchor.set(0.5);
+      icon.width = icon.height = 25;
+      const totalW = t.width + 31;
+      icon.x = -totalW / 2 + 12;
+      t.x = 15;
+      view.addChild(icon, t);
+    } else {
+      view.addChild(t);
+    }
+    view.position.set(x, y);
+    world.addChild(view);
+    floats.push({ view, ttl: 1.1 });
+  };
+
+  // The harvested crop itself pops free and flies upward, echoing the original
+  // game's collection feedback. Each crop uses its own ripe icon/portrait.
+  const harvestFx: { view: Sprite; age: number; x: number; y: number }[] = [];
+  const popHarvestIcon = (result: import("./Field").HarvestResult, x: number, y: number) => {
+    const add = (texture: Texture) => {
+      const view = new Sprite(texture);
+      view.anchor.set(0.5);
+      const maxSide = Math.max(texture.width, texture.height, 1);
+      view.scale.set(54 / maxSide);
+      view.position.set(x, y);
+      field.labelLayer.addChild(view);
+      harvestFx.push({ view, age: 0, x, y });
+    };
+    if (result.zombieKey) {
+      void Assets.load<Texture>(zombiePortrait(result.zombieKey)).then(add).catch(() => {});
+    } else {
+      add(assets.cropTop[result.icon] ?? assets.crop[result.icon]);
+    }
   };
 
   // Boss Tokens use the active boss's transparent face portrait. At 52px they are
@@ -639,7 +715,8 @@ async function main() {
     awardOfflineEpicBossToken,
     (currency, needed) => hud.showToast(
       currency === "gold" ? "Not enough coins." : `Not enough brains (need ${needed}).`
-    )
+    ),
+    popHarvestIcon
   );
 
   // Quest-complete celebration, styled like the level-up popup. Quests can finish in
@@ -840,6 +917,8 @@ async function main() {
         if (pl.isZombie && !zombies.canAdd()) continue; // respect the army cap
         const r = field.harvestAt(pl.oc, pl.or);
         if (!r) continue;
+        const cropCenter = field.plotCenterOf(pl.oc, pl.or);
+        popHarvestIcon(r, cropCenter.x, cropCenter.y);
         if (state.onFarm) {
           if (r.zombieKey) {
             const context = mutationContexts.get(`${pl.oc}:${pl.or}`) ?? r.mutationContext!;
@@ -860,7 +939,6 @@ async function main() {
           }
         }
         questBus.post(r.isZombie ? QuestEvent.ZombieHarvested : QuestEvent.CropHarvested, r.name);
-        const cropCenter = field.plotCenterOf(pl.oc, pl.or);
         if (!r.isZombie && awardOfflineEpicBossToken(r.growMs, r.sell, cropCenter.x, cropCenter.y)) {
           floatText(c.x, c.y - 28, "+1 Boss Token!");
         }
@@ -3464,6 +3542,7 @@ async function main() {
       if (penBounds) pet.updateInPen(dt, penBounds);
     }
     zombies.update(dt);
+    zombies.setInvasionReady(!raidActive && raids.cooldownRemaining() <= 0);
     field.updatePetPenOcclusion(
       penPetActors.map((pet) => pet.container),
       [actor.container, ...zombies.characterContainers(), ...(petActor ? [petActor.container] : [])],
@@ -3503,13 +3582,28 @@ async function main() {
     for (let i = floats.length - 1; i >= 0; i--) {
       const f = floats[i];
       f.ttl -= dt;
-      f.t.y -= 26 * dt;
-      f.t.alpha = Math.min(1, f.ttl);
+      f.view.y -= 26 * dt;
+      f.view.alpha = Math.min(1, f.ttl);
       if (f.ttl <= 0) {
-        world.removeChild(f.t);
-        f.t.destroy();
+        world.removeChild(f.view);
+        f.view.destroy({ children: true });
         floats.splice(i, 1);
       }
+    }
+    for (let i = harvestFx.length - 1; i >= 0; i--) {
+      const fx = harvestFx[i];
+      fx.age += dt;
+      const p = Math.min(1, fx.age / 1.05);
+      const eased = 1 - Math.pow(1 - p, 3);
+      fx.view.position.set(
+        fx.x + Math.sin(p * Math.PI) * 18,
+        fx.y - 118 * eased
+      );
+      fx.view.scale.set(fx.view.scale.x * (1 + dt * 0.7));
+      fx.view.alpha = p < 0.68 ? 1 : 1 - (p - 0.68) / 0.32;
+      if (p < 1) continue;
+      fx.view.destroy();
+      harvestFx.splice(i, 1);
     }
   });
 

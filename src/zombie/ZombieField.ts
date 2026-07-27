@@ -63,7 +63,8 @@ export class ZombieField {
     private field: Field,
     private state: GameState,
     // Resolve a zombie type key -> its catalog def (stats/taxonomy).
-    private resolve: (key: string) => ZombieDef | undefined
+    private resolve: (key: string) => ZombieDef | undefined,
+    private playFertilizeSfx: () => void = () => {}
   ) {}
 
   /** Deployed (on-farm) unit count — what the army cap limits. */
@@ -109,12 +110,26 @@ export class ZombieField {
     if (!winner || !this.field.markFertilized(oc, or)) return null;
     const spot = this.field.plotFrontSpot(oc, or);
     winner.teleportTo(spot.x, spot.y);
+    this.playFertilizeSfx();
     return winner.displayName;
   }
 
   /** Live on-farm character containers used by Pet Pen silhouette occlusion. */
   characterContainers(): Container[] {
     return this.units.map((unit) => unit.container);
+  }
+
+  /** Source `farmThink:` assigns the ready thought independently to every actor. */
+  setInvasionReady(ready: boolean) {
+    this.units.forEach((unit) => unit.setInvasionReady(ready));
+  }
+
+  /** A deployed, voiced zombie for occasional farm ambience. */
+  randomBrainBark(): { group: string; key: string } | null {
+    const voiced = this.units.filter((unit) => unit.group !== "Headless");
+    if (!voiced.length) return null;
+    const unit = voiced[Math.floor(Math.random() * voiced.length)];
+    return { group: unit.group, key: unit.typeKey };
   }
 
   /** Play a server-confirmed fertilization. The server owns the aggregate chance
@@ -125,6 +140,7 @@ export class ZombieField {
     const winner = gardens[Math.floor(Math.random() * gardens.length)];
     const spot = this.field.plotFrontSpot(oc, or);
     winner.teleportTo(spot.x, spot.y);
+    this.playFertilizeSfx();
     return winner.displayName;
   }
 

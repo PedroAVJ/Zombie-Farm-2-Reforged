@@ -15,4 +15,11 @@ describe("mutation visual replacements", () => {
     expect(matchesMutationReplacement("defaultArmB", "armF")).toBe(false);
     expect(matchesMutationReplacement("dragonArm", "armF")).toBe(false);
   });
+
+  it("recognizes the complete base face as a head replacement target", () => {
+    expect(matchesMutationReplacement("defaultHead", "head")).toBe(true);
+    expect(matchesMutationReplacement("defaultEyeL", "head")).toBe(true);
+    expect(matchesMutationReplacement("defaultUpperTeeth", "head")).toBe(true);
+    expect(matchesMutationReplacement("defaultBody", "head")).toBe(false);
+  });
 });

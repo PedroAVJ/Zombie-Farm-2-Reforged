@@ -15,6 +15,8 @@ export type Sfx =
 export interface FightStrike {
   team: "player" | "enemy";
   attackName?: string;
+  impact?: "projectile";
+  sfxFile?: string;
 }
 
 // Most clips are shipped as compressed .mp3 (universal browser support). The
@@ -58,7 +60,9 @@ const SFX_VOL: Partial<Record<Sfx, number>> = {
 // while stage actors choose a cue matching their authored attack. These files use
 // an explicit assets/audio/ path so A() preserves the recovered WAV extension
 // instead of applying its legacy data-driven WAV -> MP3 decor coercion.
-function fightStrikeFile({ team, attackName = "" }: FightStrike): string {
+function fightStrikeFile({ team, attackName = "", impact, sfxFile }: FightStrike): string {
+  if (impact === "projectile") return "audio/splat.wav";
+  if (sfxFile) return sfxFile.includes("/") ? sfxFile : `audio/${sfxFile}`;
   const attack = attackName.toLowerCase();
   if (attack.includes("bite")) return "audio/bite.wav";
   if (attack.includes("poke") || attack.includes("stab") || attack.includes("midgetstack")) {
@@ -79,12 +83,14 @@ const AMBIENCE_MAX_MS = 42_000;
 
 // A zombie's "Brains…" bark, chosen by its group (the game ships one clip per
 // group). The Regular group's cyborg/robot/robocop tiers use the robot bark.
-function brainFile(group: string, key: string): string {
+function brainFile(group: string, key: string): string | null {
   switch (group) {
     case "Garden": return "brainGarden.mp3";
-    case "Girl": return "brainGirl.mp3";
+    case "Girl":
+    case "Female": return "brainGirl.mp3";
     case "Small": return "brainSmall.mp3";
     case "Large": return "brainLarge.mp3";
+    case "Headless": return null;
     case "Regular":
       return /Tier[2-5]$/.test(key) ? "brainRobot.mp3" : "brainRegular.mp3";
     default: return "brainRegular.mp3"; // Headless + anything unmapped
@@ -92,7 +98,7 @@ function brainFile(group: string, key: string): string {
 }
 
 function zombieGroupFromKey(key: string): string {
-  return /^ZombieActor(Garden|Girl|Small|Large|Regular)/i.exec(key)?.[1] ?? "Regular";
+  return /^ZombieActor(Garden|Girl|Small|Large|Regular|Headless)/i.exec(key)?.[1] ?? "Regular";
 }
 
 interface StoredSettings {
@@ -120,6 +126,8 @@ export class AudioManager {
   muteWhenUnfocused = false;
   private bgm: HTMLAudioElement;
   private ambBed: HTMLAudioElement;
+  private rainBed: HTMLAudioElement;
+  private rainOn = false;
   private ambTimer: ReturnType<typeof setTimeout> | null = null;
   private oneShots = new Set<HTMLAudioElement>();
   private armed = false; // whether a user-gesture resume listener is pending
@@ -128,6 +136,7 @@ export class AudioManager {
   // paused for the raid's duration.
   private raidBgm: HTMLAudioElement | null = null;
   private raidFile = "";
+  private zombieBarkSource: (() => { group: string; key: string } | null) | null = null;
 
   constructor() {
     this.bgm = new Audio(A("dayFarmBGM.mp3"));
@@ -139,6 +148,10 @@ export class AudioManager {
     this.ambBed.loop = true;
     this.ambBed.volume = 0.25;
     this.ambBed.preload = "none";
+    this.rainBed = new Audio(A("rain.mp3"));
+    this.rainBed.loop = true;
+    this.rainBed.volume = 0.32;
+    this.rainBed.preload = "none";
 
     // Restore persisted channel toggles. Autoplay may be blocked until the user
     // interacts, so arm a one-shot gesture listener to (re)start any looping
@@ -197,6 +210,8 @@ export class AudioManager {
       if (!this.canPlay()) return;
       if (this.musicOn) void this.activeBgm().play().catch(() => {});
       if (this.ambienceOn && this.ambBed.paused) void this.ambBed.play().catch(() => {});
+      if (this.ambienceOn && this.rainOn && this.rainBed.paused)
+        void this.rainBed.play().catch(() => {});
     };
     window.addEventListener("pointerdown", resume, { once: true });
   }
@@ -216,12 +231,15 @@ export class AudioManager {
     if (!this.canPlay()) {
       this.activeBgm().pause();
       this.stopAmbience();
+      this.rainBed.pause();
       for (const audio of this.oneShots) audio.pause();
       this.oneShots.clear();
       return;
     }
     if (this.musicOn) void this.activeBgm().play().catch(() => this.arm());
     if (this.ambienceOn) this.startAmbience();
+    if (this.ambienceOn && this.rainOn)
+      void this.rainBed.play().catch(() => this.arm());
   };
 
   setMuteWhenUnfocused(on: boolean) {
@@ -299,13 +317,19 @@ export class AudioManager {
   // A zombie's "Brains…" bark when it's tapped on the farm, chosen by its group.
   brain(group: string, key: string) {
     if (!this.sfxOn || !this.canPlay()) return;
-    this.playOneShot(brainFile(group, key), 0.7);
+    const file = brainFile(group, key);
+    if (file) this.playOneShot(file, 0.7);
   }
 
   // Raid combat carries the actor key rather than the farm catalog group. Derive
   // the same group from that key so brain-bubble releases use the farm tap bark.
   brainForZombie(key: string) {
     this.brain(zombieGroupFromKey(key), key);
+  }
+
+  /** Supply deployed owned zombies for occasional, group-correct farm barks. */
+  setZombieBarkSource(source: () => { group: string; key: string } | null) {
+    this.zombieBarkSource = source;
   }
 
   // A placed decoration's signature tap sound (TileProperties tapSoundEffect /
@@ -336,20 +360,31 @@ export class AudioManager {
   setAmbienceVolume(value: number) {
     this.ambienceVolume = clampVolume(value);
     this.ambBed.volume = 0.25 * this.ambienceVolume;
+    this.rainBed.volume = 0.32 * this.ambienceVolume;
     this.persist();
   }
 
   private startAmbience() {
     void this.ambBed.play().catch(() => this.arm());
+    if (this.rainOn) void this.rainBed.play().catch(() => this.arm());
     this.scheduleAmbienceOneShot();
   }
 
   private stopAmbience() {
     this.ambBed.pause();
+    this.rainBed.pause();
     if (this.ambTimer !== null) {
       clearTimeout(this.ambTimer);
       this.ambTimer = null;
     }
+  }
+
+  /** Cosmetic rain bed, governed by the existing Ambience channel/volume. */
+  setRain(on: boolean) {
+    this.rainOn = on;
+    if (on && this.ambienceOn && this.canPlay())
+      void this.rainBed.play().catch(() => this.arm());
+    else this.rainBed.pause();
   }
 
   private scheduleAmbienceOneShot() {
@@ -357,8 +392,13 @@ export class AudioManager {
     const delay = AMBIENCE_MIN_MS + Math.random() * (AMBIENCE_MAX_MS - AMBIENCE_MIN_MS);
     this.ambTimer = setTimeout(() => {
       if (this.ambienceOn && this.canPlay()) {
-        const file = AMBIENCE_ONESHOTS[Math.floor(Math.random() * AMBIENCE_ONESHOTS.length)];
-        this.playOneShot(file, 0.3, this.ambienceVolume);
+        const zombie = Math.random() < 0.25 ? this.zombieBarkSource?.() : null;
+        const bark = zombie ? brainFile(zombie.group, zombie.key) : null;
+        if (bark) this.playOneShot(bark, 0.45, this.ambienceVolume);
+        else {
+          const file = AMBIENCE_ONESHOTS[Math.floor(Math.random() * AMBIENCE_ONESHOTS.length)];
+          this.playOneShot(file, 0.3, this.ambienceVolume);
+        }
         this.scheduleAmbienceOneShot();
       }
     }, delay);

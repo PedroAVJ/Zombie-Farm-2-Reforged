@@ -67,7 +67,7 @@ describe("AudioManager focus muting", () => {
       music: true, sfx: true, ambience: true, muteWhenUnfocused: true,
     }));
     const audio = new AudioManager();
-    const [music, ambience] = MockAudio.instances;
+    const [music, ambience, rain] = MockAudio.instances;
 
     expect(music.playCalls).toBe(1);
     expect(ambience.playCalls).toBe(1);
@@ -76,9 +76,10 @@ describe("AudioManager focus muting", () => {
     windowTarget.dispatchEvent(new Event("blur"));
     expect(music.paused).toBe(true);
     expect(ambience.paused).toBe(true);
+    expect(rain.paused).toBe(true);
 
     audio.play("buy");
-    expect(MockAudio.instances).toHaveLength(2);
+    expect(MockAudio.instances).toHaveLength(3);
 
     focused = true;
     windowTarget.dispatchEvent(new Event("focus"));
@@ -153,6 +154,9 @@ describe("AudioManager focus muting", () => {
 
     audio.fightStrike({ team: "enemy", attackName: "LumberjackSlice" });
     expect(MockAudio.instances[MockAudio.instances.length - 1]?.src).toContain("assets/audio/swipe.wav");
+
+    audio.fightStrike({ team: "enemy", impact: "projectile" });
+    expect(MockAudio.instances[MockAudio.instances.length - 1]?.src).toContain("assets/audio/splat.wav");
   });
 
   it("uses the farm interaction bark for a raid zombie actor key", () => {
@@ -163,5 +167,19 @@ describe("AudioManager focus muting", () => {
 
     audio.brainForZombie("ZombieActorRegularTier3");
     expect(MockAudio.instances[MockAudio.instances.length - 1]?.src).toContain("assets/audio/brainRobot.mp3");
+  });
+
+  it("uses girl audio for the catalog's Female group and keeps headless silent", () => {
+    const audio = new AudioManager();
+
+    audio.brain("Female", "ZombieActorGirlTier1");
+    expect(MockAudio.instances[MockAudio.instances.length - 1]?.src).toContain("assets/audio/brainGirl.mp3");
+
+    const count = MockAudio.instances.length;
+    audio.brain("Headless", "ZombieActorHeadlessTier1");
+    expect(MockAudio.instances).toHaveLength(count);
+
+    audio.brainForZombie("ZombieActorHeadlessTier1");
+    expect(MockAudio.instances).toHaveLength(count);
   });
 });

@@ -141,21 +141,49 @@
   opacity: 0; transition: opacity .35s, transform .35s; z-index: 50; }
 #hud .qtoast.show { opacity: 1; transform: translate(-50%, 0); }
 
-/* right: identical grey glossy pills, each with a colored tab + label (no icons) */
-#hud .menucol { position: fixed; right: 8px; top: 50%; transform: translateY(-50%);
-  display: flex; flex-direction: column; gap: 8px; pointer-events: auto; align-items: flex-end; }
-/* each button: a COLORED frame wrapping a grey glossy button with a dark label */
-#hud .mbtn { position: relative; width: 140px; box-sizing: border-box; cursor: pointer;
-  padding: 5px; border-radius: 15px; border: 2px solid #333;
-  filter: drop-shadow(0 2px 2px rgba(0,0,0,.4)); }
-#hud .mbtn .gbtn { display: block; text-align: center; color: #383838; font-weight: 700;
-  font-size: 15px; padding: 5px 0; text-shadow: 0 1px 0 rgba(255,255,255,.45);
-  border-style: solid; border-width: 6px 13px 8px 13px;
-  border-image: url("/assets/ui/nav_grey.png") 5 13 7 13 fill / 6px 13px 8px 13px stretch; }
+/* Secondary destinations live in one compact wooden dock at the lower-right,
+   leaving the middle-right farm visible. Icons use the game's existing UI art. */
+#hud .menucol { position: fixed; right: 12px; bottom: 86px; display: grid;
+  grid-template-columns: repeat(2, 72px); gap: 5px; padding: 8px;
+  pointer-events: auto; border: 2px solid #2f1d0d; border-radius: 16px;
+  background: linear-gradient(#6e4425ee, #492b16ee);
+  box-shadow: 0 3px 8px rgba(0,0,0,.45); }
+#hud .mbtn { position: relative; min-width: 0; height: 60px; box-sizing: border-box;
+  cursor: pointer; padding: 4px 3px 3px; border: 2px solid #2f1d0d;
+  border-radius: 11px; background: linear-gradient(#807568, #4d463e);
+  filter: drop-shadow(0 1px 1px rgba(0,0,0,.4)); color: #fff; }
+#hud .mbtn:hover { filter: brightness(1.12) drop-shadow(0 2px 2px rgba(0,0,0,.45)); }
+#hud .mbtn .micon { display: block; width: 31px; height: 31px; object-fit: contain;
+  margin: -2px auto -1px; filter: drop-shadow(0 1px 1px #1d1108); }
+#hud .mbtn .gbtn { display: block; text-align: center; color: #fff; font-weight: 800;
+  font-size: 11px; line-height: 14px; text-shadow: 0 1px 2px #1d1108; }
+#hud .mbtn[data-menu="Social"] { grid-column: 1 / -1; height: 43px; display: flex;
+  align-items: center; justify-content: center; gap: 5px; }
+#hud .mbtn[data-menu="Social"] .micon { width: 29px; height: 29px; margin: 0; }
+#hud .mbtn[data-menu="Social"] .gbtn { font-size: 12px; }
 #hud .mbtn .ready { position: absolute; top: -15px; left: 10px; z-index: -1;
   padding: 2px 14px 6px; background: linear-gradient(#a3213a,#6c1122);
   border: 2px solid #490c17; border-radius: 10px 10px 0 0; color: #fff;
   font-weight: 700; font-size: 12px; text-shadow: 0 1px 1px #000; }
+
+/* Player-facing ambience controls. Auto uses local device time; rain is cosmetic. */
+#hud .environment-bar { position: fixed; right: 12px; top: 67px; display: flex;
+  gap: 5px; pointer-events: auto; }
+#hud .environment-btn { min-width: 72px; padding: 6px 9px; border: 2px solid #2f1d0d;
+  border-radius: 12px; cursor: pointer; background: linear-gradient(#697887, #3d4854);
+  color: #fff; font: 800 11px system-ui, sans-serif; text-shadow: 0 1px 2px #111;
+  box-shadow: 0 2px 4px rgba(0,0,0,.4); }
+#hud .environment-btn:hover { filter: brightness(1.12); }
+#hud .environment-btn.on { background: linear-gradient(#4b7294, #29465f); }
+
+/* Lightweight CSS rain: visual-only, screen-space, and non-interactive. */
+#hud.weather-rain::before { content: ""; position: fixed; inset: -80px -30px 0;
+  pointer-events: none; opacity: .48;
+  background-image: repeating-linear-gradient(112deg,
+    transparent 0 21px, rgba(205,232,255,.78) 22px 23px, transparent 24px 43px);
+  background-size: 46px 92px; animation: zf-rain .48s linear infinite; }
+@keyframes zf-rain { from { transform: translate3d(0,-92px,0); }
+  to { transform: translate3d(-34px,0,0); } }
 
 /* bottom-center: farming tools */
 #hud .tools { position: fixed; left: 50%; transform: translateX(-50%); bottom: 10px;
@@ -163,19 +191,19 @@
   background: rgba(30,45,20,.55); padding: 6px 10px; border-radius: 16px; }
 /* During a live raid the battle scene owns the screen: hide the farm chrome but
    keep raid panels (.panelbg) visible. */
-#hud.raiding .topbar, #hud.raiding .tools, #hud.raiding .menucol,
+#hud.raiding .topbar, #hud.raiding .tools, #hud.raiding .menucol, #hud.raiding .environment-bar,
 #hud.raiding .questcol, #hud.raiding .invade-shortcut, #hud.raiding .fab,
 #hud.raiding .touch-cancel, #hud.raiding .plant-label,
 #hud.raiding .crop-hover { display: none !important; }
 /* "u" key: hide all farm chrome for a clean, unobstructed view of the farm. */
-#hud.ui-hidden .topbar, #hud.ui-hidden .tools, #hud.ui-hidden .menucol,
+#hud.ui-hidden .topbar, #hud.ui-hidden .tools, #hud.ui-hidden .menucol, #hud.ui-hidden .environment-bar,
 #hud.ui-hidden .questcol, #hud.ui-hidden .invade-shortcut, #hud.ui-hidden .fab,
 #hud.ui-hidden .touch-cancel,
 #hud.ui-hidden .plant-label, #hud.ui-hidden .crop-hover { display: none !important; }
 /* Visiting a friend's farm: a strictly read-only view. Hide every farm-editing
    surface (tools, menu, quests, fab, top bar) so nothing can be mutated; only the
    camera, zombie inspect, and the visit banner remain. */
-#hud.visiting .topbar, #hud.visiting .tools, #hud.visiting .menucol,
+#hud.visiting .topbar, #hud.visiting .tools, #hud.visiting .menucol, #hud.visiting .environment-bar,
 #hud.visiting .questcol, #hud.visiting .invade-shortcut, #hud.visiting .fab,
 #hud.visiting .touch-cancel, #hud.visiting .crop-hover { display: none !important; }
 #hud .visit-banner { position: fixed; top: 12px; left: 50%; transform: translateX(-50%);
@@ -1101,6 +1129,7 @@
     left: calc(6px + env(safe-area-inset-left)); right: calc(6px + env(safe-area-inset-right)); }
   #hud .questcol { left: calc(8px + env(safe-area-inset-left)); }
   #hud .menucol { right: calc(8px + env(safe-area-inset-right)); }
+  #hud .environment-bar { right: calc(8px + env(safe-area-inset-right)); }
   #hud .tools { bottom: calc(10px + env(safe-area-inset-bottom)); }
   #hud .fab { bottom: calc(12px + env(safe-area-inset-bottom));
     right: calc(14px + env(safe-area-inset-right)); }
@@ -1124,10 +1153,10 @@
   #hud .gear { width: 40px; height: 40px; }
   #hud .touch-cancel.active { display: block; }
 
-  /* right menu column: narrower pills. */
-  #hud .menucol { gap: 6px; }
-  #hud .mbtn { width: 118px; }
-  #hud .mbtn .gbtn { font-size: 13px; }
+  /* Compact dock stays clear of the active-tool button. */
+  #hud .menucol { grid-template-columns: repeat(2, 62px); gap: 4px; bottom: 80px; }
+  #hud .mbtn { width: auto; }
+  #hud .mbtn .gbtn { font-size: 10px; }
 
   /* market: 3 roomy columns instead of 5 cramped ones. */
   #hud .mkt-grid { grid-template-columns: repeat(3, 1fr); grid-auto-rows: 116px; }
@@ -1287,6 +1316,7 @@
 #hud.tutorial .tools { display: none !important; }
 #hud.tutorial .fab { display: block !important; }
 #hud.tutorial .topbar, #hud.tutorial .questcol, #hud.tutorial .menucol,
+#hud.tutorial .environment-bar,
 #hud.tutorial .tools, #hud.tutorial .fab, #hud.tutorial .touch-cancel,
 #hud.tutorial .invade-shortcut { pointer-events: none !important; }
 #hud.tutorial .invade-shortcut:not(.tut-highlight) { display: none !important; }

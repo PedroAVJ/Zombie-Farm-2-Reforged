@@ -183,5 +183,18 @@
   "damageTiming": 0.25,
   "sfxID": "bite.wav",
   "sfxTiming": 0.25
+ },
+ "ZombieBite": {
+  "animID": 8,
+  "damageMultiplier": 1,
+  "damageTiming": 0.75,
+  "sfxID": "bite.wav",
+  "sfxTiming": 0.75
+ },
+ "ZombieScratch": {
+  "animID": 9,
+  "damageTiming": 0.5,
+  "sfxID": "flail.wav",
+  "sfxTiming": 0.25
  }
 }

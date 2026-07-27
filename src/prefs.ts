@@ -20,6 +20,7 @@ export type Edition = "traditional" | "reforged";
 // How lush the decorative foliage ringing the farm is. All three fill the whole
 // camera view out to the max zoom-out edge; they differ only in tree density.
 export type FarmBackground = "deep-forest" | "woodland" | "light-meadow";
+export type DayNightMode = "auto" | "day" | "night";
 export const DEFAULT_FARM_BACKGROUND: FarmBackground = "woodland";
 
 export function isFarmBackground(value: unknown): value is FarmBackground {
@@ -29,6 +30,8 @@ export function isFarmBackground(value: unknown): value is FarmBackground {
 const SPRITE_KEY = "zf2r.spriteSet";
 const EDITION_KEY = "zf2r.edition";
 const FARM_BG_KEY = "zf2r.farmBackground";
+const DAY_NIGHT_KEY = "zf2r.dayNight";
+const WEATHER_KEY = "zf2r.weather";
 
 /** Which sprite pack to render with. Defaults to ZF2 (the only pack wired today). */
 export function getSpriteSet(): SpriteSet {
@@ -73,6 +76,32 @@ export function getFarmBackground(): FarmBackground {
 
 export function setFarmBackground(bg: FarmBackground): void {
   localStorage.setItem(FARM_BG_KEY, bg);
+}
+
+/** Player lighting preference. Auto follows the browser/device's local clock. */
+export function getDayNightMode(): DayNightMode {
+  const value = localStorage.getItem(DAY_NIGHT_KEY);
+  return value === "day" || value === "night" ? value : "auto";
+}
+
+export function setDayNightMode(mode: DayNightMode): void {
+  localStorage.setItem(DAY_NIGHT_KEY, mode);
+}
+
+/** Local-clock night window. This avoids requesting precise location permission:
+ * 7pm through 6:59am in the device's own timezone. */
+export function isLocalNight(at = new Date()): boolean {
+  const hour = at.getHours();
+  return hour >= 19 || hour < 7;
+}
+
+/** Rain is an optional ambience effect and never changes crop timers/economy. */
+export function getWeatherEnabled(): boolean {
+  return localStorage.getItem(WEATHER_KEY) === "on";
+}
+
+export function setWeatherEnabled(enabled: boolean): void {
+  localStorage.setItem(WEATHER_KEY, enabled ? "on" : "off");
 }
 
 /** Convenience gate for the modern additions (brain gifting, online, …). The

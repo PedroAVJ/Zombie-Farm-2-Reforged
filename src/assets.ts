@@ -5,6 +5,7 @@ import type { QuestDef } from "./quest/types";
 import type { RaidDef, EnemyStat, AttackDef } from "./raid/types";
 import { setZombieNames } from "./zombie/names";
 import { BASE } from "./base";
+import { fetchJson, mapConcurrent } from "./assetLoading";
 
 export interface Tile {
   terrain: string;
@@ -72,7 +73,7 @@ export interface MutationPart {
   ay: number;
   z: number;
   /** Base-model silhouette part this mutation replaces. Omitted for overlays. */
-  replaces?: "body" | "armF";
+  replaces?: "body" | "armF" | "head";
 }
 
 // A raid-enemy rig part (raids/enemies/models.json). rx/ry/rw/rh slice the enemy's
@@ -308,6 +309,7 @@ export interface GameAssets {
   enemyModels: Record<string, EnemyModel>; // raid-enemy key -> animated rig
   zombiePartTex: Record<string, Texture>; // ZombieSheet part name -> sub-texture
   mutationParts: Record<string, MutationPart>; // mutation bit (as string) -> body part
+  invasionBubble: Texture; // farm invasion-ready indicator
   plants: PlantDef[];
   zombies: ZombieDef[];
   placeables: PlaceableDef[];
@@ -441,13 +443,26 @@ export interface UpgradeData {
 export const upgradeIcon = (file: string) => `${BASE}assets/ui/market/${file}`;
 
 async function json<T>(url: string): Promise<T> {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`failed to load ${url}: ${res.status}`);
-  return res.json() as Promise<T>;
+  return fetchJson<T>(url);
 }
+
+// Keep first-visit startup from flooding slower/mobile browsers with simultaneous
+// image fetches and decodes. HTTP/2 can multiplex the requests, but decoding dozens
+// of PNGs at once still creates avoidable memory and worker pressure.
+const STARTUP_ASSET_CONCURRENCY = 8;
 
 // Load the complete modular Farmer rig so every market head/body can be equipped.
 export async function loadAssets(): Promise<GameAssets> {
+  // Pixi's retryCount defaults to 3, but its default strategy is "throw", which
+  // means the count is otherwise ignored. Apply this globally so later lazy object,
+  // pet, and raid textures receive the same transient-failure protection.
+  Assets.loader.loadOptions = {
+    ...Assets.loader.loadOptions,
+    strategy: "retry",
+    retryCount: 3,
+    retryDelay: 350,
+  };
+
   const [field, groundIndex, rig, plants, zombies, placeables, boosts, quests,
     raids, enemyStats, raidAttacks, zombieNames, drops, upgrades, farmer, pets] = await Promise.all([
     json<FieldData>(BASE + "assets/field_default.json"),
@@ -468,6 +483,9 @@ export async function loadAssets(): Promise<GameAssets> {
     json<PetCatalog>(BASE + "assets/pets/catalog.json"),
   ]);
   setZombieNames(zombieNames); // seed the random-name picker before any zombie is built
+  const invasionBubble = (await Assets.load(
+    BASE + "assets/ui/thoughtBubbleBrains.png"
+  )) as Texture;
 
   // Fence panels are 1 tile for placement but their rail bridges into a neighbour, so
   // movement collision extends one tile. A spaced fence wall only SEALS if the overhang
@@ -507,26 +525,26 @@ export async function loadAssets(): Promise<GameAssets> {
   // Load every ground-tile variant texture.
   const ground: Record<string, Texture> = {};
   const groundFiles = Object.values(groundIndex).flat();
-  await Promise.all(
-    groundFiles.map(async (f) => {
+  await mapConcurrent(
+    groundFiles, STARTUP_ASSET_CONCURRENCY, async (f) => {
       ground[f] = await Assets.load(`${BASE}assets/ground/${f}`);
-    })
+    },
   );
 
   // Load the farmer's part textures.
   const player: Record<string, Texture> = {};
-  await Promise.all(
-    Object.keys(rig).map(async (f) => {
+  await mapConcurrent(
+    Object.keys(rig), STARTUP_ASSET_CONCURRENCY, async (f) => {
       player[f] = await Assets.load(`${BASE}assets/player/${f}`);
-    })
+    },
   );
 
   // Load soil-plot textures.
   const soil: Record<string, Texture> = {};
-  await Promise.all(
-    SOIL_FILES.map(async (f) => {
+  await mapConcurrent(
+    SOIL_FILES, STARTUP_ASSET_CONCURRENCY, async (f) => {
       soil[f] = await Assets.load(`${BASE}assets/soil/${f}`);
-    })
+    },
   );
 
   // Load crop-stage textures: every plant's two stages + the generic grown zombie.
@@ -537,10 +555,10 @@ export async function loadAssets(): Promise<GameAssets> {
     cropFiles.add(p.stage1);
     cropFiles.add(p.stage2);
   }
-  await Promise.all(
-    [...cropFiles].map(async (f) => {
+  await mapConcurrent(
+    [...cropFiles], STARTUP_ASSET_CONCURRENCY, async (f) => {
       crop[f] = await Assets.load(`${BASE}assets/crops/${f}`);
-    })
+    },
   );
   crop[SEED_FILE] = soil[SEED_FILE]; // seed stage = seeded-soil texture
 
@@ -613,14 +631,15 @@ export async function loadAssets(): Promise<GameAssets> {
 
   // Decorative foliage (tree + shrubs + bush) scattered on the grass around the
   // farm. Order matters: index 0 is the tall tree, 1..3 are shrubs/bushes.
-  const scenery = await Promise.all(
-    ["tree.png", "shrub1.png", "shrub2.png", "shrub3.png"].map(
-      (f) => Assets.load(`${BASE}assets/scenery/${f}`) as Promise<Texture>
-    )
+  const scenery = await mapConcurrent(
+    ["tree.png", "shrub1.png", "shrub2.png", "shrub3.png"],
+    STARTUP_ASSET_CONCURRENCY,
+    (f) => Assets.load(`${BASE}assets/scenery/${f}`) as Promise<Texture>,
   );
 
   return {
     field, groundIndex, rig, ground, player, farmer, pets, soil, crop, cropTop,
+    invasionBubble,
     zombieModels, enemyModels, zombiePartTex, mutationParts, plants, zombies, placeables, boosts, quests,
     raids, enemyStats, raidAttacks, drops, objects, background, scenery, upgrades,
   };

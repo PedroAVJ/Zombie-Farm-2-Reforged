@@ -5,6 +5,7 @@
 import { Container, Sprite } from "pixi.js";
 import { GameAssets, ZombieModel } from "../assets";
 import { bitsOf, slotOf } from "../zombie/mutations";
+import type { MutationReplacement } from "../zombie/mutationVisual";
 import { zombiePartTint } from "../zombie/appearance";
 import { SpecialHeadFx, specialHeadFxKind } from "../zombie/specialHeadFx";
 
@@ -85,9 +86,9 @@ export class RaidActor {
   private deathT = -1; // ≥0 once dead: seconds into the head-pop animation
   private specialHeadFx: SpecialHeadFx | null = null;
 
-  constructor(assets: GameAssets, key: string, mutation = 0) {
+  constructor(assets: GameAssets, key: string, mutation = 0, group = "") {
     this.container.addChild(this.root);
-    this.build(assets, key, mutation);
+    this.build(assets, key, mutation, group);
   }
 
   /**
@@ -107,7 +108,7 @@ export class RaidActor {
     return bounds;
   }
 
-  private build(assets: GameAssets, key: string, mutation: number) {
+  private build(assets: GameAssets, key: string, mutation: number, group: string) {
     const m: ZombieModel =
       assets.zombieModels[key] ?? assets.zombieModels["ZombieActorRegularTier1"];
     const mutationParts = bitsOf(mutation).flatMap((bit) => {
@@ -118,7 +119,16 @@ export class RaidActor {
     });
     // Crop arms occupy the authored ArmF slot. Only suppress the base front arm
     // after its replacement has resolved, so incomplete assets cannot remove it.
-    const replacesFrontArm = mutationParts.some(({ bit }) => slotOf(bit) === "arm");
+    const replacements = new Set<MutationReplacement>();
+    for (const { bit, part } of mutationParts) {
+      if (part.replaces) replacements.add(part.replaces);
+      else {
+        const slot = slotOf(bit);
+        if (slot === "head") replacements.add("head");
+        else if (slot === "arm") replacements.add("armF");
+        else if (slot === "body") replacements.add("body");
+      }
+    }
     const [r, g, b] = m.color;
     const tint = (r << 16) | (g << 8) | b;
     this.renderScale = MODEL_BASE * (m.scale ?? 1);
@@ -126,7 +136,9 @@ export class RaidActor {
     this.neck = { x: m.neck.x, y: m.neck.y };
 
     for (const p of m.parts) {
-      if (replacesFrontArm && /ArmF$/i.test(p.file)) continue;
+      if (replacements.has("armF") && /ArmF$/i.test(p.file)) continue;
+      if (replacements.has("body") && /Body$/i.test(p.file)) continue;
+      if (replacements.has("head") && p.group === "head") continue;
       const tex = assets.zombiePartTex[p.file];
       if (!tex) continue;
       const sp = new Sprite(tex);
@@ -134,7 +146,7 @@ export class RaidActor {
       sp.position.set(p.px, p.py);
       sp.scale.set(p.scale ?? 1);
       sp.zIndex = p.z;
-      if (p.tint) sp.tint = zombiePartTint(p.file, tint);
+      if (p.tint) sp.tint = zombiePartTint(p.file, tint, group);
       this.root.addChild(sp);
       if (p.group === "head") {
         this.headParts.push({ sp, bx: p.px, by: p.py });
