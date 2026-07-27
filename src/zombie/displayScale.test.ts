@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { zombieFarmScale, zombieRaidHeightScale } from "./displayScale";
+import {
+  HEADLESS_RAID_STATURE,
+  zombieFarmScale,
+  zombieRaidHeightScale,
+} from "./displayScale";
 
 describe("zombie display sizing", () => {
   it("keeps regular, brute, and headless bodies on the same actor scale", () => {
@@ -24,6 +28,14 @@ describe("zombie display sizing", () => {
       .toBeCloseTo(0.7 / 0.9);
   });
 
+  it("keeps Headless rigs naturally short instead of enlarging their torso in raids", () => {
+    expect(HEADLESS_RAID_STATURE).toBe(2 / 3);
+    expect(zombieRaidHeightScale("Headless", "Green", "ZombieActorHeadlessTier1"))
+      .toBeCloseTo(2 / 3);
+    expect(zombieRaidHeightScale("Headless", "Special", "ZombieActorHeadlessTier5"))
+      .toBeCloseTo((0.8 / 0.9) * (2 / 3));
+  });
+
   it("carries every farm family size into raids relative to the regular baseline", () => {
     const cases = [
       ["Regular", "Green", "ZombieActorRegularTier1"],
@@ -38,8 +50,9 @@ describe("zombie display sizing", () => {
     ] as const;
 
     for (const [group, className, key] of cases) {
+      const stature = group === "Headless" ? HEADLESS_RAID_STATURE : 1;
       expect(zombieRaidHeightScale(group, className, key))
-        .toBeCloseTo(zombieFarmScale(group, className, key) / 0.9);
+        .toBeCloseTo((zombieFarmScale(group, className, key) / 0.9) * stature);
     }
   });
 });
