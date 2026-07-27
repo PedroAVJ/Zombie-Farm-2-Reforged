@@ -3692,7 +3692,12 @@ async function main() {
   // above the tutorial and any writer/device-lock dialog already on the HUD.
   const offerMobileFullscreen = () =>
     offerFullscreenPrompt(hud, isMobile(), auth.isSignedIn());
-  if (boot) boot.ready(offerMobileFullscreen);
+  if (boot) boot.ready(() => {
+    // Use the explicit "Click to Start" gesture to satisfy browser/PWA media
+    // policies. Constructor autoplay is only a best-effort early attempt.
+    audio.resumeFromGesture();
+    offerMobileFullscreen();
+  });
   else offerMobileFullscreen();
 }
 

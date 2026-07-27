@@ -4,6 +4,7 @@ import { AudioManager } from "./audio";
 
 class MockAudio extends EventTarget {
   static instances: MockAudio[] = [];
+  static rejectPlay = false;
   loop = false;
   volume = 1;
   preload = "";
@@ -19,8 +20,9 @@ class MockAudio extends EventTarget {
   }
 
   play() {
-    this.paused = false;
     this.playCalls++;
+    if (MockAudio.rejectPlay) return Promise.reject(new Error("autoplay blocked"));
+    this.paused = false;
     return Promise.resolve();
   }
 
@@ -39,6 +41,7 @@ describe("AudioManager focus muting", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     MockAudio.instances = [];
+    MockAudio.rejectPlay = false;
     focused = true;
     hidden = false;
     storage = new Map();
@@ -134,6 +137,24 @@ describe("AudioManager focus muting", () => {
     expect(JSON.parse(storage.get(SETTINGS_KEY)!)).toMatchObject({
       musicVolume: 0.75, sfxVolume: 0.6, ambienceVolume: 0.8,
     });
+  });
+
+  it("resumes enabled loops from the explicit start gesture after autoplay is blocked", async () => {
+    MockAudio.rejectPlay = true;
+    const audio = new AudioManager();
+    const [music, ambience] = MockAudio.instances;
+    await Promise.resolve();
+
+    expect(music.paused).toBe(true);
+    expect(ambience.paused).toBe(true);
+
+    MockAudio.rejectPlay = false;
+    audio.resumeFromGesture();
+
+    expect(music.paused).toBe(false);
+    expect(ambience.paused).toBe(false);
+    expect(music.playCalls).toBe(2);
+    expect(ambience.playCalls).toBe(2);
   });
 
   it("uses the recovered zombie bite and authored enemy attack cues", () => {

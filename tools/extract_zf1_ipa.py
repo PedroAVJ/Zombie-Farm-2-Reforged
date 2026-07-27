@@ -8,6 +8,7 @@ into normal, portable PNGs in the organized asset tree.
 from __future__ import annotations
 
 import argparse
+import datetime
 import hashlib
 import json
 import plistlib
@@ -81,6 +82,8 @@ def safe_destination(base: Path, source: Path, app: Path) -> Path:
 def plist_value(value: Any) -> Any:
     if isinstance(value, bytes):
         return {"$data_hex": value.hex()}
+    if isinstance(value, (datetime.date, datetime.datetime)):
+        return value.isoformat()
     if isinstance(value, dict):
         return {str(k): plist_value(v) for k, v in value.items()}
     if isinstance(value, (list, tuple)):
@@ -233,7 +236,7 @@ def decode_cgbi(source: Path, destination: Path) -> bool:
             pixels[i], pixels[i + 2] = pixels[i + 2], pixels[i]
         image = Image.frombytes("RGB", (width, height), bytes(pixels))
     destination.parent.mkdir(parents=True, exist_ok=True)
-    image.save(destination, "PNG", optimize=True)
+    image.save(destination, "PNG", compress_level=6)
     return True
 
 

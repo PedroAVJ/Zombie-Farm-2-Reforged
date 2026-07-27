@@ -207,13 +207,25 @@ export class AudioManager {
     const resume = () => {
       this.armed = false;
       window.removeEventListener("pointerdown", resume);
-      if (!this.canPlay()) return;
-      if (this.musicOn) void this.activeBgm().play().catch(() => {});
-      if (this.ambienceOn && this.ambBed.paused) void this.ambBed.play().catch(() => {});
-      if (this.ambienceOn && this.rainOn && this.rainBed.paused)
-        void this.rainBed.play().catch(() => {});
+      this.resumeFromGesture();
     };
     window.addEventListener("pointerdown", resume, { once: true });
+  }
+
+  /** Resume enabled loops synchronously from a real user gesture.
+   *
+   * Browsers may reject the constructor's autoplay attempt. The start screen
+   * calls this from its "Click to Start" handler so playback is authorized by
+   * that same gesture instead of depending on the rejection/arming race.
+   */
+  resumeFromGesture() {
+    if (!this.canPlay()) return;
+    if (this.musicOn && this.activeBgm().paused)
+      void this.activeBgm().play().catch(() => this.arm());
+    if (this.ambienceOn && this.ambBed.paused)
+      void this.ambBed.play().catch(() => this.arm());
+    if (this.ambienceOn && this.rainOn && this.rainBed.paused)
+      void this.rainBed.play().catch(() => this.arm());
   }
 
   // --- music ---------------------------------------------------------------
