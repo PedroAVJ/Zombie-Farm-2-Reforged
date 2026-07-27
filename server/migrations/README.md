@@ -78,6 +78,7 @@ manual `schema.sql` touched the table):
 | `0024_epic_boss_tokens` | `ALTER TABLE epic_boss_runs_v3 ADD COLUMN token_count` | Fails if `token_count` exists. |
 | `0025_writer_lease` | Four `ALTER TABLE account_runtime_v3 ADD COLUMN` statements | Fails if a writer-lease column was added manually. |
 | `0030_black_market_specific_mutations` | `ALTER TABLE black_market_orders ADD COLUMN mutation_required` (with a `CHECK` constraint) | Fails if `mutation_required` exists. |
+| `0031_account_last_online` | `ALTER TABLE accounts ADD COLUMN last_online_at` + backfill from sessions | Fails if `last_online_at` exists. |
 
 The remaining current migrations use repeatable deletes or `CREATE … IF NOT EXISTS`
 (including `0029_restore_ledger`, which recreates the `ledger` table dropped by the v3
@@ -107,6 +108,8 @@ wrangler d1 execute zombiefarm --remote --command \
   migration `0029` — a claim writes its XP reward there and fails without it.
 - For specific-mutation Black Market orders, verify
   `black_market_orders.mutation_required` exists after migration `0030`.
+- For administrative account activity, verify `accounts.last_online_at` exists
+  after migration `0031`.
 
 ## Going forward
 

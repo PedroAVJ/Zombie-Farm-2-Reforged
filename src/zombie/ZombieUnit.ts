@@ -15,7 +15,12 @@ import { findPath } from "../pathfind";
 import { OwnedZombie } from "./types";
 import { bitsOf, slotOf } from "./mutations";
 import { matchesMutationReplacement, type MutationReplacement } from "./mutationVisual";
-import { zombiePartTint } from "./appearance";
+import {
+  BRUTE_EYEBALL_SCALE,
+  DEFAULT_ZOMBIE_EYE_TINT,
+  isBruteEyeball,
+  zombiePartTint,
+} from "./appearance";
 import { SpecialHeadFx, specialHeadFxKind } from "./specialHeadFx";
 import { zombieFarmScale } from "./displayScale";
 
@@ -193,6 +198,19 @@ export class ZombieUnit {
       } else if (p.group === "footF") { this.footF = sp; this.footFBaseY = p.py; }
       else if (p.group === "footB") { this.footB = sp; this.footBBaseY = p.py; }
       else if (/Arm[FB](?:\.png)?$/i.test(p.file)) this.arms.push({ sp, baseRotation: sp.rotation });
+
+      if (isBruteEyeball(this.data.group, p.file)) {
+        const eyeball = new Sprite(tex);
+        eyeball.anchor.set(p.ax, p.ay);
+        eyeball.position.set(p.px, p.py);
+        eyeball.scale.set((p.scale ?? 1) * BRUTE_EYEBALL_SCALE);
+        eyeball.tint = DEFAULT_ZOMBIE_EYE_TINT;
+        eyeball.zIndex = p.z + 0.1;
+        this.parts.push(eyeball);
+        this.root.addChild(eyeball);
+        this.headParts.push({ sp: eyeball, bx: p.px, by: p.py });
+        replaceable.head.push(eyeball);
+      }
     }
     // Attach crop-mutation parts from the unit's mask (onion head, celery arm, …).
     // Independent of species: a combined zombie shows exactly the mutations it

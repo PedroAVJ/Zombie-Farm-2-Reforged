@@ -37,6 +37,9 @@ export interface Account {
   username: string | null;
   friend_code: string;
   created_at: number;
+  /** Latest known authenticated activity, with the same throttled resolution as
+   *  the session heartbeat. Intended for administrative account inspection. */
+  last_online_at: number;
 }
 
 export interface SaveRow {
@@ -100,9 +103,11 @@ export async function upsertAccount(
     try {
       await db
         .prepare(
-          "INSERT INTO accounts (id, google_sub, friend_code, created_at) VALUES (?, ?, ?, ?)"
+          `INSERT INTO accounts
+             (id, google_sub, friend_code, created_at, last_online_at)
+           VALUES (?, ?, ?, ?, ?)`
         )
-        .bind(id, who.sub, code, now)
+        .bind(id, who.sub, code, now, now)
         .run();
       return {
         id,
@@ -110,6 +115,7 @@ export async function upsertAccount(
         username: null,
         friend_code: code,
         created_at: now,
+        last_online_at: now,
       };
     } catch (e) {
       // Unique-constraint clash on friend_code → try another; re-check sub in case
@@ -665,12 +671,14 @@ export async function createSession(
   label: string | null = null
 ): Promise<string> {
   const id = idFromBytes(rand(16));
-  await db
-    .prepare(
+  await db.batch([
+    db.prepare(
       "INSERT INTO sessions (id, account_id, created_at, last_used_at, label) VALUES (?, ?, ?, ?, ?)"
-    )
-    .bind(id, accountId, now, now, label)
-    .run();
+    ).bind(id, accountId, now, now, label),
+    db.prepare(
+      "UPDATE accounts SET last_online_at = MAX(last_online_at, ?) WHERE id = ?"
+    ).bind(now, accountId),
+  ]);
   return id;
 }
 
@@ -701,10 +709,12 @@ export async function sessionAccount(
   if (!row) return null;
   if (now - row.last_used_at > SESSION_IDLE_MAX_MS) return null; // idle-expired
   if (now - row.last_used_at > SESSION_TOUCH_MS) {
-    await db
-      .prepare("UPDATE sessions SET last_used_at = ? WHERE id = ?")
-      .bind(now, sessionId)
-      .run();
+    await db.batch([
+      db.prepare("UPDATE sessions SET last_used_at = ? WHERE id = ?")
+        .bind(now, sessionId),
+      db.prepare("UPDATE accounts SET last_online_at = MAX(last_online_at, ?) WHERE id = ?")
+        .bind(now, row.account_id),
+    ]);
   }
   return row.account_id;
 }

@@ -8,11 +8,14 @@
 -- Google display name from the sign-in token are read for verification and then
 -- discarded — never written here.
 CREATE TABLE IF NOT EXISTS accounts (
-  id           TEXT PRIMARY KEY,
-  google_sub   TEXT UNIQUE NOT NULL,
-  username     TEXT,
-  friend_code  TEXT UNIQUE NOT NULL,
-  created_at   INTEGER NOT NULL
+  id             TEXT PRIMARY KEY,
+  google_sub     TEXT UNIQUE NOT NULL,
+  username       TEXT,
+  friend_code    TEXT UNIQUE NOT NULL,
+  created_at     INTEGER NOT NULL,
+  -- Account-level activity heartbeat for administrative account inspection.
+  -- Updated at sign-in and alongside the throttled per-session heartbeat.
+  last_online_at INTEGER NOT NULL
 );
 
 -- Migration from the earlier schema that stored PII (run once; safe on fresh DBs):

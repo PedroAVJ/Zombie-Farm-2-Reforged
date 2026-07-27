@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  BRUTE_EYEBALL_SCALE,
   BRUTE_ZOMBIE_EYE_TINT,
   DEFAULT_ZOMBIE_EYE_TINT,
   DEFAULT_ZOMBIE_TEETH_TINT,
+  isBruteEyeball,
   zombiePartTint,
 } from "./appearance";
 
@@ -17,5 +19,13 @@ describe("zombie appearance", () => {
     expect(zombiePartTint("defaultUpperTeeth", 0x7bff4a)).toBe(DEFAULT_ZOMBIE_TEETH_TINT);
     expect(zombiePartTint("defaultLowerTeeth.png", 0xffff5f)).toBe(DEFAULT_ZOMBIE_TEETH_TINT);
     expect(zombiePartTint("defaultEyeL", 0x123456, "Large")).toBe(BRUTE_ZOMBIE_EYE_TINT);
+  });
+
+  it("adds one-fifth-size eyeballs inside every Large zombie's eyes", () => {
+    expect(BRUTE_EYEBALL_SCALE).toBe(0.2);
+    expect(isBruteEyeball("Large", "defaultEyeL")).toBe(true);
+    expect(isBruteEyeball("Large", "defaultEyeR.png")).toBe(true);
+    expect(isBruteEyeball("Regular", "defaultEyeL")).toBe(false);
+    expect(isBruteEyeball("Large", "defaultHead")).toBe(false);
   });
 });
