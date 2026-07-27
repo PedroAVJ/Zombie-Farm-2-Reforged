@@ -22,8 +22,8 @@ const rareCombinePairIds = (): [string, string] => {
 };
 
 describe("protocol v3 command engine", () => {
-  it("starts fresh players with the post-brainflation balance", () => {
-    expect(freshGameplayState().balance).toEqual({ gold: 400, brains: 2, xp: 0 });
+  it("starts fresh players with the tutorial's one-brain balance", () => {
+    expect(freshGameplayState().balance).toEqual({ gold: 400, brains: 1, xp: 0 });
   });
 
   it("can claim the ordered writer lane without changing gameplay state", () => {

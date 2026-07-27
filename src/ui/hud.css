@@ -1307,6 +1307,9 @@
 #hud .tut-layer.invade-step .tut-bubble::after {
   left: auto; right: -14px; border-right-color: transparent; border-left-color: #7a4a1e;
 }
+/* Raid select and army select carry their own instructions and launch control.
+   Remove Tim once either panel opens so he cannot cover Start Invasion. */
+#hud .tut-layer.invasion-menu-open .tut-tim { display: none; }
 /* Full-screen tap blocker: only present while a step gates input. It swallows
    every DOM tap so nothing but the highlighted element is reachable. */
 #hud.tutorial .tut-blocker { position: fixed; inset: 0; pointer-events: auto;

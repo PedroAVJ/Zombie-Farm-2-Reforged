@@ -20,8 +20,8 @@ type Listener = () => void;
 export class GameState {
   name = "Zombie Farmer";
   gold = 400;
-  // Post-brainflation revert: start with 2 brains (was 20). A brain is now ~10x more valuable.
-  brains = 2;
+  // The tutorial spends the fresh player's one brain on Insta-Grow.
+  brains = 1;
   xp = 0;
   zombieCount = 1;
   zombieMax = 16;

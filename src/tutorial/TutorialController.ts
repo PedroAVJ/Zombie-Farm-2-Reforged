@@ -213,6 +213,7 @@ export class TutorialController {
     const def = STEPS[step];
     this.removeBlocker();
     this.layer.classList.toggle("invade-step", step === TutStep.Invade);
+    this.layer.classList.remove("invasion-menu-open");
     this.d.hud.setTutorialMenuTarget(def.kind === "menu" ? (def.menuLabel ?? null) : null);
 
     // Menu beats need the (mobile) menu column visible to anchor the arrow.
@@ -293,6 +294,14 @@ export class TutorialController {
     // Hide the whole overlay while a live raid owns the screen.
     if (this.d.isRaidActive()) { this.layer.style.display = "none"; return; }
     if (this.layer.style.display === "none") this.layer.style.display = "block";
+    // Tim moves aside to expose the farm's Invade shortcut, but once that shortcut
+    // opens raid select (and later army select), the panel owns the instructions
+    // and Tim must not cover its Start Invasion control.
+    this.layer.classList.toggle(
+      "invasion-menu-open",
+      this.current === TutStep.Invade &&
+        !!document.querySelector("#hud .raid-bg, #hud .army-bg")
+    );
 
     // If an old client-only tutorial plot disappears when authoritative farm state
     // arrives, rewind to the earliest real action the surviving state supports.

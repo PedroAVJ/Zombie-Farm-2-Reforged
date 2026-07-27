@@ -811,7 +811,7 @@ export function applyCommandBatch(
 
 export function freshGameplayState(): MutableGameplayState {
   return {
-    balance: { gold: 400, brains: 2, xp: 0 },
+    balance: { gold: 400, brains: 1, xp: 0 },
     farm: { version: 0, plots: {} },
     objects: { version: 0, objects: [] },
     quests: { version: 0, completed: [], progress: [] } satisfies QuestProjection,

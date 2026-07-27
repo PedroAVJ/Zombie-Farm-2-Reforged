@@ -2,6 +2,10 @@ import { describe, expect, it, vi } from "vitest";
 import { GameState } from "./GameState";
 
 describe("GameState level-up notifications", () => {
+  it("starts a fresh player with the one brain required by the tutorial", () => {
+    expect(new GameState().brains).toBe(1);
+  });
+
   it("notifies when an authoritative online balance crosses a level threshold", () => {
     const state = new GameState();
     const onLevelUp = vi.fn();
