@@ -20,10 +20,18 @@ describe("item economy helpers", () => {
     expect(sellBack(100)).toBe(Math.floor(100 * ECONOMY.SELL_BACK_RATIO));
     expect(sellBack(1)).toBe(1);
   });
-  it("buyXp returns authoritative source XP when present", () =>
-    expect(buyXp(1000, 42)).toBe(42));
-  it("buyXp grants zero when the source has no XP", () => {
+  it("buyXp retains authoritative source XP for gold purchases", () =>
+    expect(buyXp(1000, 42, false, "decor")).toBe(42));
+  it("buyXp grants zero to a gold purchase when the source has no XP", () => {
     expect(buyXp(1000)).toBe(0);
     expect(buyXp(1, 0)).toBe(0);
+  });
+  it("derives brain decor/tree XP from the current price", () => {
+    expect(buyXp(10, 6000, true, "decor")).toBe(1000); // Heart Fountain
+    expect(buyXp(3, 0, true, "tree")).toBe(300);
+  });
+  it("uses the binary's lower multiplier for brain functional items", () => {
+    expect(buyXp(12, 6000, true, "functional")).toBe(960); // Clay Monolith
+    expect(buyXp(3, 500, true, "functional")).toBe(240); // repeat Zombie Pot
   });
 });

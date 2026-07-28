@@ -5,8 +5,8 @@
 // balance is easy to find, reason about, and adjust.
 //
 // Design intent (placeable items — decor / trees / functional):
-//   - BUYING an item costs its full price and grants exactly the XP authored in
-//     the source Market catalog. A missing/zero XP field grants no XP.
+//   - Gold purchases retain the XP authored in the source Market catalog.
+//   - Brain purchases derive XP from cost using the recovered binary formula.
 //   - SELLING an item refunds only a small fraction of its price, so churning
 //     buy->sell is a real loss, not a free way to farm money.
 // ---------------------------------------------------------------------------
@@ -21,9 +21,23 @@ export const ECONOMY = {
 
 } as const;
 
-/** XP granted for buying/placing an item that cost `cost` and whose source data
- *  declares `sourceXp` (0/absent when the source has none). */
-export function buyXp(_cost: number, sourceXp = 0): number {
+export type PlaceablePurchaseCategory = "tree" | "decor" | "functional" | "reward";
+
+/** XP granted for buying/placing an item. The shipped binary's
+ * `+[MarketDataManager xpFromItem:]` derives brain-purchase XP from the price:
+ * decor/tree items grant binary-era cost*10 and functional (`special`) items
+ * grant binary-era cost*8. Reforged undid brainflation by dividing brain prices
+ * by ten, so the equivalent formulas against current prices are cost*100 and
+ * cost*80 respectively. Gold purchases keep their authored XP. */
+export function buyXp(
+  cost: number,
+  sourceXp = 0,
+  brainsNeeded = false,
+  category: PlaceablePurchaseCategory = "decor"
+): number {
+  if (brainsNeeded) {
+    return Math.max(0, Math.trunc(cost)) * (category === "functional" ? 80 : 100);
+  }
   return Math.max(0, sourceXp);
 }
 

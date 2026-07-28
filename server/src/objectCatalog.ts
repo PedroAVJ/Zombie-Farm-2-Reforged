@@ -1,8 +1,8 @@
 // Server mirror of public/assets/placeables.json purchase economics. GENERATED —
 // KEEP IN SYNC. Only the fields that decide VALUE are mirrored: buy cost + currency
 // + source xp. The server prices a placeable BUY and REFUND from THIS table (never a
-// client amount): buy debits `cost` (brains if `brains`, else gold) and grants the
-// exact authored XP;
+// client amount): buy debits `cost` (brains if `brains`, else gold) and grants XP
+// using the recovered purchase formula;
 // refund credits floor(cost * SELL_BACK_RATIO). Object ownership is tracked as a COUNT
 // per key (like boosts) — placement/position stays client-side layout.
 //
@@ -15,7 +15,7 @@ export const SELL_BACK_RATIO = 0.2; // mirrors src/economy.ts ECONOMY.SELL_BACK_
 export interface ObjectEcon {
   cost: number;
   brains: boolean; // cost paid in brains, not gold
-  xp: number;      // exact source XP (0 => no XP)
+  xp: number;      // source XP retained for gold purchases
   /** Player level required to buy. -1 means NO requirement (59 seasonal/promo items),
    *  matching the client's `state.level < def.level` check, which -1 passes for free. */
   level: number;
@@ -299,8 +299,20 @@ export function objectRefund(cost: number): number {
   return cost > 0 ? Math.max(1, Math.floor(cost * SELL_BACK_RATIO)) : 0;
 }
 
-/** XP granted for buying a placeable: exactly its source Market XP. */
-export function objectBuyXp(_cost: number, sourceXp: number): number {
+/** XP granted for buying a placeable. Binary ground truth
+ * (`+[MarketDataManager xpFromItem:]`): decor/tree purchases grant binary-era
+ * cost*10 and functional/special purchases grant binary-era cost*8. Reforged
+ * divided brain prices by ten when undoing brainflation, so current-price
+ * equivalents are cost*100 and cost*80. Gold purchases retain their authored
+ * Market XP. `brains` is explicit because the Zombie Pot changes from a first
+ * gold purchase to subsequent brain purchases at runtime. */
+export function objectBuyXp(
+  cost: number,
+  sourceXp: number,
+  brains = false,
+  functional = false
+): number {
+  if (brains) return Math.max(0, Math.trunc(cost)) * (functional ? 80 : 100);
   return Math.max(0, sourceXp);
 }
 

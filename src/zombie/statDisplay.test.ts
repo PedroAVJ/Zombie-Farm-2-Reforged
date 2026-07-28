@@ -53,7 +53,7 @@ describe("self stat abilities", () => {
   const largeGreen = z({ str: 23.32, con: 16.5, dex: 1.3, focus: 100, group: "Large" }); // t1 = powerBuff
 
   it("applies an unlocked self buff to the stat it targets, not the others", () => {
-    expect(statBreakdown(largeGreen, "str", ALL).total).toBe(110); // 23.32×1.10 (+10% Power)
+    expect(statBreakdown(largeGreen, "str", ALL).total).toBe(110); // 23.32×1.10 (+10% Damage)
     expect(statBreakdown(largeGreen, "con", ALL).total).toBe(56); // unaffected
     expect(statBreakdown(largeGreen, "dex", ALL).total).toBe(30); // unaffected
   });
@@ -63,10 +63,10 @@ describe("self stat abilities", () => {
   });
 
   it("lists the ability on every stat, +0% where it does not contribute", () => {
-    const dmg = statBreakdown(largeGreen, "str", ALL).lines.find((l) => l.label === "+10% Power")!;
+    const dmg = statBreakdown(largeGreen, "str", ALL).lines.find((l) => l.label === "+10% Damage")!;
     expect(dmg.amount).toBe("+10%");
     expect(dmg.zero).toBe(false);
-    const life = statBreakdown(largeGreen, "con", ALL).lines.find((l) => l.label === "+10% Power")!;
+    const life = statBreakdown(largeGreen, "con", ALL).lines.find((l) => l.label === "+10% Damage")!;
     expect(life.amount).toBe("+0%");
     expect(life.zero).toBe(true);
   });

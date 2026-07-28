@@ -130,13 +130,34 @@ describe("Garden healing and formation depth", () => {
     h.state = "advance";
     f.formOrder = 0;
     h.formOrder = 1;
-    f.hp -= 1000;
+    f.hp = 1400; // below the binary's 50%-Life Heal threshold
 
     sim.step(50);
     expect(h.slotX).toBeLessThan(f.slotX - 200);
-    expect(f.hp).toBeGreaterThan(2000);
+    expect(f.hp).toBe(1425); // healer Power 50 × 0.5
     expect(f.healFxSeq).toBe(1);
     expect(h.healCastSeq).toBe(1);
+  });
+
+  it("fires Heal All every 20 seconds for half the healer's Power", () => {
+    const a = unit({ id: "a", sourceKey: "ZombieActorRegularTier1", team: "player", hp: 1000 });
+    const b = unit({ id: "b", sourceKey: "ZombieActorFemaleTier1", team: "player", hp: 2000 });
+    const healer = unit({
+      id: "healer", sourceKey: "ZombieActorGardenTier4", team: "player",
+      isGarden: true, abilities: ["healAOE"],
+    });
+    const enemy = unit({
+      id: "enemy", sourceKey: "FarmStageActorFarmhand", team: "enemy",
+      hp: 100_000, maxHp: 100_000, attackCooldownMs: 100_000,
+    });
+    const sim = new BattleSim([a, b, healer], [enemy], null, true);
+    for (const id of ["a", "b", "healer"]) sim.units.find((u) => u.id === id)!.state = "advance";
+
+    for (let elapsed = 0; elapsed < 19_950; elapsed += 50) sim.step(50);
+    expect(sim.units.find((u) => u.id === "a")!.hp).toBe(1000);
+    sim.step(50);
+    expect(sim.units.find((u) => u.id === "a")!.hp).toBe(1025);
+    expect(sim.units.find((u) => u.id === "b")!.hp).toBe(2025);
   });
 
   it("carries the faithful unbanded base damage on both sides (enemies NOT doubled)", () => {
@@ -234,5 +255,136 @@ describe("Garden healing and formation depth", () => {
     sim.step(50);
     expect(a.slotX).toBe(b.slotX);
     expect(a.slotY).toBeGreaterThan(b.slotY);
+  });
+});
+
+describe("binary-authentic ability procs", () => {
+  it("blocks exactly the nine >90 integer results in each 100-roll cycle", () => {
+    const blocker = unit({
+      id: "blocker", sourceKey: "ZombieActorHeadlessTier4", team: "player",
+      hp: 10_000, maxHp: 10_000, abilities: ["block"],
+    });
+    const enemy = unit({ id: "enemy", sourceKey: "FarmStageActorFarmhand", team: "enemy" });
+    const sim = new BattleSim([blocker], [enemy], null, true);
+    const live = sim.units.find((u) => u.id === "blocker")!;
+    for (let i = 0; i < 100; i++) (sim as any).dealEnemyDamage(live, 1);
+    expect(live.hp).toBe(10_000 - 91);
+  });
+
+  it("adds 29 quarter-Power strikes per 100 attacks", () => {
+    const striker = unit({
+      id: "striker", sourceKey: "ZombieActorFemaleTier4", team: "player",
+      abilities: ["doubleStrike"],
+    });
+    const enemy = unit({
+      id: "enemy", sourceKey: "FarmStageActorFarmhand", team: "enemy",
+      hp: 100_000, maxHp: 100_000,
+    });
+    const sim = new BattleSim([striker], [enemy], null, true);
+    const s = sim.units.find((u) => u.id === "striker")!;
+    const e = sim.units.find((u) => u.id === "enemy")!;
+    for (let i = 0; i < 100; i++) {
+      s.timerMs = 0;
+      (sim as any).tryAttack(s, e, 0);
+    }
+    expect(e.hp).toBe(100_000 - 100 * 50 - 29 * 13);
+  });
+
+  it("stuns on exactly the four >95 integer results in each 100-roll cycle", () => {
+    const stunner = unit({
+      id: "stunner", sourceKey: "ZombieActorFemaleTier3", team: "player",
+      abilities: ["stun"],
+    });
+    const enemy = unit({
+      id: "enemy", sourceKey: "FarmStageActorFarmhand", team: "enemy",
+      hp: 100_000, maxHp: 100_000,
+    });
+    const sim = new BattleSim([stunner], [enemy], null, true);
+    const s = sim.units.find((u) => u.id === "stunner")!;
+    const e = sim.units.find((u) => u.id === "enemy")!;
+    let procs = 0;
+    for (let i = 0; i < 100; i++) {
+      e.stunMs = 0;
+      s.timerMs = 0;
+      (sim as any).tryAttack(s, e, 0);
+      if (e.stunMs === 1000) procs++;
+    }
+    expect(procs).toBe(4);
+  });
+});
+
+describe("lasers, resurrection, and activated attacks", () => {
+  it("fires the base walking laser for 10% Power", () => {
+    const laser = unit({
+      id: "laser", sourceKey: "ZombieActorRegularTier3", team: "player",
+      abilities: ["laserBeam"], attackCooldownMs: 600,
+    });
+    const enemy = unit({
+      id: "enemy", sourceKey: "FarmStageActorFarmhand", team: "enemy",
+      hp: 10_000, maxHp: 10_000,
+    });
+    const sim = new BattleSim([laser], [enemy], null, true);
+    const p = sim.units.find((u) => u.id === "laser")!;
+    const e = sim.units.find((u) => u.id === "enemy")!;
+    p.state = "advance";
+    p.x = 300;
+    e.state = "hold";
+    e.x = 915;
+    sim.step(200); // finalAttackSpeed / 3
+    expect(e.hp).toBe(9995);
+  });
+
+  it("resurrects one non-Small zombie once at full Life", () => {
+    const fighter = unit({ id: "fighter", sourceKey: "ZombieActorRegularTier1", team: "player" });
+    const healer = unit({
+      id: "healer", sourceKey: "ZombieActorGardenTier3", team: "player",
+      isGarden: true, abilities: ["ressurect"],
+    });
+    const enemy = unit({ id: "enemy", sourceKey: "FarmStageActorFarmhand", team: "enemy" });
+    const sim = new BattleSim([fighter, healer], [enemy], null, true);
+    const f = sim.units.find((u) => u.id === "fighter")!;
+    const h = sim.units.find((u) => u.id === "healer")!;
+
+    (sim as any).dealDamage(f, f.maxHp, false);
+    expect(f.alive).toBe(true);
+    expect(f.hp).toBe(f.maxHp);
+    expect(h.resurrectUsed).toBe(true);
+    (sim as any).dealDamage(f, f.maxHp, false);
+    expect(f.alive).toBe(false);
+  });
+
+  it("does not spend Resurrect on a Small zombie", () => {
+    const mini = unit({ id: "mini", sourceKey: "ZombieActorSmallTier3", team: "player" });
+    const healer = unit({
+      id: "healer", sourceKey: "ZombieActorGardenTier3", team: "player",
+      isGarden: true, abilities: ["ressurect"],
+    });
+    const enemy = unit({ id: "enemy", sourceKey: "FarmStageActorFarmhand", team: "enemy" });
+    const sim = new BattleSim([mini, healer], [enemy], null, true);
+    const m = sim.units.find((u) => u.id === "mini")!;
+    const h = sim.units.find((u) => u.id === "healer")!;
+    (sim as any).dealDamage(m, m.maxHp, false);
+    expect(m.alive).toBe(false);
+    expect(h.resurrectUsed).toBe(false);
+  });
+
+  it("uses shipped Explode damage/stun once and keeps Ver.1 from hitting bosses", () => {
+    const mini = unit({
+      id: "mini", sourceKey: "ZombieActorSmallTier3", team: "player",
+      abilities: ["explode"], attackCooldownMs: 600,
+    });
+    const boss = unit({
+      id: "boss", sourceKey: "FarmStageActorBoss", team: "enemy",
+      isBoss: true, hp: 10_000, maxHp: 10_000,
+    });
+    const sim = new BattleSim([mini], [boss], null, true);
+    const p = sim.units.find((u) => u.id === "mini")!;
+    const e = sim.units.find((u) => u.id === "boss")!;
+    p.state = "fight";
+    e.state = "hold";
+    expect(sim.activate("explode")).toBe(true);
+    (sim as any).stepWindup(p, e, 4000);
+    expect(e.hp).toBe(10_000);
+    expect(sim.activate("explode")).toBe(false);
   });
 });

@@ -168,3 +168,77 @@ describe("buildPlayerUnits — level-scaling is applied", () => {
     expect(buildPlayerUnits([mutated])[0].mutation).toBe(4 | 64);
   });
 });
+
+describe("buildPlayerUnits — binary-authentic zombie abilities", () => {
+  const owned = (
+    id: string,
+    group: string,
+    className: string,
+    over: Partial<OwnedZombie> = {}
+  ): OwnedZombie => ({
+    id,
+    key: `ZombieActor${group}${className}`,
+    name: id,
+    typeName: id,
+    group,
+    className,
+    classColor: "#000",
+    mutation: 0,
+    str: 10,
+    dex: 2,
+    con: 20,
+    focus: 50,
+    invasions: 0,
+    col: 0,
+    row: 0,
+    ...over,
+  });
+  const unlocked = () => true;
+
+  it("Chivalry buffs Girl stats but not its Regular carrier", () => {
+    const girl = owned("girl", "Female", "Green");
+    const carrier = owned("knight", "Regular", "Blue");
+    const solo = buildPlayerUnits([girl], { abilityUnlocked: unlocked })[0];
+    const [buffed, regular] = buildPlayerUnits([girl, carrier], { abilityUnlocked: unlocked });
+    expect(buffed.str).toBeCloseTo(solo.str * 1.10);
+    expect(buffed.dex).toBeCloseTo(solo.dex * 1.10);
+    expect(buffed.maxHp).toBeCloseTo(solo.maxHp * 1.10);
+    expect(regular.str).toBeCloseTo(10 * 1.05); // only its own +5% All Stats
+  });
+
+  it("Grace buffs Regular zombies", () => {
+    const regular = owned("regular", "Regular", "Green");
+    const carrier = owned("grace", "Female", "Blue");
+    const solo = buildPlayerUnits([regular], { abilityUnlocked: unlocked })[0];
+    const [buffed] = buildPlayerUnits([regular, carrier], { abilityUnlocked: unlocked });
+    expect(buffed.str).toBeCloseTo(solo.str * 1.10);
+    expect(buffed.dex).toBeCloseTo(solo.dex * 1.10);
+    expect(buffed.maxHp).toBeCloseTo(solo.maxHp * 1.10);
+  });
+
+  it("Protect reduces damage for every group except Headless", () => {
+    const regular = owned("regular", "Regular", "Green");
+    const headless = owned("protector", "Headless", "Blue");
+    const built = buildPlayerUnits([regular, headless], { abilityUnlocked: unlocked });
+    expect(built[0].damageReduction).toBeCloseTo(0.20);
+    expect(built[1].damageReduction).toBe(0);
+  });
+
+  it("Fortitude gives Headless zombies 10% Life", () => {
+    const headless = owned("headless", "Headless", "Green");
+    const garden = owned("garden", "Garden", "Blue");
+    const solo = buildPlayerUnits([headless], { abilityUnlocked: unlocked })[0];
+    const [buffed] = buildPlayerUnits([headless, garden], { abilityUnlocked: unlocked });
+    expect(buffed.maxHp).toBeCloseTo(solo.maxHp * 1.10);
+  });
+
+  it("Turbo doubles walking only, without changing DEX or attack cadence", () => {
+    const turbo = owned("turbo", "Headless", "Red");
+    const base = owned("base", "Headless", "Green");
+    const [fast] = buildPlayerUnits([turbo], { abilityUnlocked: unlocked });
+    const [normal] = buildPlayerUnits([base], { abilityUnlocked: unlocked });
+    expect(fast.dex).toBeCloseTo(normal.dex);
+    expect(fast.attackCooldownMs).toBeCloseTo(normal.attackCooldownMs);
+    expect(fast.walkingSpeedMult).toBe(2);
+  });
+});

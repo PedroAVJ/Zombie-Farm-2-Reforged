@@ -14,7 +14,7 @@
 // first living enemy on the opposite team; a side loses when all its units die.
 import type { OwnedZombie } from "../zombie/types";
 import { veterancyMultiplier } from "../zombie/traits";
-import { activeAbilities, combatEffect, ARMY_HP_MULT_CAP } from "../zombie/abilities";
+import { activeAbilities, combatEffect } from "../zombie/abilities";
 import {
   applyDamage,
   levelScaleStat,
@@ -127,8 +127,9 @@ export function focusFactor(focus: number, concentration: boolean): number {
  *      speed / all-stats, gated exactly like the detail card (tier ≤ class rank
  *      AND that ability unlocked). Pass `abilityUnlocked` so combat matches the UI;
  *      omit it (tests) to run with abilities off.
- *   3. Army-wide sustain — heals / protection / revive / enemy-stun from any unit
- *      in the party lift every unit's effective HP (stacked, capped).
+ *   3. Original type-targeted auras — Chivalry buffs Girl zombies, Grace buffs
+ *      Regular zombies, Protect reduces damage to non-Headless types, and
+ *      Fortitude buffs Headless Life.
  *  Player attack multipliers aren't baked into zombies.json and the source attacks
  *  are ~1.0, so the base per-hit multiplier is 1x — scaled by the focus-based
  *  distraction factor (negated by Concentration) times any self damage ability. */
@@ -150,16 +151,17 @@ export function buildPlayerUnits(
   const conc = !!opts.concentration;
   const lvl = opts.playerLevel;
 
-  // Resolve each unit's ability set once, and aggregate the army-wide sustain
-  // across the whole party before building any unit.
+  // Resolve each unit's ability set once, then count the original group auras.
+  // ZFActorFightEffect accumulates percentage changes additively.
   const rows = party.map((z) => {
     const keys = activeAbilities(z, abilityUnlocked);
     return { z, keys, eff: combatEffect(keys) };
   });
-  const armyHpMult = Math.min(
-    ARMY_HP_MULT_CAP,
-    rows.reduce((m, r) => m * r.eff.armyHpMult, 1)
-  );
+  const auraCount = (key: string) => rows.filter((r) => r.keys.includes(key)).length;
+  const chivalry = auraCount("chivalry");
+  const grace = auraCount("grace");
+  const protect = auraCount("protect");
+  const fortitude = auraCount("tankHitPointsBuff");
 
   return rows.map(({ z, keys, eff }) => {
     const v = veterancyMultiplier(z.invasions);
@@ -169,13 +171,17 @@ export function buildPlayerUnits(
     const bStr = lvl == null ? z.str : levelScaleStat(z.group, "str", z.str, lvl);
     const bDex = lvl == null ? z.dex : levelScaleStat(z.group, "dex", z.dex, lvl);
     const bCon = lvl == null ? z.con : levelScaleStat(z.group, "con", z.con, lvl);
-    const str = bStr * v * eff.allStatsMult * (opts.farmerStrengthMult ?? 1);
-    const dex = bDex * v * eff.allStatsMult * eff.selfSpeedMult;
-    const con = bCon * v * eff.allStatsMult * eff.selfHpMult * (opts.farmerLifeMult ?? 1);
+    const statAura = z.group === "Female" ? chivalry : z.group === "Regular" ? grace : 0;
+    const lifeAura = statAura + (z.group === "Headless" ? fortitude : 0);
+    const str = bStr * v * eff.allStatsMult * eff.selfDamageMult * (1 + statAura * 0.10) *
+      (opts.farmerStrengthMult ?? 1);
+    const dex = bDex * v * eff.allStatsMult * eff.selfSpeedMult * (1 + statAura * 0.10);
+    const con = bCon * v * eff.allStatsMult * eff.selfHpMult * (1 + lifeAura * 0.10) *
+      (opts.farmerLifeMult ?? 1);
     const focus = base * v * eff.allStatsMult;
-    // Distraction resistance keys off the unit's real focus stat; self-damage
-    // abilities and army-wide effects fold into the per-hit multiplier / HP.
-    const mult = focusFactor(base, conc) * eff.selfDamageMult;
+    // Distraction resistance keys off the unit's real focus stat. Damage abilities
+    // are already part of finalPower (`str`) so lasers and healing see them too.
+    const mult = focusFactor(focus, conc);
     const u = unit(
       z.id, z.key, "player", z.name,
       str, dex, con, focus,
@@ -185,8 +191,8 @@ export function buildPlayerUnits(
     u.group = z.group;
     u.className = z.className;
     u.mutation = z.mutation;
-    u.maxHp = Math.max(1, Math.round(u.maxHp * armyHpMult));
-    u.hp = u.maxHp;
+    u.damageReduction = z.group === "Headless" ? 0 : Math.min(0.95, protect * 0.20);
+    u.walkingSpeedMult = keys.includes("turboSpeed") ? 2 : 1;
     u.abilities = keys; // carried into the live scene (strip + activated moves)
     return u;
   });

@@ -1606,7 +1606,7 @@ async function main() {
     const id = field.shedId();
     if (!id) return;
     if (state.level < def.level) return;
-    const xp = buyXp(def.cost, def.xp); // exact source XP; zero means no reward
+    const xp = buyXp(def.cost, def.xp, !!def.brainsNeeded, def.category);
     // Server-owned upgrade (online, priced): the server charges the new shed's full
     // price, swaps the ownership record, and grants the xp. The old shed is given up
     // with no refund — same as the local path. A legacy shed the server doesn't know
@@ -2762,7 +2762,7 @@ async function main() {
     const potBought = !!def.zombiePot && state.zombiePotBought;
     const cost = def.zombiePot ? (potBought ? 3 : 500) : def.cost;
     const useBrains = def.zombiePot ? potBought : def.brainsNeeded;
-    const xp = buyXp(cost, def.xp); // exact source XP; zero means no reward
+    const xp = buyXp(cost, def.xp, useBrains, def.category);
     // Server-owned object buy: the server debits the exact price, records ownership,
     // and persists the dynamic first/subsequent Zombie Pot pricing flag.
     const serverObject = !!economy && cost > 0;

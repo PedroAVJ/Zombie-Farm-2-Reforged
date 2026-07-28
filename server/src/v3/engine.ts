@@ -481,7 +481,12 @@ function applyOne(
       const instanceId = requested && /^[A-Za-z0-9_-]{1,80}$/.test(requested) &&
         !state.objects.objects.some((o) => o.instanceId === requested) ? requested : options.id();
       state.balance[currency] -= cost;
-      state.balance.xp += objectBuyXp(cost, econ.xp);
+      state.balance.xp += objectBuyXp(
+        cost,
+        econ.xp,
+        currency === "brains",
+        econ.purchaseLimit !== undefined
+      );
       if (isZombiePot) state.zombiePotBought = true;
       const rule = objectRules.get(command.catalogKey);
       state.objects.objects.push({ instanceId, catalogKey: command.catalogKey, status: "placed",
@@ -527,7 +532,12 @@ function applyOne(
       const currency = econ.brains ? "brains" : "gold";
       if (state.balance[currency] < econ.cost) return reject(sequence, "insufficient");
       state.balance[currency] -= econ.cost;
-      state.balance.xp += objectBuyXp(econ.cost, econ.xp);
+      state.balance.xp += objectBuyXp(
+        econ.cost,
+        econ.xp,
+        currency === "brains",
+        econ.purchaseLimit !== undefined
+      );
       if (obj) obj.catalogKey = command.catalogKey;
       else {
         obj = { instanceId: command.instanceId, catalogKey: command.catalogKey, status: "placed" };

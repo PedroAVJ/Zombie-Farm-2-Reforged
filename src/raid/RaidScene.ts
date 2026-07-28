@@ -301,6 +301,7 @@ export class RaidScene {
   private checkpointRetryAt = 0;
 
   private assets: GameAssets;
+  private regularZombieNativeHeight: number | null = null;
   private backdrop = new Graphics(); // sky/grass fill behind the (letterboxed) stage
   private stageLayer = new Container(); // parallax level-asset layers (behind everyone)
   private stageLayers: { sp: Sprite; asset: RaidLevelAsset }[] = [];
@@ -722,6 +723,16 @@ export class RaidScene {
     this.container.addChild(badge);
   }
 
+  private getRegularZombieNativeHeight(): number {
+    if (this.regularZombieNativeHeight === null) {
+      const reference = new RaidActor(
+        this.assets, "ZombieActorRegularTier1", 0, "Regular",
+      );
+      this.regularZombieNativeHeight = reference.getNativeSizingHeight();
+    }
+    return this.regularZombieNativeHeight;
+  }
+
   private makeToken(u: SimUnit): Token {
     const root = new Container();
     let actor: RaidActor | undefined;
@@ -736,14 +747,16 @@ export class RaidScene {
     let actorBaseY = 0;
 
     if (u.team === "player") {
-      // Real farm-style zombie rig (with the walk animation), restored to the
-      // standard raid height regardless of the model's authored group scale.
+      // Real farm-style zombie rig (with the walk animation). Most families use
+      // their authored raid height; Headless retains its actual farm silhouette.
       actor = new RaidActor(this.assets, u.sourceKey, u.mutation, u.group);
       const b = actor.getSizingBounds();
       const heightScale = zombieRaidHeightScale(
         u.group ?? (u.isHeadless ? "Headless" : u.isGarden ? "Garden" : "Regular"),
         u.className ?? "Green",
         u.sourceKey,
+        actor.getNativeSizingHeight(),
+        this.getRegularZombieNativeHeight(),
       );
       const targetHeight = ZOMBIE_H * heightScale;
       const s = targetHeight / Math.max(1, b.height);

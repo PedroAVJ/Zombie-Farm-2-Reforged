@@ -32,7 +32,7 @@
 // lineup-depth band (1.0/0.85/0.7/0.55; enemies ×1.0). See combatStats.lineupDamageBand.
 import type { BossSpecial, BossThrowConfig, CombatUnit, CrabConfig, GrabberConfig, RaidOutcome } from "./types";
 import { ACTIVATED_ABILITY, activatedKeyFor, teamAbilitiesIn } from "../zombie/abilities";
-import { deriveHitDamage, lineupDamageBand, POWER_PER_STR } from "./combatStats";
+import { applyDamage, deriveHitDamage, lineupDamageBand, POWER_PER_STR } from "./combatStats";
 import { BOSS_SPECIAL_DAMAGE_MULT, PROJECTILE_DAMAGE_MULT } from "./balance";
 
 /** Logical field the sim runs in; RaidScene scales this to the viewport. */
@@ -94,17 +94,18 @@ const COL_GAP = 52; // depth spacing between columns
 // target rather than dealing an ordinary hit.
 const ONE_SHOT_FLOOR = 0.1; // hit is capped if it would leave HP fraction below this
 
-// Mini Buddy: a waiting Small zombie mounts a Large zombie, rides to the line at
-// double speed, then dismounts as both join combat and the arrival stuns the enemy.
+// Mini Buddy: the binary sets the carrier to 4× walking speed. On arrival it
+// stuns the enemy for 2 seconds and the carrier for 1 second.
 const MINI_MOUNT_MS = 500;
-const MINI_ARRIVAL_STUN_MS = 1000;
+const MINI_CARRIER_SPEED_MULT = 4;
+const MINI_ENEMY_STUN_MS = 2000;
+const MINI_CARRIER_STUN_MS = 1000;
 
-// Garden support cadence. These values are deliberately modest: support gives up
-// its normal frontline attacks while it stands back and heals.
-const HEAL_SINGLE_MS = 4000;
-const HEAL_AOE_MS = 7000;
-const HEAL_SINGLE_FRAC = 0.12;
-const HEAL_AOE_FRAC = 0.08;
+// Garden support recovered from ZombieActorGarden: both heals restore half of
+// finalPower. Heal selects another zombie at or below 50% Life; Heal All has its
+// own automatic 20-second timer.
+const HEAL_POWER_MULT = 0.5;
+const HEAL_AOE_MS = 20_000;
 
 // Ballistic throws.
 const GRAVITY = 820; // sim px/s^2 pulling projectiles down
@@ -221,6 +222,18 @@ function hash(n: number): number {
   return s - Math.floor(s);
 }
 
+function stringSeed(value: string): number {
+  let out = 0;
+  for (let i = 0; i < value.length; i++) out = (Math.imul(out, 31) + value.charCodeAt(i)) >>> 0;
+  return out % 100;
+}
+
+function laserInterval(abilities: readonly string[], attackCooldownMs: number): number {
+  if (abilities.includes("zomBeam")) return attackCooldownMs / 6;
+  if (abilities.includes("laserBeam")) return attackCooldownMs / 3;
+  return 0;
+}
+
 /** Zombie advance speed scales with DEX (quicker zombies reach the front sooner). */
 function advanceSpeed(dex: number): number {
   return clamp(90 + dex * 22, 90, 260);
@@ -269,6 +282,7 @@ export interface SimUnit {
   y: number;
   hp: number;
   maxHp: number;
+  damageReduction: number;
   alive: boolean;
   oneShotProtectionUsed: boolean; // remains consumed through healing and replay checkpoints
   state: UnitState;
@@ -291,6 +305,7 @@ export interface SimUnit {
   cooldownMs: number;
   timerMs: number;
   moveSpeed: number;
+  power: number; // finalPower, retained for lasers and Garden heals
   homeX: number; // waiting-group spot (zombies)
   homeY: number;
   mill: number; // per-unit wander phase
@@ -309,8 +324,13 @@ export interface SimUnit {
   buddyCarrierId: string | null; // Large zombie carrying this Small zombie
   buddyMountMs: number; // jump-to-carrier animation time remaining
   healTimerMs: number; // Garden support heal cadence
+  healAoeTimerMs: number; // independent 20-second Heal All timer
   healFxSeq: number; // increments when this unit receives a heal (renderer trigger)
   healCastSeq: number; // increments when this Garden zombie performs a heal
+  laserTimerMs: number; // automatic walking-laser cadence
+  abilityRollSeq: number; // replay-safe proc sequence (Block/Stun/Double Strike)
+  usedAbilities: string[]; // one-use activated abilities already consumed
+  resurrectUsed: boolean; // one-use automatic Resurrect latch
   stunMs: number; // ms of stun left — can't act while > 0 (enemies AND zombies)
   // ---- enemy attack effects inflicted on a struck zombie ----
   knockBack: boolean; // this enemy's attack shoves the zombie back down the lane
@@ -458,6 +478,7 @@ function toSim(u: CombatUnit, i: number): SimUnit {
     // max while translating it into simulation state.
     hp: Math.max(0, Math.min(u.maxHp, u.hp)),
     maxHp: u.maxHp,
+    damageReduction: u.damageReduction ?? 0,
     alive: true,
     oneShotProtectionUsed: false,
     state: isPlayer ? "waiting" : "queued",
@@ -480,7 +501,8 @@ function toSim(u: CombatUnit, i: number): SimUnit {
     attackName: u.attacks[0]?.name ?? "",
     cooldownMs: u.attackCooldownMs,
     timerMs: u.attackCooldownMs,
-    moveSpeed: isPlayer ? advanceSpeed(u.dex) : EMERGE_SPEED,
+    moveSpeed: isPlayer ? advanceSpeed(u.dex) * (u.walkingSpeedMult ?? 1) : EMERGE_SPEED,
+    power: u.str * POWER_PER_STR,
     homeX: home.x,
     homeY: home.y,
     mill: hash(i * 3 + 2) * Math.PI * 2,
@@ -498,8 +520,13 @@ function toSim(u: CombatUnit, i: number): SimUnit {
     buddyCarrierId: null,
     buddyMountMs: 0,
     healTimerMs: 0,
+    healAoeTimerMs: abilities.includes("healAOE") ? 20_000 : 0,
     healFxSeq: 0,
     healCastSeq: 0,
+    laserTimerMs: laserInterval(abilities, u.attackCooldownMs),
+    abilityRollSeq: 0,
+    usedAbilities: [],
+    resurrectUsed: false,
     stunMs: 0,
     knockBack: !isPlayer && !!u.knockBack,
     stunInflictMs: isPlayer ? 0 : u.stunMs ?? 0,
@@ -669,6 +696,13 @@ export class BattleSim {
       ...u,
       abilities: [...u.abilities],
       healCastSeq: u.healCastSeq ?? 0,
+      healAoeTimerMs: u.healAoeTimerMs ??
+        (u.abilities.includes("healAOE") ? HEAL_AOE_MS : 0),
+      laserTimerMs: u.laserTimerMs ?? laserInterval(u.abilities, u.cooldownMs),
+      abilityRollSeq: u.abilityRollSeq ?? 0,
+      usedAbilities: [...(u.usedAbilities ?? [])],
+      resurrectUsed: u.resurrectUsed ?? false,
+      power: u.power ?? u.damage,
       // An old checkpoint parked at the 1-HP floor has necessarily consumed
       // its protection. New checkpoints persist the explicit latch.
       oneShotProtectionUsed: u.oneShotProtectionUsed ?? (u.team === "player" && u.hp <= 1),
@@ -739,6 +773,7 @@ export class BattleSim {
   /** A player unit is READY for an activated move when it's alive, in the thick of
    *  the fight, off cooldown, and not already charging one. */
   private readyToActivate(p: SimUnit, key: string): boolean {
+    if (p.usedAbilities.includes(key)) return false;
     if (key === "attachMini") {
       return (
         p.alive && this.isLarge(p) && p.abilities.includes(key) && !p.buddyId &&
@@ -784,11 +819,14 @@ export class BattleSim {
       mini.state = "carried";
       mini.distracted = false;
       mini.awaitRelease = false;
+      pick.usedAbilities.push(key);
       return true;
     }
     pick.windupKey = key;
-    pick.windupMs = ab.windupMs;
-    pick.windupTotal = ab.windupMs;
+    const windup = Math.max(1, pick.cooldownMs * ab.speedMultiplier * ab.damageTiming);
+    pick.windupMs = windup;
+    pick.windupTotal = windup;
+    pick.abilityCdMs = ab.cooldownMs;
     return true;
   }
 
@@ -803,6 +841,7 @@ export class BattleSim {
     if (ab.aoe) {
       for (const e of this.enemies) {
         if (!e.alive || e.state === "queued" || e.state === "structure" || e.state === "descending") continue;
+        if (e.isBoss && !ab.hitBoss && (key === "explode" || key === "explodeV2")) continue;
         this.dealDamage(e, dmg, true);
         if (ab.stunMs) e.stunMs = Math.max(e.stunMs, ab.stunMs);
         this.playerDamage += dmg;
@@ -816,18 +855,19 @@ export class BattleSim {
     this.attacksLanded++;
     p.windupKey = null;
     p.windupMs = 0;
-    p.abilityCdMs = ab.cooldownMs;
+    if (ab.useOnce && !p.usedAbilities.includes(key)) p.usedAbilities.push(key);
     p.timerMs = p.cooldownMs; // resume normal attacks after a beat
   }
 
-  /** Dismount a Mini Buddy at the line. Both units remain alive and committed;
-   *  the arrival briefly stuns the current enemy before normal attacks resume. */
+  /** Dismount a Mini Buddy at the line. The shipped ram stuns the enemy for two
+   *  seconds and the carrier for one; both zombies then remain in combat. */
   private deployMiniBuddy(carrier: SimUnit, foe: SimUnit | null) {
     if (!carrier.buddyId) return;
     const mini = this.players.find((p) => p.id === carrier.buddyId);
     carrier.buddyId = null;
-    carrier.abilityCdMs = ACTIVATED_ABILITY.attachMini.cooldownMs;
-    if (foe) foe.stunMs = Math.max(foe.stunMs, MINI_ARRIVAL_STUN_MS);
+    carrier.abilityCdMs = 0;
+    carrier.stunMs = Math.max(carrier.stunMs, MINI_CARRIER_STUN_MS);
+    if (foe) foe.stunMs = Math.max(foe.stunMs, MINI_ENEMY_STUN_MS);
     if (!mini || !mini.alive) return;
     mini.buddyCarrierId = null;
     mini.buddyMountMs = 0;
@@ -841,8 +881,9 @@ export class BattleSim {
     mini.timerMs = mini.cooldownMs;
   }
 
-  /** Garden support heals from its rear position. Heal targets the most injured
-   *  deployed ally; Heal All restores every damaged deployed ally. */
+  /** Authentic Garden support. Heal selects the most injured OTHER deployed
+   *  zombie at or below half Life and restores 50% of the healer's Power.
+   *  Heal All independently fires every 20 seconds for the same amount. */
   private stepHealing(dtMs: number) {
     const deployed = this.players.filter(
       (p) => p.alive && (p.state === "advance" || p.state === "fight")
@@ -854,27 +895,40 @@ export class BattleSim {
         healer.healTimerMs = Math.max(healer.healTimerMs, 250);
         continue;
       }
-      healer.healTimerMs -= dtMs;
-      if (healer.healTimerMs > 0) continue;
+      const amount = Math.max(1, Math.round(healer.power * HEAL_POWER_MULT));
 
-      const aoe = healer.abilities.includes("healAOE");
-      const damaged = deployed.filter((p) => p.hp < p.maxHp && (aoe || p.id !== healer.id));
-      if (!damaged.length) {
-        healer.healTimerMs = 250; // check again soon without banking many instant heals
-        continue;
+      if (healer.abilities.includes("heal")) {
+        healer.healTimerMs -= dtMs;
+        if (healer.healTimerMs <= 0) {
+          const candidates = deployed.filter(
+            (p) => p.id !== healer.id && p.hp > 0 && p.hp / p.maxHp <= 0.5
+          );
+          if (candidates.length) {
+            const target = candidates.reduce(
+              (a, b) => b.hp / b.maxHp < a.hp / a.maxHp ? b : a
+            );
+            target.hp = Math.min(target.maxHp, target.hp + amount);
+            target.healFxSeq++;
+            healer.healCastSeq++;
+            healer.healTimerMs = healer.cooldownMs;
+          } else {
+            healer.healTimerMs = 250;
+          }
+        }
       }
 
-      const targets = aoe
-        ? damaged
-        : [damaged.reduce((a, b) => b.hp / b.maxHp < a.hp / a.maxHp ? b : a)];
-      const frac = aoe ? HEAL_AOE_FRAC : HEAL_SINGLE_FRAC;
-      for (const target of targets) {
-        const amount = Math.max(1, Math.round(target.maxHp * frac));
-        target.hp = Math.min(target.maxHp, target.hp + amount);
-        target.healFxSeq++;
+      if (healer.abilities.includes("healAOE")) {
+        healer.healAoeTimerMs -= dtMs;
+        if (healer.healAoeTimerMs <= 0) {
+          const damaged = deployed.filter((p) => p.hp > 0 && p.hp < p.maxHp);
+          for (const target of damaged) {
+            target.hp = Math.min(target.maxHp, target.hp + amount);
+            target.healFxSeq++;
+          }
+          if (damaged.length) healer.healCastSeq++;
+          healer.healAoeTimerMs += HEAL_AOE_MS;
+        }
       }
-      healer.healCastSeq++;
-      healer.healTimerMs = aoe ? HEAL_AOE_MS : HEAL_SINGLE_MS;
     }
   }
 
@@ -957,6 +1011,33 @@ export class BattleSim {
     return side.some((u) => u.alive && !u.taken);
   }
 
+  /** Replay-safe equivalent of `(arc4random() % 100)`. Multiplication by 37
+   *  permutes all 100 integer results once per cycle, preserving the binary's
+   *  exact 9/4/29 successful rolls without making replays nondeterministic. */
+  private abilityRoll(u: SimUnit): number {
+    const roll = (stringSeed(u.id) + u.abilityRollSeq * 37) % 100;
+    u.abilityRollSeq++;
+    return roll;
+  }
+
+  /** Fire the automatic walking laser. Both versions deal 10% of finalPower;
+   *  Ver.2 schedules at finalAttackSpeed/6 instead of /3. */
+  private stepLaser(u: SimUnit, dtMs: number) {
+    const interval = laserInterval(u.abilities, u.cooldownMs);
+    if (interval <= 0) return;
+    u.laserTimerMs -= dtMs;
+    if (u.laserTimerMs > 0) return;
+    const foe = this.targetEnemy(u);
+    if (foe) {
+      const dmg = Math.max(1, Math.round(u.power * 0.10));
+      this.dealDamage(foe, dmg, true);
+      u.struckThisTick = true;
+      this.attacksLanded++;
+      this.playerDamage += dmg;
+    }
+    u.laserTimerMs += interval;
+  }
+
   /** Land a hit from `u` on `foe` when its clock is ready; else re-arm. An enemy
    *  hit can also knock the zombie back (to the back of the line) and/or stun it. */
   private tryAttack(u: SimUnit, foe: SimUnit, dtMs: number) {
@@ -969,13 +1050,30 @@ export class BattleSim {
       u.team === "player"
         ? Math.max(1, Math.round(u.damage * lineupDamageBand(u.lineupIndex)))
         : u.damage;
-    if (u.team === "enemy") this.dealEnemyDamage(foe, dmg);
-    else this.dealDamage(foe, dmg, true);
+    if (u.team === "enemy") {
+      this.dealEnemyDamage(foe, dmg);
+    } else {
+      this.dealDamage(foe, dmg, true);
+      this.playerDamage += dmg;
+
+      // Girl `damageIn:` uses integer rolls >.70 and >.95. Double Strike adds
+      // the authored 0.25× Power strike; Random Stun holds the target for 1s.
+      if (u.abilities.includes("doubleStrike") && this.abilityRoll(u) > 70 && foe.alive) {
+        const bonus = Math.max(
+          1,
+          Math.round(u.power * 0.25 * lineupDamageBand(u.lineupIndex))
+        );
+        this.dealDamage(foe, bonus, true);
+        this.playerDamage += bonus;
+        this.attacksLanded++;
+      }
+      if (u.abilities.includes("stun") && this.abilityRoll(u) > 95 && foe.alive) {
+        foe.stunMs = Math.max(foe.stunMs, 1000);
+      }
+    }
     u.struckThisTick = true;
     this.attacksLanded++;
-    if (u.team === "player") {
-      this.playerDamage += dmg;
-    } else if (foe.alive && foe.team === "player") {
+    if (u.team === "enemy" && foe.alive && foe.team === "player") {
       // Enemy attack effects on the struck zombie.
       if (u.stunInflictMs > 0) foe.stunMs = Math.max(foe.stunMs, u.stunInflictMs);
       if (u.knockBack) this.knockBackZombie(foe);
@@ -1006,25 +1104,54 @@ export class BattleSim {
       if (carrier) carrier.buddyId = null;
       foe.buddyCarrierId = null;
     }
+    if (foe.team === "player" && this.tryResurrect(foe)) return;
     // A downed enemy opens the gate for the next to emerge after a beat.
     if (fromPlayer && foe.team === "enemy") this.emergeCooldown = ENEMY_EMERGE_GAP_MS;
   }
 
+  /** Resurrect is automatic and one-use. A living Garden holder revives the
+   *  defeated non-Small zombie at full Life and sends it back into formation. */
+  private tryResurrect(defeated: SimUnit): boolean {
+    if (this.isSmall(defeated)) return false;
+    const healer = this.players.find(
+      (p) => p.alive && p.abilities.includes("ressurect") && !p.resurrectUsed
+    );
+    if (!healer) return false;
+    healer.resurrectUsed = true;
+    defeated.alive = true;
+    defeated.hp = defeated.maxHp;
+    defeated.state = "advance";
+    defeated.x = CHARGE_X;
+    defeated.y = CENTER_Y;
+    defeated.prevX = defeated.x;
+    defeated.prevY = defeated.y;
+    defeated.formOrder = this.releaseSeq++;
+    defeated.timerMs = defeated.cooldownMs;
+    defeated.windupKey = null;
+    defeated.windupMs = 0;
+    defeated.stunMs = 0;
+    defeated.oneShotProtectionUsed = false;
+    defeated.healFxSeq++;
+    return true;
+  }
+
   /** Apply an ordinary enemy hit through the recovered player-zombie one-shot floor. */
   private dealEnemyDamage(foe: SimUnit, dmg: number) {
+    if (dmg > 0 && foe.abilities.includes("block") && this.abilityRoll(foe) > 90) return;
+    const applied = applyDamage(dmg, 0, foe.team === "player" ? foe.damageReduction ?? 0 : 0);
     if (
-      dmg > 0 &&
+      applied > 0 &&
       foe.team === "player" &&
       foe.alive &&
       !foe.oneShotProtectionUsed &&
       foe.hp > 1 &&
-      (foe.hp - dmg) / foe.maxHp < ONE_SHOT_FLOOR
+      (foe.hp - applied) / foe.maxHp < ONE_SHOT_FLOOR
     ) {
       foe.hp = 1;
       foe.oneShotProtectionUsed = true;
       return;
     }
-    this.dealDamage(foe, dmg, false);
+    this.dealDamage(foe, applied, false);
   }
 
   /** Advance the charging zombie's focus bar, running the bubble minigame unless
@@ -1289,7 +1416,8 @@ export class BattleSim {
           const mdx = destinationX - p.x;
           const mdy = p.slotY - p.y;
           const md = Math.hypot(mdx, mdy);
-          const stepd = (p.moveSpeed * (p.buddyId ? 2 : 1) * dtMs) / 1000;
+          const wasWalking = md > 2;
+          const stepd = (p.moveSpeed * (p.buddyId ? MINI_CARRIER_SPEED_MULT : 1) * dtMs) / 1000;
           if (md > stepd) {
             p.x += (mdx / md) * stepd;
             p.y += (mdy / md) * stepd;
@@ -1297,6 +1425,7 @@ export class BattleSim {
             p.x = destinationX;
             p.y = p.slotY;
           }
+          if (wasWalking) this.stepLaser(p, dtMs);
           // The formation is only for spacing / projectile hitboxes — EVERY zombie
           // that has reached the combat zone attacks the enemy once it has arrived
           // (not just the front row). The enemy still only strikes those in melee

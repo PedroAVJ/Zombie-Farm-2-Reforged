@@ -38,7 +38,12 @@ export function planObjectBuy(
     return { ok: false, error: "purchase_limit" };
   }
   if (have + 1 > MAX_OBJECT_COUNT) return { ok: false, error: "stack_full" };
-  return { ok: true, currency, cost: econ.cost, xp: objectBuyXp(econ.cost, econ.xp) };
+  return {
+    ok: true,
+    currency,
+    cost: econ.cost,
+    xp: objectBuyXp(econ.cost, econ.xp, econ.brains, econ.purchaseLimit !== undefined),
+  };
 }
 
 export type ObjectRefundPlan =
@@ -89,5 +94,11 @@ export function planObjectUpgrade(
     return { ok: false, error: "purchase_limit" };
   }
   if (haveTo + 1 > MAX_OBJECT_COUNT) return { ok: false, error: "stack_full" };
-  return { ok: true, currency, cost: to.cost, xp: objectBuyXp(to.cost, to.xp), consumesFrom };
+  return {
+    ok: true,
+    currency,
+    cost: to.cost,
+    xp: objectBuyXp(to.cost, to.xp, to.brains, to.purchaseLimit !== undefined),
+    consumesFrom,
+  };
 }

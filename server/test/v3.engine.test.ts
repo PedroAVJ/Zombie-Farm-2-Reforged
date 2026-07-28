@@ -661,6 +661,7 @@ describe("protocol v3 command engine", () => {
     expect(bought.state.zombiePotBought).toBe(true);
     expect(bought.state.balance.gold).toBe(500);
     expect(bought.state.balance.brains).toBe(97); // 3 spent on the repeat pot; leveling grants no brains
+    expect(bought.state.balance.xp).toBe(815); // +500 gold-buy XP, then 3 brains * 80
     expect(bought.state.objects.objects).toEqual(expect.arrayContaining([
       expect.objectContaining({ instanceId: "pot-1", catalogKey: "zombieCombiner", purchaseCost: 500, purchaseCurrency: "gold" }),
       expect.objectContaining({ instanceId: "pot-2", catalogKey: "zombieCombiner", purchaseCost: 3, purchaseCurrency: "brains" }),
@@ -678,6 +679,20 @@ describe("protocol v3 command engine", () => {
     expect(sold.state.balance.brains).toBe(97);
     expect(sold.state.objects.objects).toHaveLength(2);
     expect(sold.state.zombiePotBought).toBe(true);
+  });
+
+  it("derives brain decor XP from the post-revert price instead of raw catalog XP", () => {
+    const state = freshGameplayState();
+    state.balance.brains = 100;
+    const bought = applyCommandBatch(state, commands({
+      type: "object.buy",
+      catalogKey: "heartFountain",
+      clientInstanceId: "heart-fountain",
+    }), { now: 100 });
+
+    expect(bought.results[0].status).toBe("applied");
+    expect(bought.state.balance.brains).toBe(90);
+    expect(bought.state.balance.xp).toBe(1000); // 10 brains * decor multiplier 100
   });
 
   it("rejects duplicate functional buys even when the owned copy is stored", () => {

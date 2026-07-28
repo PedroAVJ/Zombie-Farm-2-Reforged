@@ -113,6 +113,13 @@ export class RaidActor {
     return bounds;
   }
 
+  /** Rig height before its model-authored scale is applied. Farm actors use this
+   * native silhouette with zombieFarmScale, so raids use it to retain the same
+   * relative apparent size. */
+  getNativeSizingHeight(): number {
+    return this.getSizingBounds().height / Math.max(0.001, this.renderScale);
+  }
+
   private build(assets: GameAssets, key: string, mutation: number, group: string) {
     const m: ZombieModel =
       assets.zombieModels[key] ?? assets.zombieModels["ZombieActorRegularTier1"];

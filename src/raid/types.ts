@@ -177,6 +177,9 @@ export interface CombatUnit {
   /** Fractional damage reduction 0..1, applied after armor (binary
    *  `finalDamageReduction`). 0/absent = none. */
   damageReduction?: number;
+  /** Walking-only multiplier. Turbo Walking Speed changes this without changing
+   *  DEX or the attack interval. */
+  walkingSpeedMult?: number;
 }
 
 /** One item the boss can throw, derived from UnitStats bossActions. */
