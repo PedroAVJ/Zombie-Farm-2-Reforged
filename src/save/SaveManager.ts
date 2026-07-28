@@ -19,6 +19,7 @@ import type { JobSystem } from "../JobSystem";
 export type FarmLoadResult =
   | { kind: "local-existing" }
   | { kind: "local-new" }
+  | { kind: "local-unavailable"; reason: "storage_unavailable" | "save_unreadable" }
   | { kind: "online-authoritative"; restored: boolean }
   | { kind: "online-cached"; savedAt: number }
   | { kind: "online-unavailable"; reason: string };
@@ -51,6 +52,7 @@ export class SaveManager {
   private lastPresentationCallAt = 0;
   private suspended = false;
   private onlineWritable = false;
+  private readonly localKey: string | null;
   onStorageError: ((message: string) => void) | null = null;
 
   constructor(
@@ -65,13 +67,18 @@ export class SaveManager {
     private readonly mode: PlayMode = "local",
     private readonly jobs?: JobSystem,
   ) {
-    if (mode === "local") migrateLegacyProfileSaves();
+    if (mode === "local") {
+      migrateLegacyProfileSaves();
+      this.localKey = activeSaveKey();
+    } else {
+      this.localKey = null;
+    }
   }
 
   private isOnline(): boolean { return this.mode === "online" && api.isConfigured() && !!api.getSession(); }
   private cacheKey(): string {
     const session = api.getSession();
-    if (this.mode === "local") return activeSaveKey();
+    if (this.mode === "local") return this.localKey!;
     return `${ONLINE_PRESENTATION_PREFIX}::${session?.accountId ?? "unavailable"}`;
   }
   private snapshotKey(): string | null {
@@ -293,7 +300,7 @@ export class SaveManager {
         };
       }
     }
-    return await this.loadLocal() ? { kind: "local-existing" } : { kind: "local-new" };
+    return this.loadLocal();
   }
 
   private writeOnlineSnapshot(snapshot: SaveGame): void {
@@ -403,11 +410,12 @@ export class SaveManager {
     };
   }
 
-  private async loadLocal(): Promise<boolean> {
+  private async loadLocal(): Promise<FarmLoadResult> {
     const key = this.cacheKey();
     let values: (string | null)[];
     try { values = [localStorage.getItem(key), localStorage.getItem(`${key}.backup`)]; }
-    catch { return false; }
+    catch { return { kind: "local-unavailable", reason: "storage_unavailable" }; }
+    if (!values.some((value) => value !== null)) return { kind: "local-new" };
     for (let index = 0; index < values.length; index++) {
       const raw = values[index];
       if (!raw) continue;
@@ -420,10 +428,14 @@ export class SaveManager {
           this.writeLocal(data);
           this.onStorageError?.("The latest Local Farm save was damaged. The previous backup was restored.");
         }
-        return true;
-      } catch { /* try the last-known-good backup */ }
+        return { kind: "local-existing" };
+      } catch (error) {
+        console.warn(`[save] could not restore Local Farm ${index === 0 ? "primary" : "backup"}`, error);
+        // Stored bytes are not the same as a new farm. Keep both copies intact
+        // and let startup offer recovery instead of overwriting them.
+      }
     }
-    return false;
+    return { kind: "local-unavailable", reason: "save_unreadable" };
   }
 
   private async applySave(data: SaveGame): Promise<void> {

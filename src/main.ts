@@ -67,7 +67,7 @@ import { dropsEpicBossToken, EPIC_BOSS_FIGHT_BRAIN_COST } from "./epicBoss/token
 import { offerFullscreenPrompt } from "./ui/panels/fullscreenPrompt";
 import {
   choosePlayMode, clearPreferredPlayMode, setPreferredPlayMode, showOnlineUnavailable,
-  usesOnlineGameplay, type PlayMode,
+  showLocalUnavailable, usesOnlineGameplay, type PlayMode,
 } from "./playMode";
 
 // The boot / start screen lives in index.html and paints on the first frame (no
@@ -1042,6 +1042,19 @@ async function main() {
         },
         () => {
           setPreferredPlayMode("local");
+          location.reload();
+        },
+      );
+    }
+    if (loadResult.kind === "local-unavailable") {
+      await showLocalUnavailable(
+        async () => {
+          loadResult = await saveManager.load();
+          return loadResult.kind !== "local-unavailable";
+        },
+        () => {
+          saveManager.suspend();
+          saveManager.clear();
           location.reload();
         },
       );

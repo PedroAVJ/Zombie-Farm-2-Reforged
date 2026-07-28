@@ -100,3 +100,52 @@ export function showOnlineUnavailable(
     localButton.onclick = openLocal;
   });
 }
+
+export function showLocalUnavailable(
+  retry: () => Promise<boolean>,
+  reset: () => void,
+): Promise<void> {
+  const root = document.createElement("div");
+  root.className = "zf-mode-gate";
+  root.innerHTML = `
+    <main class="zf-mode-card zf-online-unavailable" aria-labelledby="zf-local-save-title">
+      <h1 id="zf-local-save-title">Can’t Open Your Local Farm</h1>
+      <p>Your saved farm has not been overwritten. Browser storage may be temporarily unavailable, or the latest save may be damaged.</p>
+      <button class="zf-mode-action primary" data-action="retry">Try Again</button>
+      <button class="zf-mode-action" data-action="reset">Start a New Local Farm</button>
+      <small>Starting over permanently removes this Local Farm and its backup.</small>
+      <div class="zf-mode-error" role="status"></div>
+    </main>`;
+  document.body.appendChild(root);
+
+  return new Promise((resolve) => {
+    const retryButton = root.querySelector<HTMLButtonElement>('[data-action="retry"]')!;
+    const resetButton = root.querySelector<HTMLButtonElement>('[data-action="reset"]')!;
+    const status = root.querySelector<HTMLElement>(".zf-mode-error")!;
+    let resetArmed = false;
+    retryButton.onclick = async () => {
+      retryButton.disabled = true;
+      resetButton.disabled = true;
+      status.textContent = "Opening saved farm…";
+      if (await retry()) {
+        root.remove();
+        resolve();
+        return;
+      }
+      status.textContent = "The saved farm still could not be opened. It has not been changed.";
+      retryButton.disabled = false;
+      resetButton.disabled = false;
+    };
+    resetButton.onclick = () => {
+      if (!resetArmed) {
+        resetArmed = true;
+        resetButton.textContent = "Confirm Start New Farm";
+        status.textContent = "This permanently deletes the saved Local Farm and its backup.";
+        return;
+      }
+      retryButton.disabled = true;
+      resetButton.disabled = true;
+      reset();
+    };
+  });
+}

@@ -450,9 +450,13 @@ export class Hud {
     // openProfiles) — the friend code / add / gift / visit all live in Friends.
     name.onclick = () => this.openProfiles();
     this.nameEl = name;
-    this.playStatusEl = document.createElement("div");
+    this.playStatusEl = document.createElement("button");
     this.playStatusEl.className = "play-status local";
     this.playStatusEl.textContent = "LOCAL FARM";
+    this.playStatusEl.setAttribute("type", "button");
+    this.playStatusEl.setAttribute("aria-label", "Current farm: Local Farm. Choose Local or Online.");
+    this.playStatusEl.title = "Choose Local or Online";
+    this.playStatusEl.onclick = () => this.openProfiles();
 
     // Account button: a person icon just right of the nameplate. Opens the same
     // Account menu; stays visible on mobile (where the nameplate is hidden), so
@@ -624,6 +628,10 @@ export class Hud {
       : state === "reconnecting" ? "ONLINE · RECONNECTING"
       : state === "saving" ? `ONLINE · SAVING${pending ? ` (${pending})` : ""}`
       : "ONLINE · SYNCED";
+    this.playStatusEl.setAttribute(
+      "aria-label",
+      `Current farm: ${mode === "local" ? "Local Farm" : "Online Farm"}. Choose Local or Online.`
+    );
   }
 
   // Brief top-center banner for quest completion (messageComplete).
@@ -2204,7 +2212,7 @@ export class Hud {
   // friend code, adding friends, and gifting/visiting all live in the Friends panel.
   // Opened by clicking the top-right nameplate / person icon.
   openProfiles() {
-    const { panel } = openModal({
+    const { panel, close } = openModal({
       host: this.el, bgClass: "prof-bg", panelClass: "profiles",
       title: this.playMode === "local" ? "Local Farm" : "Account", replaceSelector: ".prof-bg",
     });
@@ -2221,6 +2229,18 @@ export class Hud {
       note.textContent = "Local Farm is saved on this device. Online Farm has separate progress.";
       panel.append(note);
     }
+
+    const switchActions = document.createElement("div");
+    switchActions.className = "zbtns";
+    const switchFarm = document.createElement("button");
+    switchFarm.className = "zbtn locate";
+    switchFarm.textContent = "Choose Local / Online";
+    switchFarm.onclick = () => {
+      close();
+      this.onSwitchFarm?.();
+    };
+    switchActions.appendChild(switchFarm);
+    panel.appendChild(switchActions);
   }
 
   /** Confirm a destructive social action before touching local or server state. */

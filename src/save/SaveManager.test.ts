@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as api from "../net/api";
 import { SaveManager } from "./SaveManager";
+import { activeSaveKey } from "./profiles";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -99,5 +100,43 @@ describe("SaveManager mode isolation", () => {
     manager.flushCritical();
 
     expect(write).not.toHaveBeenCalled();
+  });
+
+  it("does not treat an existing but unreadable Local Farm as a new farm", async () => {
+    vi.stubGlobal("localStorage", memoryStorage());
+    const manager = new SaveManager(
+      {} as never, {} as never, {} as never, {} as never, {} as never,
+      new Map(), new Map(), async () => undefined, "local",
+    );
+    const key = activeSaveKey();
+    const stored = JSON.stringify({
+      version: 1,
+      savedAt: 123,
+      player: { name: "Preserve Me" },
+      farm: { plots: [] },
+    });
+    localStorage.setItem(key, stored);
+    vi.spyOn(manager as any, "applySave").mockRejectedValue(new Error("temporary hydrate failure"));
+
+    await expect(manager.load()).resolves.toEqual({
+      kind: "local-unavailable",
+      reason: "save_unreadable",
+    });
+    expect(localStorage.getItem(key)).toBe(stored);
+  });
+
+  it("reports unavailable storage instead of creating a disposable Local Farm", async () => {
+    const blocked = memoryStorage();
+    blocked.getItem = () => { throw new Error("storage blocked"); };
+    vi.stubGlobal("localStorage", blocked);
+    const manager = new SaveManager(
+      {} as never, {} as never, {} as never, {} as never, {} as never,
+      new Map(), new Map(), async () => undefined, "local",
+    );
+
+    await expect(manager.load()).resolves.toEqual({
+      kind: "local-unavailable",
+      reason: "storage_unavailable",
+    });
   });
 });

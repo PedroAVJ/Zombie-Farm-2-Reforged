@@ -31,8 +31,11 @@
   align-self: center; padding: 4px 8px; border: 1px solid #102109;
   border-radius: 999px; color: #efffdf; background: #335e20;
   font: 800 10px/1.1 system-ui, sans-serif; letter-spacing: .45px;
-  white-space: nowrap; box-shadow: 0 1px 3px #0006;
+  white-space: nowrap; box-shadow: 0 1px 3px #0006; cursor: pointer;
+  appearance: none;
 }
+#hud .play-status:hover { filter: brightness(1.12); }
+#hud .play-status:focus-visible { outline: 2px solid #d9ff9b; outline-offset: 2px; }
 #hud .play-status.online { background: #245985; }
 #hud .play-status.reconnecting { background: #8a5b16; }
 #hud .play-status.cached { background: #6b4b2a; }
