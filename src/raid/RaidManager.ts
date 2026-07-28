@@ -35,6 +35,7 @@ import { BossSpecial, BossThrowConfig, CombatUnit, CrabConfig, GrabberConfig, Ra
 import { rollLootTier } from "./LootTable";
 import { rollBrainDrop } from "./brainDrops";
 import { orderPartyRoster } from "./partySelection";
+import { dropsOldMcZombie, OLD_MC_ZOMBIE_KEY, OLD_MC_ZOMBIE_NAME } from "./zombieDrops";
 
 /** Real grab-hazard art per raid id. Circus = the trapeze girl (extracted from the
  *  stage atlas). */
@@ -182,7 +183,7 @@ export class RaidManager {
     private assets: GameAssets,
     private state: GameState,
     private zombies: ZombieField,
-    private hooks: { save: () => void },
+    private hooks: { save: () => void; grantZombie?: (key: string) => void },
     /** Between-invasions cooldown in ms (playtest-scaled by main.ts). */
     private cooldownMs: number = RAID_COOLDOWN_MS,
     /** Wall clock, injectable for tests. */
@@ -629,6 +630,10 @@ export class RaidManager {
         // applied by the server only after deterministic replay verifies the boss win.
         brains = brainDrop;
         if (brains > 0) this.state.addBrains(brains);
+        if (dropsOldMcZombie(raid.id, true, Math.random())) {
+          this.hooks.grantZombie?.(OLD_MC_ZOMBIE_KEY);
+          loot.push({ name: OLD_MC_ZOMBIE_NAME, icon: zombiePortrait(OLD_MC_ZOMBIE_KEY) });
+        }
       }
       // Beating a tier boss unlocks ONE still-locked ability of that tier (the next
       // in canonical order) across the roster — so `wins` maps to the wins-th pool

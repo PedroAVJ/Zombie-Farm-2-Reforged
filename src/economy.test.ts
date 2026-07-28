@@ -10,8 +10,10 @@ describe("zombieSellValue — floor(baseCost / 2)", () => {
     expect(zombieSellValue(1)).toBe(1);
   });
   it("does NOT scale with anything but base cost", () => {
-    // A brain-priced special (50) and a cheap normal (50) sell for the same.
-    expect(zombieSellValue(50)).toBe(zombieSellValue(50));
+    expect(zombieSellValue(50)).toBe(25);
+  });
+  it("converts brain-priced zombies to 1,000 gold per brain", () => {
+    expect(zombieSellValue(5, true)).toBe(5_000);
   });
 });
 
@@ -19,6 +21,9 @@ describe("item economy helpers", () => {
   it("sellBack refunds the configured fraction, min 1", () => {
     expect(sellBack(100)).toBe(Math.floor(100 * ECONOMY.SELL_BACK_RATIO));
     expect(sellBack(1)).toBe(1);
+  });
+  it("converts brain-priced items to 1,000 gold per brain", () => {
+    expect(sellBack(3, true)).toBe(3_000);
   });
   it("buyXp retains authoritative source XP for gold purchases", () =>
     expect(buyXp(1000, 42, false, "decor")).toBe(42));

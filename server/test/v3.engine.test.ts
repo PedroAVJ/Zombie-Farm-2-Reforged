@@ -697,6 +697,26 @@ describe("protocol v3 command engine", () => {
     expect(bought.state.balance.xp).toBe(1000); // 10 brains * decor multiplier 100
   });
 
+  it("sells brain-priced decor for 1,000 gold per brain without refunding brains", () => {
+    const state = freshGameplayState();
+    const initialGold = state.balance.gold;
+    state.balance.brains = 100;
+    const bought = applyCommandBatch(state, commands({
+      type: "object.buy",
+      catalogKey: "heartFountain",
+      clientInstanceId: "heart-fountain",
+    }), { now: 100 });
+
+    const sold = applyCommandBatch(bought.state, commands({
+      type: "object.refund",
+      instanceId: "heart-fountain",
+    }), { now: 101 });
+
+    expect(sold.results[0]).toMatchObject({ status: "applied" });
+    expect(sold.state.balance.gold).toBe(initialGold + 10_000);
+    expect(sold.state.balance.brains).toBe(90);
+  });
+
   it("rejects duplicate functional buys even when the owned copy is stored", () => {
     const state = freshGameplayState();
     state.balance.brains = 100;

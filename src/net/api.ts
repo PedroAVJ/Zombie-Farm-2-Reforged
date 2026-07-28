@@ -844,6 +844,8 @@ export interface RaidFinishResult {
    *  the drop's name + what it became. Null when nothing dropped, on a loss, or on a
    *  replayed finish. */
   loot?: { name: string; kind: "gold" | "boost" | "item" } | null;
+  /** Extremely rare roster reward, placed on the farm or protected in the Mausoleum. */
+  newZombie?: { id: string; key: string; stored: boolean } | null;
   outcome?: RaidOutcome;
   questChanges?: QuestChange[];
   inventory?: Record<string, number>;

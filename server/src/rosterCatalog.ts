@@ -3,7 +3,7 @@ import zombieRows from "../../public/assets/zombies.json";
 
 // Server-side zombie catalog. Mirrors the `cost` of each unit in
 // public/assets/zombies.json so the server can price a SELL exactly (sell = the
-// client's zombieSellValue = max(1, floor(cost/2))) and validate that a granted unit
+// client's zombieSellValue and validate that a granted unit
 // is a real catalog zombie. A unit's stats aren't needed here — the roster records
 // only id/key/mutation/invasions, and stats derive from the key on the client.
 //
@@ -80,6 +80,9 @@ const LEGACY_ZOMBIE_COST: Readonly<Record<string, number>> = {
 
 export const ZOMBIE_COST: Readonly<Record<string, number>> = Object.fromEntries(
   (zombieRows as Array<{ key: string; cost: number }>).map((zombie) => [zombie.key, zombie.cost])
+);
+export const ZOMBIE_BRAINS: Readonly<Record<string, boolean>> = Object.fromEntries(
+  (zombieRows as Array<{ key: string; brainsNeeded?: boolean }>).map((zombie) => [zombie.key, !!zombie.brainsNeeded])
 );
 void LEGACY_ZOMBIE_COST;
 
@@ -166,6 +169,7 @@ export function fertilizeProbability(keys: string[]): number {
 /** Gold a unit sells for, mirroring the client's zombieSellValue. */
 export function zombieSell(key: string): number {
   const cost = ZOMBIE_COST[key] ?? 0;
+  if (ZOMBIE_BRAINS[key]) return Math.max(0, Math.trunc(cost)) * 1_000;
   return Math.max(1, Math.floor(cost / 2));
 }
 

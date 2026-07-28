@@ -1102,9 +1102,10 @@ export class Hud {
   onZombieLocate: ((id: string) => void) | null = null;
   /** Permanently sell an owned zombie for gold (after confirmation). */
   onZombieSell: ((id: string) => void | Promise<void>) | null = null;
-  /** Base market cost of a zombie type by key — drives the sell payout shown on
-   *  the detail card (sell = floor(baseCost/2), binary ground truth). */
+  /** Market pricing of a zombie type — drives the gold sell payout shown on the
+   *  detail card (brain prices convert at 1,000 gold per brain). */
   zombieBaseCost: ((key: string) => number) | null = null;
+  zombieCostsBrains: ((key: string) => boolean) | null = null;
   getBlackMarketOrders: ((query: {
     kind: BlackMarketOrderKind; zombieKey?: string; mutated?: boolean;
     sort?: "newest" | "price_asc" | "price_desc"; mine?: boolean;
@@ -3213,7 +3214,10 @@ export class Hud {
       // Selling is permanent, so it routes through a confirmation window (guards
       // against dumping a rare/veteran unit by mistake). The value is shown up
       // front on the button so the player sees what the zombie is worth.
-      const value = zombieSellValue(this.zombieBaseCost?.(info.key) ?? 0);
+      const value = zombieSellValue(
+        this.zombieBaseCost?.(info.key) ?? 0,
+        this.zombieCostsBrains?.(info.key) ?? false
+      );
       const sell = document.createElement("button");
       sell.className = "zbtn sell";
       sell.textContent = `Sell +${value}g`;

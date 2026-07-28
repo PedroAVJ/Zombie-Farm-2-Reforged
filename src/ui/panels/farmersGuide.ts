@@ -3,7 +3,7 @@ import { openModal } from "../Modal";
 export interface GuidePage {
   id: string;
   label: string;
-  eyebrow: string;
+  eyebrow?: string;
   title: string;
   intro: string;
   sections: Array<{
@@ -16,102 +16,112 @@ export const FARMERS_GUIDE_PAGES: GuidePage[] = [
   {
     id: "welcome",
     label: "Welcome",
-    eyebrow: "Start here",
-    title: "Welcome, farmer!",
+    title: "Welcome to Zombie Farm Reforged",
     intro: "A field guide to growing a thriving farm—and an even better zombie horde.",
     sections: [
       {
-        title: "The farm loop",
-        body: "Plow soil, plant crops or zombies, wait for them to grow, then harvest. Crops earn gold; zombies join your roster for invasions.",
-      },
-      {
-        title: "Good to know",
-        body: "Your farm keeps its unfinished jobs and growth timers when you leave. Select growing plants to see their remaining time or use an Insta-Grow boost.",
+        title: "Zombie Farm Reforged",
+        body: "Zombie Farm Reforged is a fan remake of the Zombie Farm games, which were removed from the App Store in 2017. This version incorporates elements from both Zombie Farm 1 and Zombie Farm 2 into a format that is playable on any device that can run a browser. The project is open source and nonprofit.",
       },
     ],
   },
   {
     id: "saves",
     label: "Your saves",
-    eyebrow: "Local & online",
-    title: "Two farms, two saves",
+    title: "Local vs. Online Farms",
     intro: "Local Farm and Online Farm are deliberately separate. Progress never transfers or merges between them.",
     sections: [
       {
         title: "Local Farm",
-        body: "Saved only in this browser. It works without an account or gameplay server, but clearing browser data or changing devices can remove access to the save. Use Settings to export a backup.",
+        body: "Saved only in this browser. It works without an account or gameplay server, but clearing browser data or changing devices can remove access to the save. Use Settings to export a backup, which can be imported to any device. A local farm allows you to have full control of your own data and play the game without an internet connection.",
       },
       {
         title: "Online Farm",
-        body: "Tied to your signed-in account and saved by the game server. You can continue on another device and use online features. Only one browser or device can control the farm at a time.",
+        body: "Tied to your signed-in account and saved by the game server. You can continue on another device and use online features. Only one browser or device can control the farm at a time. This is the recommended way to play.",
       },
     ],
   },
   {
-    id: "growing",
-    label: "Growing",
-    eyebrow: "Farm mechanics",
-    title: "Mutations & fertilization",
-    intro: "Smart planting turns ordinary harvests into stronger zombies and more valuable crops.",
+    id: "currency",
+    label: "Currency",
+    title: "Currency",
+    intro: "Gold and Brains",
     sections: [
       {
-        title: "Mutations",
-        body: "Plant mutation vegetables directly beside a zombie plot—north, south, east, or west—to give the harvested zombie a chance at matching body-part mutations. The Zombie Pot can also combine two zombies and inherit compatible traits.",
+        title: "Gold",
+        body: "Gold is the base currency in this game. It is obtained primarily from harvesting crops and completing invasions.",
       },
       {
-        title: "Fertilization",
-        body: "Garden-type zombies may fertilize a newly planted vegetable crop. Fertilized crops show drifting leaves and pay double gold when harvested. Zombie crops are not fertilized.",
+        title: "Brains",
+        body: "Brains are highly valuable on a zombie farm and are used to purchase powerful functional items. Brains may be obtained through invasions and Epic Bosses or received as gifts. Brains are also the primary currency for the Black Market, where farmers may trade zombies. Because there are no in-app purchases, drop rates for brains across the board have been approximately doubled.",
+      },
+    ],
+  },
+  {
+    id: "mutations",
+    label: "Mutations",
+    title: "Mutations",
+    intro: "Zombies can mutate to take on the characteristics of various plants from your farm!",
+    sections: [
+      {
+        title: "Obtaining Mutations",
+        body: "Plant vegetables directly beside a zombie plot to give the harvested zombie a chance at developing the mutation associated with them. If you want to ensure that a specific mutation is obtained, then plant a mutated zombie directly instead.",
+      },
+      {
+        title: "Zombie Pot",
+        body: "The Zombie Pot can also combine two zombies and inherit compatible traits. At higher levels, this comes with a low chance of mutating into powerful special zombies.",
       },
     ],
   },
   {
     id: "combat",
     label: "Combat",
-    eyebrow: "Build your horde",
-    title: "Raids & Epic Bosses",
+    title: "Invasions & Epic Bosses",
     intro: "Put your harvested zombies to work in live battles for loot, experience, gold, and brains.",
     sections: [
       {
         title: "Raids",
-        body: "Choose an invasion, assemble an army, and time your focus actions during the fight. Tougher stages bring stronger enemies and better rewards. Fallen zombies are permanently lost unless you accept the post-battle revival offer.",
+        body: "Choose an invasion, assemble an army, and time your focus actions during the fight. Tougher stages bring stronger enemies and better rewards. Fallen zombies are permanently lost, though they may be revived immediately after the battle for the cost of 1 brain.",
       },
       {
         title: "Epic Bosses",
-        body: "Start a limited 14-day boss event from Market → Epic Boss. Boss damage carries between attempts. Harvest event crops for fight tokens, or spend one brain per attempt, and defeat escalating levels for special rewards.",
+        body: "Starting at level 24, you can begin limited 14-day boss events from Market → Epic Boss. Boss damage carries between attempts. Harvesting crops during an event provides fight tokens, which allow you to take another attempt at the boss. Defeating the boss provides escalating special rewards, including extremely powerful special zombies.",
       },
     ],
   },
   {
     id: "social",
     label: "Social",
-    eyebrow: "Online Farm",
     title: "Friends & community",
     intro: "Online Farm adds ways to play alongside other farmers. Community links are also here when you need a hand.",
     sections: [
       {
-        title: "Social features",
-        body: "Share friend codes, send a free daily brain, claim gifts, visit friends’ farms in read-only mode, and trade zombies through the Black Market.",
+        title: "Friends",
+        body: "Share your friend code with another player to become friends with them. Friends can visit each other’s farms and gift each other brains. A limit of two brains can be gifted per day at no cost to the sender.",
+      },
+      {
+        title: "The Black Market",
+        body: "The Black Market is a new feature in Zombie Farm Reforged, which allows farmers to trade zombies for brains. Farmers may request a specific zombie, or put one of their own zombies up for sale.",
       },
       {
         title: "Discord",
-        body: "Join the community Discord to ask for help, share feedback, and meet other farmers. The invite link will be added here soon.",
+        body: "Join the community Discord, The Zombie Farm Archive, to ask for help, share feedback, and meet other farmers. This is also a good place to report bugs or request additional features.",
       },
     ],
   },
   {
     id: "project",
     label: "Project",
-    eyebrow: "Made in the open",
     title: "Open source & credits",
     intro: "Zombie Farm 2 Reforged is a non-commercial, open-source fan reimplementation built for study and preservation.",
     sections: [
       {
         title: "GitHub",
-        body: "Read the source, report bugs, browse current gaps, or contribute improvements on GitHub.",
+        body: "Read the source, report bugs, browse current gaps, or contribute improvements on GitHub. Feel free to branch off of this repository to make your own version as well.",
       },
       {
         title: "Acknowledgements",
-        body: "Created and maintained by actualdoctornerd-ai, with development contributions from Caelen Miller. Special thanks to every alpha tester for early feedback, and to all code, research, documentation, and community contributors who keep the farm growing.",
+        body: "Created and maintained by DoctorNerd. Special thanks to Brain for starting and maintaining the Zombie Farm Archive, without which this project would never have existed. Thank you as well to every alpha tester for early feedback and testing.",
       },
     ],
   },
@@ -144,7 +154,7 @@ export function openFarmersGuide(host: HTMLElement): void {
   mark.setAttribute("aria-hidden", "true");
   mark.textContent = "📖";
   const heading = document.createElement("div");
-  heading.innerHTML = "<h2>Farmer’s Guide</h2><p>Field notes for the freshly undead</p>";
+  heading.innerHTML = "<h2>Farmer’s Guide</h2><p>Field notes for zombie farmers</p>";
   header.append(mark, heading);
 
   const layout = document.createElement("div");
@@ -186,15 +196,18 @@ export function openFarmersGuide(host: HTMLElement): void {
     const page = FARMERS_GUIDE_PAGES[index];
     article.replaceChildren();
 
-    const eyebrow = document.createElement("div");
-    eyebrow.className = "guide-eyebrow";
-    eyebrow.textContent = page.eyebrow;
     const title = document.createElement("h3");
     title.textContent = page.title;
     const intro = document.createElement("p");
     intro.className = "guide-intro";
     intro.textContent = page.intro;
-    article.append(eyebrow, title, intro);
+    if (page.eyebrow) {
+      const eyebrow = document.createElement("div");
+      eyebrow.className = "guide-eyebrow";
+      eyebrow.textContent = page.eyebrow;
+      article.appendChild(eyebrow);
+    }
+    article.append(title, intro);
 
     for (const section of page.sections) {
       const block = document.createElement("section");

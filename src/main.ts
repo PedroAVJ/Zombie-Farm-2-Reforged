@@ -1743,13 +1743,15 @@ async function main() {
     if (p) centerOn(p.x, p.y);
   };
   hud.zombieBaseCost = (key) => zombieDefs.get(key)?.cost ?? 0;
+  hud.zombieCostsBrains = (key) => !!zombieDefs.get(key)?.brainsNeeded;
   hud.onZombieSell = async (id) => {
     if (onlineGameplayBlocked()) return;
     try { if (economy) [id] = await economy.settleUnitIds([id]); }
     catch { hud.showToast("Could not confirm that zombie. Please reconnect."); return; }
     const z = zombies.roster().find((r) => r.id === id);
     if (!z) { hud.showToast("That zombie is no longer available."); return; }
-    const value = zombieSellValue(zombieDefs.get(z.key)?.cost ?? 0);
+    const def = zombieDefs.get(z.key);
+    const value = zombieSellValue(def?.cost ?? 0, !!def?.brainsNeeded);
     const p = zombies.selectById(id); // deployed unit's world pos (null if stored)
     if (!zombies.sell(id)) return; // gone already; don't credit gold
     audio.play("sell");
@@ -1826,7 +1828,13 @@ async function main() {
     // Raid settlement is the authoritative write. A synchronous presentation flush
     // here used to race /raid/finish for the writer-operation lock; schedule the
     // visual save normally and let the durable finish go first.
-    { save: () => { saveManager.save(); void economy?.flush(); } },
+    {
+      save: () => { saveManager.save(); void economy?.flush(); },
+      grantZombie: (key) => {
+        zombies.grantReward(key, walk.tile.col, walk.tile.row);
+        hud.showToast(`${zombieDefs.get(key)?.name ?? "Rare zombie"} joined your farm!`);
+      },
+    },
     raidCooldownMs
   );
   hud.getRaidCards = () => raids.raidCards();
@@ -2594,6 +2602,22 @@ async function main() {
             economy!.onRaidSettled = null;
             if (res.outcome) zombies.applyServerRaidOutcome(res.outcome.survivors, res.outcome.losses);
             const drops = res.loot ? [{ name: res.loot.name, icon: raids.lootIconFor(res.loot.name) }] : [];
+            if (res.newZombie) {
+              zombies.grantReward(
+                res.newZombie.key,
+                walk.tile.col,
+                walk.tile.row,
+                res.newZombie.id,
+                res.newZombie.stored
+              );
+              drops.push({
+                name: zombieDefs.get(res.newZombie.key)?.name ?? "Rare zombie",
+                icon: zombiePortrait(res.newZombie.key),
+              });
+              hud.showToast(
+                `${zombieDefs.get(res.newZombie.key)?.name ?? "Rare zombie"} joined your ${res.newZombie.stored ? "Mausoleum" : "farm"}!`
+              );
+            }
             hud.setRaidResultLoot(drops, res.gold);
             hud.setRaidResultBrains(res.brains ?? 0);
           };
@@ -2911,9 +2935,8 @@ async function main() {
     }
   };
 
-  // The gold/brains refunded when selling a placed object (see economy.ts —
-  // significantly less than the purchase price).
-  const sellRefund = (def: PlaceableDef) => sellBack(def.cost);
+  // Gold paid when selling a placed object. Brain prices convert at 1,000g each.
+  const sellRefund = (def: PlaceableDef) => sellBack(def.cost, !!def.brainsNeeded);
 
   // Sell a placed object for a refund (used by the Remove tool + object popup).
   const sellObject = (id: string) => {
@@ -2926,21 +2949,19 @@ async function main() {
     audio.play("sell");
     if (def.armyMax) state.addZombieMax(-def.armyMax); // reverse functional effect
     const purchase = objectPurchases.get(id);
-    const refund = purchase ? sellBack(purchase.cost) : sellRefund(def);
-    const refundBrains = purchase ? purchase.currency === "brains" : def.brainsNeeded;
-    // Server-owned object refunds use the recorded purchase currency/cost. A legacy
+    const boughtWithBrains = purchase ? purchase.currency === "brains" : !!def.brainsNeeded;
+    const refund = purchase ? sellBack(purchase.cost, boughtWithBrains) : sellRefund(def);
+    // Server-owned object refunds use the recorded purchase cost. A legacy
     // object the server doesn't know is rejected and the optimistic credit is dropped.
     const serverObject = !!economy && def.cost > 0;
     if (serverObject) {
-      economy!.submitObject({ type: "refund", key: def.key, instanceId: id }, refundBrains ? { brains: refund } : { gold: refund });
-    } else if (refundBrains) {
-      state.addBrains(refund);
+      economy!.submitObject({ type: "refund", key: def.key, instanceId: id }, { gold: refund });
     } else {
       state.addGold(refund);
     }
     const c = tileCenter(o.oc, o.or);
     objectPurchases.delete(id);
-    floatText(c.x, c.y, `+${refund}${refundBrains ? "b" : "g"}`);
+    floatText(c.x, c.y, `+${refund}g`);
   };
 
   // Store a placed object in the shed (returns it to inventory for free re-placing
@@ -2973,13 +2994,12 @@ async function main() {
       if (d?.category === "functional") return;
       if (!d) return;
       const purchase = objectPurchases.get(id);
-      const refund = purchase ? sellBack(purchase.cost) : sellRefund(d);
-      const refundBrains = purchase ? purchase.currency === "brains" : !!d.brainsNeeded;
-      const currency = refundBrains ? (refund === 1 ? "brain" : "brains") : "gold";
+      const boughtWithBrains = purchase ? purchase.currency === "brains" : !!d.brainsNeeded;
+      const refund = purchase ? sellBack(purchase.cost, boughtWithBrains) : sellRefund(d);
       const confirmed = await hud.confirmInGame(
         `Sell ${d.name}?`,
-        `The Remove tool will permanently sell this item for ${refund} ${currency}. This cannot be undone.`,
-        `Sell +${refund}${refundBrains ? "b" : "g"}`
+        `The Remove tool will permanently sell this item for ${refund} gold. This cannot be undone.`,
+        `Sell +${refund}g`
       );
       // The farm may have changed while the confirmation was open.
       if (!confirmed || field.objectDefOf(id) !== d) return;
@@ -3393,7 +3413,7 @@ async function main() {
             canStore: canStore(def),
             canSell: def.category !== "functional",
             sellRefund: sellRefund(def),
-            sellBrains: !!def.brainsNeeded,
+            sellBrains: false,
             onMove: () => {
               hud.setMode("move"); // fires onModeChange (clears carry) FIRST...
               carrying = { id: oid, def, flipped: field.objectFlipOf(oid) }; // ...then pick up this object

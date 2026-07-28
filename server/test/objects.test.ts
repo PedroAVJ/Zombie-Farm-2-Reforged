@@ -27,6 +27,7 @@ describe("objectCatalog — mirror of placeables.json", () => {
   it("prices refund at floor(cost*0.2), and NOTHING for a free object", () => {
     expect(objectRefund(10)).toBe(2);
     expect(objectRefund(50)).toBe(10);
+    expect(objectRefund(3, true)).toBe(3_000);
     expect(objectRefund(0)).toBe(0); // free object refunds nothing (no buy-free→refund mint)
   });
   it("keeps source XP for gold and derives brain XP from cost + category", () => {
@@ -89,9 +90,9 @@ describe("planObjectBuy — exact price + xp", () => {
 });
 
 describe("planObjectRefund — must own it", () => {
-  it("credits the catalog refund in the buy currency when owned", () => {
+  it("always credits gold, converting brain costs at 1,000 gold each", () => {
     expect(planObjectRefund(objectEcon("daisy"), 1)).toEqual({ ok: true, currency: "gold", refund: 2 });
-    expect(planObjectRefund(objectEcon("skeletonCouple"), 2)).toEqual({ ok: true, currency: "brains", refund: 1 });
+    expect(planObjectRefund(objectEcon("skeletonCouple"), 2)).toEqual({ ok: true, currency: "gold", refund: 3_000 });
   });
   it("rejects refunding an object you don't own, or an unknown key", () => {
     expect(planObjectRefund(objectEcon("daisy"), 0)).toMatchObject({ ok: false, error: "none_owned" });

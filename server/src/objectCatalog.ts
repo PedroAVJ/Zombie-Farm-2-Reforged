@@ -11,6 +11,7 @@
 // not route its buy/refund through the server.
 
 export const SELL_BACK_RATIO = 0.2; // mirrors src/economy.ts ECONOMY.SELL_BACK_RATIO
+export const BRAIN_SELL_GOLD_RATE = 1_000; // mirrors src/economy.ts
 
 export interface ObjectEcon {
   cost: number;
@@ -293,9 +294,10 @@ export function objectEcon(key: string): ObjectEcon | undefined {
   return Object.prototype.hasOwnProperty.call(OBJECTS, key) ? OBJECTS[key] : undefined;
 }
 
-/** Gold/brains refunded when selling a placeable bought for `cost` (min 1). A free
- *  (cost 0) placeable refunds NOTHING — otherwise buy-free → refund-1 would mint. */
-export function objectRefund(cost: number): number {
+/** Gold paid when selling a placeable. Brain costs convert at 1,000 gold each;
+ * gold costs use the normal ratio. Free placeables refund nothing. */
+export function objectRefund(cost: number, brains = false): number {
+  if (brains) return Math.max(0, Math.trunc(cost)) * BRAIN_SELL_GOLD_RATE;
   return cost > 0 ? Math.max(1, Math.floor(cost * SELL_BACK_RATIO)) : 0;
 }
 

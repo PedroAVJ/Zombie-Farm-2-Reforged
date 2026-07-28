@@ -10,12 +10,13 @@ import { validateUnit, cleanIds } from "../src/roster";
 import zombieRows from "../../public/assets/zombies.json";
 
 describe("rosterCatalog", () => {
-  it("mirrors every keyed zombie and prices sell as max(1, floor(cost/2))", () => {
+  it("mirrors every keyed zombie and converts brain prices to gold", () => {
     expect(Object.keys(ZOMBIE_COST)).toHaveLength(new Set(zombieRows.map((row) => row.key)).size);
     expect(zombieSell("ZombieActorRegularTier1")).toBe(17); // floor(35/2)
     expect(zombieSell("ZombieActorGardenTier4")).toBe(150); // floor(300/2)
     expect(zombieSell("ZombieActorGardenCupidPink")).toBe(1); // cost 0 → floor 0, min 1
     expect(zombieSell("nope")).toBe(1); // unknown → 0 → min 1 (only owned units sell anyway)
+    expect(zombieSell("ZombieActorZomBetty")).toBe(5_000);
   });
   it("knows real keys and rejects unknown", () => {
     expect(isKnownZombie("ZombieActorLargeTier4")).toBe(true);

@@ -9,6 +9,9 @@ import raidRows from "../../../public/assets/raids/raids.json";
 import { farmerCooldownMs } from "../../../src/farmer";
 import { buildPinnedV3Raid, verifyRaid, RAID_RULESET_VERSION, type PinnedRaidConfig, type RaidReplayInput } from "../raidVerifier";
 import { rollBrainDrop } from "../../../src/raid/brainDrops";
+import { dropsOldMcZombie, OLD_MC_ZOMBIE_KEY, OLD_MC_ZOMBIE_NAME } from "../../../src/raid/zombieDrops";
+import objectRows from "../../../public/assets/placeables.json";
+import { shouldStoreEpicReward } from "../../../src/epicBoss/rewards";
 
 const DEFAULT_COOLDOWN_MS = 2 * 60 * 60 * 1000;
 const RAID_TTL_MS = 15 * 60 * 1000;
@@ -18,6 +21,7 @@ interface CoreState {
   inventory: Record<string, number>;
   storage: { received: Record<string, number>; stored: Record<string, number> };
   farmerHeadId?: number;
+  zombieMax?: number;
   [key: string]: unknown;
 }
 
@@ -57,6 +61,9 @@ const parse = <T>(value: string, fallback: T): T => {
   try { return JSON.parse(value) as T; } catch { return fallback; }
 };
 const raidNames = new Map((raidRows as { id: number; name: string }[]).map((r) => [r.id, r.name]));
+const objectArmyCapacity = new Map(
+  (objectRows as Array<{ key: string; armyMax?: number }>).map((o) => [o.key, o.armyMax ?? 0])
+);
 
 function seededUnit(seed: string, salt: number): number {
   let h = 2166136261 ^ salt;
@@ -319,7 +326,7 @@ export async function finishRaid(
   const raidId = Number(session.raid_id);
   const econ = raidEcon(raidId);
   if (!econ) return { status: 409, body: { error: "bad_raid" } };
-  const [balance, coreRow, raidState, questRow, casualtyRows] = await Promise.all([
+  const [balance, coreRow, raidState, questRow, casualtyRows, objectRow, rosterCounts] = await Promise.all([
     db.prepare("SELECT gold, brains, xp, claimed_level FROM balances WHERE account_id = ?").bind(accountId).first<{ gold: number; brains: number; xp: number; claimed_level: number }>(),
     db.prepare("SELECT current_json FROM gameplay_documents_v3 WHERE account_id = ?").bind(accountId).first<{ current_json: string }>(),
     db.prepare("SELECT last_started_at, progress_json FROM raid_state_v3 WHERE account_id = ?").bind(accountId).first<RaidStateRow>(),
@@ -330,8 +337,14 @@ export async function finishRaid(
         .bind(accountId, session.id, ...losses)
         .all<{ unit_id: string; zombie_key: string; mutation: number; invasions: number; stored: number; created_at: number }>()
       : Promise.resolve({ results: [] }),
+    db.prepare("SELECT current_json FROM object_documents_v3 WHERE account_id = ?")
+      .bind(accountId).first<{ current_json: string }>(),
+    db.prepare("SELECT stored, COUNT(*) AS count FROM roster_v3 WHERE account_id = ? GROUP BY stored")
+      .bind(accountId).all<{ stored: number; count: number }>(),
   ]);
-  if (!balance || !coreRow || !raidState || !questRow) return { status: 409, body: { error: "state_conflict" } };
+  if (!balance || !coreRow || !raidState || !questRow || !objectRow) {
+    return { status: 409, body: { error: "state_conflict" } };
+  }
   const core = parse<CoreState>(coreRow.current_json, { inventory: {}, storage: { received: {}, stored: {} } });
   const progress = parse<Record<string, number>>(raidState.progress_json, {});
   const firstClear = win && !(progress[String(raidId)] > 0);
@@ -341,6 +354,7 @@ export async function finishRaid(
     ? pinnedBrainDrop(session.id, econ.recLevel, config.enemyUnits.some((unit) => unit.isBoss))
     : 0;
   let loot: { name: string; kind: "gold" | "boost" | "item" } | null = null;
+  let newZombie: { id: string; key: string; stored: boolean } | null = null;
   let lootGold = 0;
   if (win) {
     progress[String(raidId)] = (progress[String(raidId)] ?? 0) + 1;
@@ -350,6 +364,23 @@ export async function finishRaid(
     if (grant.kind === "gold") { lootGold = grant.gold; loot = { name: grant.name, kind: "gold" }; }
     else if (grant.kind === "boost") { core.inventory[grant.key] = (core.inventory[grant.key] ?? 0) + 1; loot = { name: grant.name, kind: "boost" }; }
     else if (grant.kind === "item") { core.storage.received[grant.name] = (core.storage.received[grant.name] ?? 0) + 1; loot = { name: grant.name, kind: "item" }; }
+    if (dropsOldMcZombie(raidId, true, seededUnit(session.id, 0x4d43))) {
+      const objects = parse<Array<{ catalogKey: string; status: string }>>(objectRow.current_json, []);
+      const activeCapacity = (core.zombieMax ?? 16) + objects.reduce(
+        (total, object) => total +
+          (object.status === "placed" ? objectArmyCapacity.get(object.catalogKey) ?? 0 : 0),
+        0
+      );
+      const activeCount = Math.max(
+        0,
+        (rosterCounts.results.find((row) => !row.stored)?.count ?? 0) - losses.length
+      );
+      newZombie = {
+        id: crypto.randomUUID(),
+        key: OLD_MC_ZOMBIE_KEY,
+        stored: shouldStoreEpicReward(activeCount, activeCapacity),
+      };
+    }
   }
   const nextBalance = { gold: balance.gold + baseGold + lootGold, brains: balance.brains + brains, xp: balance.xp + xp };
   const questData = parse<{ completed: string[]; progress: QuestProjection["progress"] }>(
@@ -360,6 +391,7 @@ export async function finishRaid(
     { type: "kInvasionSuccessfulNotification", subject: raidNames.get(raidId) ?? String(raidId) },
     ...(losses.length === 0 ? [{ type: "kInvasionPerfectGameNotification", subject: raidNames.get(raidId) ?? String(raidId) }] : []),
     ...(loot ? [{ type: "kLootItemWonNotification", subject: loot.name }] : []),
+    ...(newZombie ? [{ type: "kLootItemWonNotification", subject: OLD_MC_ZOMBIE_NAME }] : []),
   ] : [];
   const questChanges = applyQuestEvents(nextBalance, quests, questEvents);
   nextBalance.brains += levelUpBrains(levelForXp(balance.xp), levelForXp(nextBalance.xp));
@@ -380,7 +412,7 @@ export async function finishRaid(
     : null;
   const settlementId = crypto.randomUUID();
   const result = { settlementId, lastRaidAt: raidState.last_started_at, balance: nextBalance, gold: baseGold + lootGold,
-    brains, xp: nextBalance.xp - balance.xp, firstClear, loot, outcome, questChanges,
+    brains, xp: nextBalance.xp - balance.xp, firstClear, loot, newZombie, outcome, questChanges,
     inventory: core.inventory, storage: core.storage, raidProgress: progress, revival,
     rulesetVersion: RAID_RULESET_VERSION };
   const resultJson = JSON.stringify(result);
@@ -414,6 +446,10 @@ export async function finishRaid(
   for (const id of survivors) statements.push(db.prepare(`UPDATE roster_v3 SET invasions = invasions + 1
     WHERE account_id = ? AND unit_id = ? AND locked_by_raid = ? AND ${guard}`)
     .bind(accountId, id, session.id, session.id, resultJson));
+  if (newZombie) statements.push(db.prepare(`INSERT INTO roster_v3
+    (account_id, unit_id, zombie_key, mutation, invasions, stored, created_at)
+    SELECT ?, ?, ?, 0, 0, ?, ? WHERE ${guard}`)
+    .bind(accountId, newZombie.id, newZombie.key, newZombie.stored ? 1 : 0, now, session.id, resultJson));
   statements.push(db.prepare(`UPDATE roster_v3 SET locked_by_raid = NULL
     WHERE account_id = ? AND locked_by_raid = ? AND ${guard}`)
     .bind(accountId, session.id, session.id, resultJson));

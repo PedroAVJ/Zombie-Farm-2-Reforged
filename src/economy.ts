@@ -18,6 +18,7 @@ export const ECONOMY = {
    * (Was 0.5; lowered so sell value is "significantly less than bought for".)
    */
   SELL_BACK_RATIO: 0.2,
+  BRAIN_SELL_GOLD_RATE: 1_000,
 
 } as const;
 
@@ -41,17 +42,21 @@ export function buyXp(
   return Math.max(0, sourceXp);
 }
 
-/** Gold/brains refunded when selling an item that was bought for `cost`. */
-export function sellBack(cost: number): number {
+/** Gold paid when selling an item bought for `cost`. Brain prices convert at
+ * 1,000 gold per brain; gold prices use the normal sell-back ratio. */
+export function sellBack(cost: number, brainsNeeded = false): number {
+  if (brainsNeeded) return Math.max(0, Math.trunc(cost)) * ECONOMY.BRAIN_SELL_GOLD_RATE;
   return Math.max(1, Math.floor(cost * ECONOMY.SELL_BACK_RATIO));
 }
 
-/** Gold paid for selling an owned zombie. GROUND TRUTH (binary
+/** Gold paid for selling an owned zombie. Gold-priced zombies follow the binary
  *  `-[ZFToolManager sellZombie:]`, docs/mechanics/COMBAT_STATS_RECOVERED.md): the
  *  sell value is simply `floor(baseMarketCost / 2)` — HALF the unit's base buy
  *  price, flat. It is NOT scaled by stats, mutations, or veterancy (the earlier
  *  stat-scaled model was a guess). `baseCost` is the zombie type's market cost
- *  (ZombieDef.cost); pass 0 for a type with no price to floor the payout at 1. */
-export function zombieSellValue(baseCost: number): number {
+ *  (ZombieDef.cost); pass 0 for a type with no price to floor the payout at 1.
+ *  Brain-priced zombies instead convert to 1,000 gold per brain. */
+export function zombieSellValue(baseCost: number, brainsNeeded = false): number {
+  if (brainsNeeded) return Math.max(0, Math.trunc(baseCost)) * ECONOMY.BRAIN_SELL_GOLD_RATE;
   return Math.max(1, Math.floor((baseCost || 0) / 2));
 }

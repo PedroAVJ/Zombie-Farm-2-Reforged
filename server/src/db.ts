@@ -2123,7 +2123,7 @@ export interface RosterResult {
 }
 
 /** Apply a batch of roster actions with server authority:
- *   • sell     — price floor(cost/2) from the catalog, remove the unit, credit gold
+ *   • sell     — catalog-priced gold payout, remove the unit, credit gold
  *                (a unit the server doesn't own — e.g. one never granted by a trusted
  *                source — is rejected → no gold, which kills grant→sell laundering);
  *   • veteran  — bump invasions for surviving units;

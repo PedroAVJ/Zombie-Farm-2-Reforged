@@ -505,8 +505,8 @@ function applyOne(
         return reject(sequence, "not_sellable");
       }
       state.objects.objects.splice(index, 1);
-      const currency = obj.purchaseCurrency ?? (econ.brains ? "brains" : "gold");
-      state.balance[currency] += objectRefund(obj.purchaseCost ?? econ.cost);
+      const boughtWithBrains = (obj.purchaseCurrency ?? (econ.brains ? "brains" : "gold")) === "brains";
+      state.balance.gold += objectRefund(obj.purchaseCost ?? econ.cost, boughtWithBrains);
       return { sequence, status: "applied" };
     }
     case "object.upgrade": {

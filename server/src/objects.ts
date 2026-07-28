@@ -50,13 +50,13 @@ export type ObjectRefundPlan =
   | { ok: true; currency: "gold" | "brains"; refund: number }
   | { ok: false; error: string };
 
-/** A refund: must own at least one; credits the catalog refund in the buy currency and
- *  decrements the count. A free (cost 0) object refunds 0 (see objectRefund). */
+/** A refund: must own at least one and always credits gold. Brain costs convert
+ * at 1,000 gold each. A free object refunds 0 (see objectRefund). */
 export function planObjectRefund(econ: ObjectEcon | undefined, have: number): ObjectRefundPlan {
   if (!econ) return { ok: false, error: "bad_item" };
   if (econ.purchaseLimit !== undefined) return { ok: false, error: "not_sellable" };
   if (have < 1) return { ok: false, error: "none_owned" };
-  return { ok: true, currency: econ.brains ? "brains" : "gold", refund: objectRefund(econ.cost) };
+  return { ok: true, currency: "gold", refund: objectRefund(econ.cost, econ.brains) };
 }
 
 export type ObjectUpgradePlan =
