@@ -66,7 +66,8 @@ the `throwSpeed` cadence. Specials add extra hazards with their own cast/cooldow
 
 - **Aliens** — `alienLaser` (cooldown **2 s**) + `summonBoss` (cast **2 s**), rapid throws (0.2 s).
 - **Video Games (Zedzox)** — `turnZombie` (cast **3 s**, *converts your zombie to an enemy*),
-  `pixelFire` (cast **2 s**, AoE), + 100-dmg throws.
+  `pixelFire` (cast **2 s**; the source data labels it AoE, but the recovered behaviour is a
+  single-target one-frame interrupt — see the implementation note below), + 100-dmg throws.
 - **Ninjas** — `wall` (cast **3 s**, hp **1500**, collision 70) — a carrotWall blocking the lane.
 - **Robots (BrainBot)** — `telekinesis` (cast **3 s**) + 5 debris types.
 - Farm/Pirate/City — pure escalating throws (McDonnell 6/12/18; Pirate 12.5/25/50; City 12/24/36).
@@ -115,7 +116,7 @@ items — see below.)
 |---|---|---|
 | **1 brain** | 10 | 5% → **10%** |
 | **3 brains** | 30 | 2% → **4%** |
-| **5 brains** | 5 | 1% → **2%** |
+| **5 brains** | 50 | 1% → **2%** |
 
 The chance scales with the raid's level from the lower limit up to the upper ("optimal")
 limit, reaching it at `epicBossLootLevelWithOptimalChances` = **level 20**. These are the
@@ -160,12 +161,16 @@ configs and threads them to the scene.
 **DONE (in `BattleSim`, verified headlessly):**
 - **Round timer + enrage** — 3:00 countdown; on expiry throws come 2× faster and the boss
   hits 1.5× harder. Shown as a top-center HUD countdown that flips to "⚠ ENRAGED".
+  **Caveat:** `ENEMY_DAMAGE_RECOVERED.md` establishes that no `enrage` field exists in any
+  plist — this mechanic is an invention that was kept deliberately. Treat the 2×/1.5× figures
+  as tuning, not ground truth.
 - **Throw cadence + `throwingDisabled`** — from stage `throwSpeed` (already wired).
 - **Boss specials** — data-driven cast/cooldown scheduler:
-  - `alienLaser` → a fast straight bolt at a forward zombie.
-  - `pixelFire` → AoE chip to all fighting zombies.
+  - `alienLaser` → a fast straight bolt at a forward zombie (`ALIEN_LASER_DAMAGE = 200`).
+  - `pixelFire` → a **one-frame interrupt on a single random zombie** (~0.083% of max HP), NOT
+    an AoE burn. Corrected at ruleset v9 — see `ENEMY_DAMAGE_RECOVERED.md`.
   - `turnZombie` → removes your front zombie (turned against you).
-  - `telekinesis` → a heavy single-target hit.
+  - `telekinesis` → **zero damage**: knockback + stun only. It is not a heavy hit.
 - **Beach crab** — `initialSpawnClass` identifies the `BeachStageActorCrab`, and
   `obstacleSpawnTimer` / `obstacleLimit` set its cadence and concurrent cap. It grabs and carries
   a zombie off rather than damaging it (see the crab bullet below). This is the **only** consumer

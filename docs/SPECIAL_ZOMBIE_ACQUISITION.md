@@ -36,8 +36,14 @@ themselves in the Zombie Pot.
 
 ## Market: Special zombie crops (5)
 
-These five permanent specials unlock at level 20 and cost 5 brains to plant (the 50-brain
-figure predates the brainflation revert):
+These five permanent specials cost **5 brains** to plant (the 50-brain figure predates the
+brainflation revert). Their unlock levels are **not** uniform, and are not level 20 — that
+figure is the Black Market *delivery* gate below, not the planting gate. Per `zombies.json`,
+most `Tier5` crops unlock at level **1**; `ZombieActorRegularTier5` at **15** and
+`ZombieActorLargeTier5` at **20**.
+
+Selling one now pays **gold, not brains**: a brain-priced zombie sells for 1,000 gold per brain
+of its cost, so a 5-brain special returns 5,000 gold.
 
 - Bombie, Crazy Zombie, Cupid Zombie, Dapper Zombie, and Granny Zombie.
 

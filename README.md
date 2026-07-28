@@ -80,7 +80,9 @@ must also update [SECURITY.md](SECURITY.md) and [server/README.md](server/README
 - Local Farm persists unfinished farmer jobs across close/reopen and replays them from elapsed wall time.
 - Objects placed against the farm's south/east edge (notably fruit trees) are harvestable — their walk-to point is clamped onto the grid, and a job with an unreachable destination cancels instead of jamming the queue.
 - Source-derived crop and zombie catalogs with level/currency/grave gates.
-- Local gold, brains, XP, level curve, item economy, and level-up unlock popup.
+- Local gold, brains, XP, level curve, item economy, and level-up unlock popup. A new farm starts with 400 gold and **1 brain** (the tutorial spends it on Insta-Grow).
+- **Selling always pays gold.** Gold-bought placeables refund 20% of cost; gold zombies return half their cost (minimum 1). Anything bought with brains — placeables or zombies — pays **1,000 gold per brain** of its original cost, so a 5-brain special zombie sells for 5,000 gold. Nothing refunds brains.
+- Buying with brains grants derived XP (`cost × 100` for decor and trees, `cost × 80` for functional items); gold purchases still grant the authored Market XP.
 - Persistent placeable objects, fruit trees, storage sheds, Mausoleum, graves, monoliths, Zombie Patch, and Zombie Pot.
 - A placed Plowing Monolith makes plowing free, removes the normal plow XP reward, and adds +1 XP to every crop, zombie, and fruit-tree harvest.
 - The five functional Monoliths share one source texture and are distinguished by their authentic per-item Market color, carried in the placeable catalog and applied as a multiplicative tint to the Market card, the placement ghost, and the placed object.
@@ -95,7 +97,9 @@ must also update [SECURITY.md](SECURITY.md) and [server/README.md](server/README
 - Owned zombies with per-type models/portraits, wandering, roster, detail cards, storage/deploy, selling (with confirmation), veterancy, mutations, and ability display.
 - Tapping a still-growing crop or zombie opens an info popup with its type, a live countdown to harvest, and an Insta-Grow button that spends one boost use to ripen it on the spot.
 - Mutation/combination system (Zombie Pot) with bitmask inheritance, slot restrictions, timers, mixed-color combined zombies, same-type alternate results, and field rendering.
-- All farm zombies render at the standard zombie height regardless of their source group scale; headless variants deliberately render shorter. Kindlehead, Flamehead, and Party Zombie draw their missing heads as live procedural FX — a colored flame aura with rising motes, and looping confetti — on the farm and in raids.
+- Farm zombies render at authored per-family scales (`src/zombie/displayScale.ts`) — Regular/Large/Headless 0.9, Female/Girl 0.8, Garden 0.7, Small 0.6 — with four tier-5 transformations keeping their smaller size. In raids, actors are contain-fit to a target height using *measured* native rig heights, so ordinary Headless bodies stay short while the near-full-height tier-5 Skull Head isn't shrunk.
+- Kindlehead, Flamehead, and Party Zombie draw their missing heads as live procedural FX — a colored flame aura with rising motes, and looping confetti — on the farm and in raids. Large-group zombies get black eye disks with a small authored eyeball inset; head-replacing mutations now hide the base head on the farm, in raids, and in portraits.
+- Deployed zombies show a thought bubble when an invasion is ready, a green cloud while fertilizing, and blend between walk and idle arm poses.
 
 ### Quests
 - Quest engine loading all 105 shipped quest records (71 farm/raid + 34 Epic Boss), activating each when its prerequisite and level gate are met.
@@ -108,18 +112,22 @@ must also update [SECURITY.md](SECURITY.md) and [server/README.md](server/README
 - Army-selection boost frontend: a **Concentration** toggle (bypasses the focus minigame) and a **Golden Dice** stepper (raises loot tier), both inventory-aware, consumed at raid start.
 - Zombies that die in an invasion are culled from the roster + save, unless revived from the one-time post-battle **revival offer** (one brain per casualty, restored from a server-owned snapshot online); casualties not revived are permanently lost.
 - All 11 invasions scale by player level through a full 7-stage difficulty ladder (McDonnell's authored ladder, extrapolated onto every other raid — one stage per invasion, not sequential waves; enemies emerge one at a time by design).
+- Old McDonnell's boss throw cadence is eased over a new player's first two clears (2× the authored interval before the first win, 1.5× after it, authored cadence from the third). The pinned server config carries `priorWins` so the replay agrees.
+- Winning Old McDonnell's Farm has a flat **1% chance to drop Old McZombie** as a unit — an independent roll, separate from the ordinary weighted loot roll. Online it is server-rolled and deterministic per session, and goes to storage when the active army is full.
 - Side-view enemy actor art for all 11 raids. Ten use bone rigs from `public/assets/raids/enemies/models.json` (32 rigs); Video Games' five actors play real per-frame idle/attack animations. Eleven named enemy attacks (Circus, Lawyers, Pirate, Ninja, Robot) play **authored timelines recovered from `ZFAttackAnims`**, rotated so the source contact frame lands on the simulated hit; unmapped enemies fall back to a procedural lunge. Ninja/Pirate/City rigs are decoded from the iOS binary (their atlases have no TexturePacker plist — see `docs/mechanics/RAID_TIMING_AND_HAZARDS.md`). Raid particle FX (impact dust, victory confetti, heal).
 - Zombies fight with two recovered basic attacks — bite (anim 8) and scratch (anim 9) — alternating per swing from a per-unit seed so the horde is staggered, each with its own strike SFX. Zombies also narrow their eyes while their deployment bar fills.
 - Raid audio: per-stage battle BGM (farm/pirate/ninja/robot/alien themes, with `fightBGM` covering the other six raids) plus attack-keyed strike SFX (bite/poke/swipe/flail/punch) in both raids and Epic Boss fights.
 
 ### Online and social (Reforged)
 - **Explicit Local/Online choice** — Local Farm and Online Farm use isolated storage and carry a persistent in-game mode badge. Settings returns to the chooser without moving progress between them.
-- **Google account authentication** — the hosted build gates the whole game behind Sign in with Google (`src/net/gate.ts`); an offline build (no config) has no lock.
+- **Google account authentication** — Online Farm is gated behind Sign in with Google (`src/net/gate.ts`). The gate covers Online Farm *only*: the mode is chosen before auth is touched (`src/main.ts`), so Local Farm makes no account or gameplay-server call even when the browser still holds a valid session. A build with no online config never shows the chooser and opens Local Farm directly.
+- **Local Farm profiles** — Local Farm supports multiple named save slots (create, rename, delete, switch). Switching flushes and suspends the outgoing save before reloading, so autosave can't write into the incoming profile. Online Farm has no profile picker; the account is the slot.
+- **Offline view** — if the Online Farm bootstrap fails, the game can render from the last server-confirmed snapshot and says so ("Offline view; changes may be waiting to sync"). It never silently falls back to Local Farm; the recovery dialog offers a *separate* local farm as an explicit choice.
 - **Player-chosen usernames** picked on first login.
 - **Online state** across devices: the Cloudflare Worker owns protocol-v3 gameplay state, with an exclusive single-writer lease (token-hashed, account-version CAS), account-version conflict handling, an offline command outbox, and a local per-account cache.
 - **Account activity tracking** records sign-in immediately and refreshes `last_online_at` from the active Online Farm writer heartbeat at most once per minute.
 - **Server-verified raids**: `/raid/finish` replays the pinned combat from the submitted input transcript and derives the outcome server-side. Because the Beach crab and Circus trapeze hazards are client-only, the server replays the *un-harassed* fight and the client concedes the difference — concessions are merged one-way, so a client can only make its own result worse, never claim a win the replay didn't produce. All mutation routes are serialized through the writer lease. See `SECURITY.md` for the current anti-cheat posture and residual limits.
-- **Friends**: friend codes, server-backed friend lists, **daily brain gifting** (one brain per friend per day, enforced by a database uniqueness constraint on the day bucket), and a **gift inbox** with claiming.
+- **Friends**: friend codes, server-backed friend lists, **daily brain gifting** (each gift is one brain; at most one gift per friend per day via a uniqueness constraint on the day bucket, and at most **two gifts per sender per day** overall), and a **gift inbox** with claiming.
 - **Black Market**: server-authoritative buy/sell-zombie orders with brain/zombie escrow, caps of 10 open orders and 50 per day, price bounds, and atomic fulfillment. Buy orders can demand **specific mutations** (every requested anatomical slot must match; extras are allowed). Delivery is gated on the recipient — special zombies need player level 20, and colored classes need their gravestone placed.
 - **Read-only friend-farm visits**: the client reloads into visit mode and the server returns an allowlisted projection of the friend's save (farm, objects, zombies, Zombie Pot only — currencies zeroed; progression, quests, raids, storage, and social data omitted). Autosave is disabled and editing controls are hidden while visiting.
 
@@ -204,12 +212,12 @@ npm run preview    # serve the built dist/ locally
 ## Tests
 
 ```bash
-npm test                            # client suite — 60 files, 380 tests
+npm test                            # client suite — 71 files, 464 tests
 npm run build                       # tsc typecheck + vite build
 
 cd server
-npm test                            # server unit suite — 21 files, 267 tests
-npm run test:integration            # route-level integration — 2 files, 34 tests
+npm test                            # server unit suite — 22 files, 275 tests
+npm run test:integration            # route-level integration — 2 files, 35 tests
 npm run typecheck                   # tsc --noEmit
 npm run migrations:check            # validate migration ordering/numbering
 ```
@@ -229,21 +237,33 @@ locally before opening one — see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Deployment (GitHub Pages)
 
-The GitHub Actions workflow (`.github/workflows/deploy.yml`) runs on every push to
-`main`: it installs dependencies, runs the client Vitest suite, builds `dist/`, and
-then **force-pushes the output to the `gh-pages` branch**. A test or build failure
-leaves the currently deployed site unchanged. The production online config
-(`VITE_API_URL`, `VITE_GOOGLE_CLIENT_ID`) is committed in `.env.production` — both
-values are public, so nothing is injected at build time.
+The GitHub Actions workflow (`.github/workflows/deploy.yml`) **triggers on a successful
+CI run** (`workflow_run` on the CI workflow, `main` branch only) and checks out the exact
+SHA CI validated. It does not run on push, and `workflow_dispatch` was removed — the old
+push trigger raced CI and could publish a commit whose server suite was red. The job
+installs dependencies, runs the client Vitest suite, builds `dist/`, and then
+**force-pushes the output to the `gh-pages` branch**. A test or build failure leaves the
+currently deployed site unchanged. The production online config (`VITE_API_URL`,
+`VITE_GOOGLE_CLIENT_ID`) is committed in `.env.production` — both values are public, so
+nothing is injected at build time.
 
-To serve it:
+Production is served from the custom domain **`zombiefarmreforged.com`**, set by
+`public/CNAME` (Vite copies `public/` into `dist/`, so the CNAME rides each publish).
+The Worker's `ALLOWED_ORIGIN` (`server/wrangler.toml`) is a **single value** and must
+match that domain — the old `github.io` URL is no longer an allowed API origin, so
+changing one without the other breaks every online request with a CORS failure.
 
-1. Push this project to a GitHub repo (the `main` branch) so the workflow runs.
+To serve it yourself:
+
+1. Push this project to a GitHub repo (the `main` branch) so CI, and then the deploy,
+   runs.
 2. In the repo, go to **Settings → Pages → Build and deployment**, set **Source**
    to **Deploy from a branch**, and choose branch **`gh-pages`** / folder **`/ (root)`**.
-3. When the workflow finishes and Pages publishes, the game is live at
-   `https://<your-username>.github.io/<repo-name>/` — share that link; there is
-   nothing for the recipient to install.
+3. For a custom domain, set it under **Settings → Pages → Custom domain**, point your
+   DNS at GitHub Pages, and edit `public/CNAME` to match. To use the default
+   `https://<your-username>.github.io/<repo-name>/` instead, delete `public/CNAME`.
+4. Update `ALLOWED_ORIGIN` in `server/wrangler.toml` to whichever origin you land on and
+   redeploy the Worker.
 
 The build uses a relative base (`base:"./"` in `vite.config.ts`), so it works
 whether it's served from a domain root or a Pages project subpath. All runtime
@@ -291,6 +311,11 @@ python tools/prep_enemies.py
 python tools/prep_upgrades.py
 python tools/prep_epic_bosses.py
 ```
+
+`tools/extract_zf1_ipa.py` extracts the **original Zombie Farm 1** app bundle — decoding Apple
+CgBI "crushed" PNGs to portable PNGs and bucketing plists and art by category. It writes to an
+external `ZF1_extracted` tree, not into `public/`, and is groundwork toward the ZF1 art pack the
+**ZF2 Sprites** setting needs; nothing at runtime reads its output yet.
 
 `tools/sprite_assembler.html` (built by `tools/build_sprite_assembler.py`) is a
 hands-on drag/rotate/pivot editor for hand-authoring zombie `models.json`; its

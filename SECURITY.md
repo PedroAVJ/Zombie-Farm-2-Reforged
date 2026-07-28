@@ -1,6 +1,6 @@
 # Security and Anti-Cheat Status
 
-Last reviewed: 2026-07-25
+Last reviewed: 2026-07-28
 
 ## Reporting a vulnerability
 
@@ -26,7 +26,7 @@ Please give a reasonable window before disclosing publicly.
 ## Scope and status
 
 This document describes the current source tree at gameplay protocol v3 (client integrity
-version 4, raid ruleset version 9). It covers authentication, sessions, the exclusive writer
+version 5, raid ruleset version 9). It covers authentication, sessions, the exclusive writer
 lease, social features, gameplay commands, persistence, economy, farms, quests, raids, Epic
 Boss runs, the Black Market, rate limiting, and operational controls.
 
@@ -58,15 +58,39 @@ blocked valuable/competitive use have been closed:
    **zero** XP (the repeatable XP moved onto time-gated harvests); without the monolith, each plow
    costs gold. Neither path yields cost-free repeatable XP.
 
-**Remaining posture.** Rewards and progression are now server-derived and catalog-bounded. The
-residual risks below are integrity limitations (client-only hazards and their concession fallback,
-bot-optimal input, deployment-gated enforcement, non-deterministic loot rolls, session compromise,
-offline mutability), not upward outcome forgery — no path lets a client claim a better result than
-the replay produced. This
+**Remaining posture.** Rewards and progression are server-derived and catalog-bounded, and **raid
+outcomes** admit no upward client assertion — no path lets a client claim a better result than the
+replay produced. Most residual risks below are integrity limitations rather than forgery
+(client-only hazards and their concession fallback, bot-optimal input, deployment-gated
+enforcement, non-deterministic loot rolls, session compromise, offline mutability). The one
+current exception is **client-asserted fertilization**, a bounded but genuinely upward assertion
+documented below; it should be closed rather than accepted. This
 build is a non-commercial fan reimplementation with no real payment rail, so "paid currency" is
 notional. `MUTATIONS_DISABLED=1` remains the incident stop for all gameplay writes.
 
 ## Controls currently implemented
+
+### Local Farm / Online Farm separation
+
+The client is no longer online-or-offline by build. When online services are configured, the
+player picks **Local Farm** or **Online Farm** at first launch (`src/playMode.ts`, persisted in
+`localStorage`, switchable in Settings). This matters to the threat model in three ways:
+
+- **The farm choice, not a retained session, owns the gameplay boundary.** The mode is resolved
+  before auth is touched (`src/main.ts`), so Local Farm issues no account or gameplay-server
+  request even when the browser still holds a valid Online Farm session.
+- **Storage domains are namespaced and never cross.** Local saves live under
+  `zf2r.local.save.v1`, the online read-only snapshot under `zf2r.online.snapshot.v1`, and the
+  online presentation cache under `zf2r.online.presentation.v1`. In online mode the save manager
+  writes nothing at all when the session is missing, rather than falling through to a local
+  write — the cross-contamination path this split removes.
+- **Failure never silently degrades authority.** A failed online bootstrap renders a labelled
+  read-only "offline view" from the last server-confirmed snapshot, or offers a *separate* local
+  farm as an explicit choice. It never promotes local state into the account.
+
+Local Farm is client-authoritative by design and remains out of scope for vulnerability reports
+(see above) — it has no server and no other player to defend against. The security-relevant
+property is only that it stays isolated from the account.
 
 ### Authentication and account isolation
 
@@ -92,7 +116,7 @@ notional. `MUTATIONS_DISABLED=1` remains the incident stop for all gameplay writ
   (`beginOperation`/`endOperation`) that blocks any concurrent command batch or other mutation
   for that account.
 - Enforcement is deployment-gated: upgraded clients send `X-Integrity-Version`
-  (`CLIENT_INTEGRITY_VERSION = 4`) and are always fenced. When `WRITER_LEASE_MODE=enforce`,
+  (`CLIENT_INTEGRITY_VERSION = 5`) and are always fenced. When `WRITER_LEASE_MODE=enforce`,
   un-upgraded clients receive `426 client_upgrade_required` on every mutation route; in the
   default observe mode they are allowed through unfenced during rollout.
 
@@ -103,9 +127,9 @@ notional. `MUTATIONS_DISABLED=1` remains the incident stop for all gameplay writ
 - `/commands` accepts an allowlisted semantic command union. It rejects arbitrary balance/state
   setters and validates catalog keys, ownership, affordability, level gates, capacity, crop
   timing, and coordinates on the server.
-- Farm timestamps, random IDs, fertilization, combine output, prices, refunds, XP, level rewards,
+- Farm timestamps, random IDs, combine output, prices, refunds, XP, level rewards,
   inventory counts, object ownership, storage counts, and roster changes are computed from
-  server-held state.
+  server-held state. **Fertilization is no longer in this list** — see the known limitation below.
 - Command batches use account versions, a single writer device/generation, sequential command
   numbers, a batch ID, and a D1 transaction guard. A batch cannot commit while an
   active-operation lock is held (`batch_in_progress`), and a retry of the latest committed batch
@@ -121,7 +145,7 @@ notional. `MUTATIONS_DISABLED=1` remains the incident stop for all gameplay writ
   (`buildPinnedV3Raid`): player/enemy units, boss throw/specials, summon and wall templates,
   and concentration. The pinned config and `ruleset_version` are stored on the session
   (migrations `0016`, `0017`, `0027`). The config still carries a `grabber` field, but since
-  ruleset 6 `raidVerifier.grabberOf` returns `null` unconditionally — hazards are client-only
+  ruleset 6 (current version 9) `raidVerifier.grabberOf` returns `null` unconditionally — hazards are client-only
   and are not simulated server-side at all.
 - `/raid/finish` requires a matching `rulesetVersion` (`RAID_RULESET_VERSION = 9`; a mismatch
   returns `409 stale_ruleset` and closes the session), rejects a `finalTick` beyond the paced
@@ -163,8 +187,11 @@ notional. `MUTATIONS_DISABLED=1` remains the incident stop for all gameplay writ
 ### Social and abuse controls
 
 - Friendships require consent; blocks are checked in both directions.
-- Brain gifts require friendship, are limited by a database uniqueness constraint, and use a
-  unique grant record to prevent duplicate claims.
+- Brain gifts require friendship and are doubly capped in SQL: a `(from_id, to_id, day_bucket)`
+  uniqueness constraint allows one gift per friend per day (`already_gifted_today`), and the
+  insert's own `WHERE` clause caps a sender at two gifts per day overall (`daily_gift_limit`).
+  Both are enforced in the statement, not in application code, so a race cannot exceed them. A
+  unique grant record prevents duplicate claims.
 - All routes have a global body ceiling. Presentation and command batches have tighter semantic
   limits.
 - Cloudflare rate-limit bindings protect authentication, read, and write tiers before gameplay
@@ -205,6 +232,25 @@ fight that is strictly easier than the one the player saw. The player concedes t
 Closing this properly means simulating the hazards server-side (restoring `grabberOf`) so no
 concession is needed.
 
+### Client-asserted fertilization (open regression)
+
+The Garden-zombie fertilize roll moved from the server to the client so the actor animation and
+leaf effect appear immediately. `farm.plant` now carries an optional `fertilized` boolean, and
+`server/src/v3/engine.ts` takes it **verbatim** — the only checks are that the value is a boolean
+(`server/src/index.ts`) and that the crop is a vegetable. The server's own roll is gone;
+`fertilizeProbability` in `server/src/rosterCatalog.ts` no longer has a caller.
+
+A modified client can therefore set `fertilized: true` on every vegetable plant and collect the
+2x harvest every time, with no adjacency requirement and no probability gate. The gain is bounded
+(2x on vegetable harvests only, still time-gated by grow timers, and it cannot touch zombie
+crops), so this is yield inflation rather than arbitrary value creation — but unlike the raid
+concession it is a strict *upward* client assertion, which is the property the rest of this
+document says protocol v3 does not permit.
+
+Closing it means either restoring the server roll and letting the client animate optimistically
+against a server correction, or having the server re-derive eligibility from the account's own
+Garden-zombie placement at plant time.
+
 ### Bot-optimal input, not forged outcomes
 
 Because the server replays the client's input transcript against the pinned enemies, a modified
@@ -241,13 +287,13 @@ automatically.
 
 ## Verification status
 
-On 2026-07-25 the following local checks passed on a clean working tree:
+On 2026-07-28 the following local checks passed on a clean working tree:
 
 ```text
-npm test                              # client: 379 passed, 1 skipped (60 files)
+npm test                              # client: 463 passed, 1 skipped (71 files)
 cd server && npm run typecheck        # passed
-cd server && npm test                 # server: 267 passed (21 files)
-cd server && npm run test:integration # 34 passed (2 files)
+cd server && npm test                 # server: 275 passed (22 files)
+cd server && npm run test:integration # 35 passed (2 files)
 ```
 
 Coverage now includes the anti-forgery paths directly: replay determinism and illegal-input
@@ -270,8 +316,8 @@ valuable/competitive features, confirm on the running environment:
 1. `WRITER_LEASE_MODE=enforce` and `MIN_PROTOCOL_VERSION=3` are set, and an un-upgraded client is
    actually rejected on every mutation route.
 2. The live Worker commit and remote D1 schema match this source (migrations applied through
-   `0030_black_market_specific_mutations.sql`); do not infer production state from source control.
-   Note `0030` is a non-idempotent `ALTER TABLE ... ADD COLUMN`.
+   `0031_account_last_online.sql`); do not infer production state from source control.
+   Note `0030` and `0031` are non-idempotent `ALTER TABLE ... ADD COLUMN` migrations.
 3. `SESSION_SECRET` has been rotated for the current deployment and is not a reused historical
    value.
 4. Add thresholded alerting on the existing audit/rejection telemetry (forged-finish attempts,

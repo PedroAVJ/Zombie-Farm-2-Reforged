@@ -2989,8 +2989,8 @@ export class Hud {
   // row) on the RIGHT. Tapping a stat or ability icon shows a small tooltip that
   // any further interaction dismisses.
   /** Build the inspect "card" (trading card + stats + abilities) for one zombie.
-   *  Stat/ability tooltips attach to `host` (a position:relative, non-clipped
-   *  container). Shared by the single-zombie modal and the Zombies list. */
+   *  Stat/ability tooltips attach to the modal backdrop so a scrolling panel
+   *  cannot clip them. Shared by the single-zombie modal and the Zombies list. */
   private buildZombieCard(info: ZombieInfo, host: HTMLElement): HTMLElement {
     // --- tooltip: one small popup at a time; any interaction dismisses it ---
     let tip: HTMLElement | null = null;
@@ -3000,11 +3000,36 @@ export class Hud {
       tip = document.createElement("div");
       tip.className = "ztip";
       tip.innerHTML = `<b>${title}</b><span>${body}</span>`;
-      host.appendChild(tip);
+      // On compact layouts the panel itself scrolls. Put the popup beside the
+      // panel in its full-viewport backdrop so it can extend beyond the card.
+      const portal = host.parentElement ?? host;
+      portal.appendChild(tip);
       const ar = anchor.getBoundingClientRect();
-      const pr = host.getBoundingClientRect();
-      tip.style.left = `${ar.left - pr.left + ar.width / 2}px`;
-      tip.style.top = `${ar.top - pr.top - 8}px`;
+      const tr = tip.getBoundingClientRect();
+      const edge = 8;
+      const gap = 8;
+      const halfWidth = tr.width / 2;
+      const anchorCenter = ar.left + ar.width / 2;
+      const left = Math.min(
+        window.innerWidth - edge - halfWidth,
+        Math.max(edge + halfWidth, anchorCenter)
+      );
+      tip.style.left = `${left}px`;
+
+      // Prefer the familiar above-anchor position, but flip below when needed.
+      // If neither side alone is tall enough, detach just enough from the anchor
+      // to keep the whole popup inside the viewport.
+      const roomAbove = ar.top - gap - edge;
+      const roomBelow = window.innerHeight - ar.bottom - gap - edge;
+      const below = roomAbove < tr.height;
+      tip.classList.toggle("below", below);
+      if (!below) {
+        tip.style.top = `${ar.top - gap}px`;
+      } else if (roomBelow >= tr.height) {
+        tip.style.top = `${ar.bottom + gap}px`;
+      } else {
+        tip.style.top = `${Math.max(edge, window.innerHeight - edge - tr.height)}px`;
+      }
       // The NEXT pointer-down anywhere closes it (this click's down already fired).
       document.addEventListener("pointerdown", closeTip, { capture: true, once: true });
     };

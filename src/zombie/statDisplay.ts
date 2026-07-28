@@ -50,8 +50,9 @@ export interface StatBreakdown {
 
 const STAT_KEYS = ["str", "dex", "con", "focus"] as const;
 
-/** True if an ability effect raises one of the unit's OWN displayed stats (as opposed
- *  to an army-wide effect like `stun`'s armyHpMult, which touches no self stat). */
+/** True if an ability effect raises one of the unit's OWN displayed stats. Abilities whose
+ *  effect is a team aura, a chance proc, healing, or an activated move carry no self-stat
+ *  multiplier and are excluded here — they are modeled in CombatEngine/BattleSim instead. */
 function affectsSelfStat(e: AbilityCombatEffect): boolean {
   return (
     (e.allStatsMult ?? 1) !== 1 ||

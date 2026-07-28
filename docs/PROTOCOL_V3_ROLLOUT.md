@@ -1,12 +1,13 @@
 # Protocol v3 destructive rollout
 
-> **Security status (2026-07-25):** the anti-cheat gaps that made protocol v3 fun-only are
+> **Security status (2026-07-28):** the anti-cheat gaps that made protocol v3 fun-only are
 > closed — raid/Epic Boss outcomes are server-verified by deterministic replay, all mutation
 > routes are serialized through the writer lease's active-operation lock, and the free-plow XP
-> loop is gone. Since raid ruleset version 6 the Beach crab and Circus trapeze hazards are
-> client-only, so `/raid/finish` accepts one-way `clientWin`/`clientLosses` concessions that can
-> only worsen the submitting player's own result; see the concession-fallback limitation in
-> `../SECURITY.md`. Before enabling valuable/competitive features, complete the deployment-time
+> loop is gone. The Beach crab and Circus trapeze hazards have been client-only since raid
+> ruleset version 6 (current version **9**), so `/raid/finish` accepts one-way
+> `clientWin`/`clientLosses` concessions that can only worsen the submitting player's own
+> result; see the concession-fallback limitation in `../SECURITY.md`. Note one open regression
+> there: **fertilization is now client-asserted** and is not server-verified. Before enabling valuable/competitive features, complete the deployment-time
 > release gates there (notably `WRITER_LEASE_MODE=enforce`, `MIN_PROTOCOL_VERSION=3`,
 > `SESSION_SECRET` rotation, and confirming the live commit/D1 schema).
 
@@ -21,7 +22,7 @@ usable by the v3 application.
    and the raid, Epic Boss, and Black Market mutation routes reject writes.
 2. Disable or hide sign-in at the client edge so a user cannot create an account while
    the database is being replaced.
-3. Apply the pending migrations through `server/migrations/0030_black_market_specific_mutations.sql`
+3. Apply the pending migrations through `server/migrations/0031_account_last_online.sql`
    to the production D1 database. `0020_protocol_v3_reset.sql` is intentionally
    repeatable and recreates the protocol-v3 baseline; `0021` adds Epic Boss runs and
    sessions; `0024` adds run-scoped fight tokens; `0025` adds the authenticated
@@ -31,9 +32,10 @@ usable by the v3 application.
    `0027` adds the pinned raid-replay columns (`config_json` / `ruleset_version`) that make
    server-side raid verification possible; `0028` adds gift rewards; `0029` restores the
    `ledger` table that the v3 reset dropped (gift claims write their XP reward there); and
-   `0030` adds `black_market_orders.mutation_required` for specific-mutation buy orders —
-   a **non-idempotent** `ADD COLUMN`. Confirm Wrangler reports no pending migrations
-   afterward.
+   `0030` adds `black_market_orders.mutation_required` for specific-mutation buy orders; and
+   `0031` adds `accounts.last_online_at`, backfilled from session activity. `0030` and
+   `0031` are both **non-idempotent** `ADD COLUMN` migrations. Confirm Wrangler reports no
+   pending migrations afterward.
 4. Rotate `SESSION_SECRET` with `wrangler secret put SESSION_SECRET`. Never reuse the
    historical value. This invalidates any token copied before the database reset even if
    it is presented to a different environment.

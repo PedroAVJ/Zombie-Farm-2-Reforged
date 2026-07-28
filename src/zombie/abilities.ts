@@ -100,9 +100,6 @@ export interface AbilityCombatEffect {
   selfHpMult?: number;
   /** Multiplies this unit's DEX (→ shorter attack cooldown / faster advance). */
   selfSpeedMult?: number;
-  /** Legacy instant-resolve hook. Authentic team effects are applied explicitly
-   *  by CombatEngine/ BattleSim and no longer use effective-HP stand-ins. */
-  armyHpMult?: number;
 }
 
 // Per-ability magnitudes, keyed by the ability_*.png basename used in traits.ts.
@@ -142,10 +139,6 @@ export const ABILITY_COMBAT: Record<string, AbilityCombatEffect> = {
   healAOE: {},
 };
 
-// Army-wide sustain stacks multiplicatively across the party (two healers help
-// more than one), but is capped so a full support army can't become unkillable.
-export const ARMY_HP_MULT_CAP = 1.6;
-
 /** The gated, currently-active ability keys for one owned zombie — the SAME set
  *  the detail card shows: for each tier up to its class rank, the tier's ability
  *  applies only if that specific ability has been unlocked (its tier's invasion
@@ -163,15 +156,15 @@ export function activeAbilities(
   return out;
 }
 
-/** The combined per-unit multipliers from a set of ability keys (army-wide effects
- *  are returned separately so the caller can aggregate them across the party). */
+/** The combined per-unit, always-on multipliers from a set of ability keys. Team
+ *  effects (auras, procs, healing, activated moves) are NOT here — CombatEngine and
+ *  BattleSim apply those explicitly from the recovered binary behavior. */
 export function combatEffect(keys: string[]): Required<AbilityCombatEffect> {
   const acc = {
     allStatsMult: 1,
     selfDamageMult: 1,
     selfHpMult: 1,
     selfSpeedMult: 1,
-    armyHpMult: 1,
   };
   for (const k of keys) {
     const e = ABILITY_COMBAT[k];
@@ -180,7 +173,6 @@ export function combatEffect(keys: string[]): Required<AbilityCombatEffect> {
     acc.selfDamageMult *= e.selfDamageMult ?? 1;
     acc.selfHpMult *= e.selfHpMult ?? 1;
     acc.selfSpeedMult *= e.selfSpeedMult ?? 1;
-    acc.armyHpMult *= e.armyHpMult ?? 1;
   }
   return acc;
 }
