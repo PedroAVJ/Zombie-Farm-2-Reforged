@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   choosePlayMode, clearPreferredPlayMode, getPreferredPlayMode, setPreferredPlayMode,
+  usesOnlineGameplay,
 } from "./playMode";
 
 function memoryStorage(): Storage {
@@ -37,5 +38,12 @@ describe("play mode preference", () => {
     setPreferredPlayMode("online");
     await expect(choosePlayMode(false)).resolves.toBe("local");
     expect(getPreferredPlayMode()).toBe("local");
+  });
+
+  it("keeps server-owned gameplay disabled for Local Farm", () => {
+    // A browser may still hold a valid Online Farm session after the player
+    // switches farms. That retained login must not change Local Farm behavior.
+    expect(usesOnlineGameplay("local")).toBe(false);
+    expect(usesOnlineGameplay("online")).toBe(true);
   });
 });

@@ -4,7 +4,11 @@ import type { RaidOutcome } from "./types";
 // 6: hazards moved client-only (the verifier no longer simulates the trapeze) and
 // `clientWin` concessions were added — in-flight v5 sessions must not replay under these
 // rules, so the bump invalidates them via the existing stale_ruleset path.
-export const RAID_RULESET_VERSION = 6;
+// 7: recovered zombie abilities changed deterministic damage, healing, movement,
+// resurrection, and fight duration. This bump prevents a newer client and an older
+// Worker from accepting a fight under the same identifier and then disagreeing on
+// whether its transcript reached a completed outcome.
+export const RAID_RULESET_VERSION = 7;
 export const RAID_TICK_MS = 50;
 export const RAID_MAX_TICKS = 4 * 60 * 1000 / RAID_TICK_MS;
 export const RAID_MAX_INPUTS = 512;

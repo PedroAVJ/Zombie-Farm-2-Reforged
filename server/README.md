@@ -44,7 +44,7 @@ server-owned tables and catalogs) into the session row. `/raid/finish` accepts
 replaying that input transcript against the pinned config (`src/raidVerifier.ts` →
 `src/raid/replay.ts`), and rewards are priced from the server catalog against the replayed
 survivor ratio. An elapsed-time gate (`future_finish`) and ruleset-version pinning
-(`stale_ruleset`, currently `RAID_RULESET_VERSION = 6`) are defense-in-depth on top of the
+(`stale_ruleset`, currently `RAID_RULESET_VERSION = 7`) are defense-in-depth on top of the
 replay, not substitutes for it.
 
 The optional `clientWin` / `clientLosses` fields exist because the Beach crab and Circus

@@ -432,11 +432,11 @@ describe("protocol v3 API", () => {
     const stale = await call<any>("POST", "/raid/start", session.token, {
       raidId: 1, orderedUnitIds: [unitId], rulesetVersion: 2,
     });
-    expect(stale).toMatchObject({ status: 426, body: { error: "stale_ruleset", rulesetVersion: 6 } });
+    expect(stale).toMatchObject({ status: 426, body: { error: "stale_ruleset", rulesetVersion: 7 } });
     const started = await call<any>("POST", "/raid/start", session.token, {
       raidId: 1,
       orderedUnitIds: [unitId],
-      rulesetVersion: 6,
+      rulesetVersion: 7,
     });
     expect(started.status, JSON.stringify(started.body)).toBe(200);
 
@@ -455,7 +455,7 @@ describe("protocol v3 API", () => {
     const next = await call<any>("POST", "/raid/start", session.token, {
       raidId: 1,
       orderedUnitIds: [unitId],
-      rulesetVersion: 6,
+      rulesetVersion: 7,
     });
     expect(next.status).toBe(429);
     expect(next.body.error).toBe("cooldown");
@@ -518,7 +518,7 @@ describe("raid finish — clientWin concession", () => {
       ]));
     const unitId = grown.body.createdZombieIds[0];
     const started = await call<any>("POST", "/raid/start", session.token, {
-      raidId: 1, orderedUnitIds: [unitId], rulesetVersion: 6,
+      raidId: 1, orderedUnitIds: [unitId], rulesetVersion: 7,
     });
     return { session, sessionId: started.body.sessionId, unitId };
   };

@@ -66,7 +66,8 @@ import { epicZombieRewardNotes, visibleEpicBosses } from "./epicBoss/market";
 import { dropsEpicBossToken, EPIC_BOSS_FIGHT_BRAIN_COST } from "./epicBoss/tokens";
 import { offerFullscreenPrompt } from "./ui/panels/fullscreenPrompt";
 import {
-  choosePlayMode, clearPreferredPlayMode, setPreferredPlayMode, showOnlineUnavailable, type PlayMode,
+  choosePlayMode, clearPreferredPlayMode, setPreferredPlayMode, showOnlineUnavailable,
+  usesOnlineGameplay, type PlayMode,
 } from "./playMode";
 
 // The boot / start screen lives in index.html and paints on the first frame (no
@@ -88,17 +89,18 @@ async function main() {
   // before touching auth so Local Farm never makes account/gameplay server calls,
   // even when this browser still has a valid Online Farm session.
   const playMode: PlayMode = await choosePlayMode(auth.isOnlineAvailable());
+  const onlineFarm = usesOnlineGameplay(playMode);
   initPwa(playMode);
-  if (playMode === "online") {
+  if (onlineFarm) {
     await auth.refreshIfSignedIn();
     await requireAuth();
   }
   // Remote revocation (including another device taking over) is surfaced by the
   // API auth bridge. Reloading re-enters requireAuth before any game state is built.
   auth.onAuthChange(() => {
-    if (!auth.isSignedIn()) location.reload();
+    if (onlineFarm && !auth.isSignedIn()) location.reload();
   });
-  if (playMode === "online") await api.prepareWriterAccess();
+  if (onlineFarm) await api.prepareWriterAccess();
   boot?.progress(0.35); // signed in — start filling the plate bar
   const app = new Application();
   await app.init({
@@ -762,7 +764,7 @@ async function main() {
       // Signed-in quest progress follows accepted server commands. Advancing from
       // local notifications would permanently complete quests for actions the
       // server later rejected or rolled back.
-      authoritative: auth.isSignedIn(),
+      authoritative: onlineFarm,
       // Online: the server grants the quest's currency reward (and any level-up brains)
       // authoritatively and idempotently; return true so QuestSystem skips the local add
       // (which the spend-only economy endpoint would reject anyway). Offline: `economy`
@@ -808,7 +810,7 @@ async function main() {
   hud.giftLimitReached = giftLimitReached;
 
   function onlineGameplayBlocked(): boolean {
-    return auth.isSignedIn() && !!economy && !economy.available;
+    return onlineFarm && !!economy && !economy.available;
   }
 
   hud.onBuyBoost = (def) => {
@@ -1000,7 +1002,7 @@ async function main() {
   // visit cannot read, write, or corrupt it. On any fetch failure we clear the
   // target and fall through to a normal load, so the player always lands on their
   // own farm.
-  const visitTarget = playMode === "online" ? getVisitTarget() : null;
+  const visitTarget = onlineFarm ? getVisitTarget() : null;
   let visiting = false;
   let visitError = "";
   let restored = false;
@@ -1127,7 +1129,7 @@ async function main() {
   };
   const storedObjectIds = new Map<string, string[]>();
   const objectPurchases = new Map<string, { cost: number; currency: "gold" | "brains" }>();
-  if (!visiting && playMode === "online" && auth.isSignedIn()) {
+  if (!visiting && onlineFarm) {
     const acct = api.getSession()?.accountId ?? "anon";
     economy = new EconomyClient(state, acct, { requireReady: true });
     economy.onAuthoritativeSettled = (serverTime) => {
@@ -1883,7 +1885,7 @@ async function main() {
       hud.showToast(`${def.name} unlocks at level ${unlockLevel}.`);
       return false;
     }
-    if (auth.isSignedIn()) {
+    if (onlineFarm) {
       try {
         await economy?.settleBeforeDependency();
         const activated = await api.epicBossActivate(crypto.randomUUID(), def.id);
@@ -1912,7 +1914,7 @@ async function main() {
   hud.onEndEpicBoss = async () => {
     const run = epicRun();
     if (!run || !epicBoss.isActive(run)) return false;
-    if (auth.isSignedIn()) {
+    if (onlineFarm) {
       try {
         await economy?.settleBeforeDependency();
         const ended = await api.epicBossEnd(run.runId);
@@ -2090,7 +2092,7 @@ async function main() {
   let requestsCache: { fromAccountId: string; name: string }[] = [];
 
   hud.onlineAvailable = () => playMode === "online" && auth.isOnlineAvailable();
-  hud.socialOnline = () => playMode === "online" && auth.isSignedIn();
+  hud.socialOnline = () => onlineFarm && auth.isSignedIn();
   hud.myAccount = () => {
     const s = api.getSession();
     return s ? { name: api.displayName(s), friendCode: s.friendCode } : null;
@@ -2199,7 +2201,7 @@ async function main() {
   };
   hud.onRemoveFriend = async (id) => {
     // Online: unfriend server-side then refresh. Offline path handled above.
-    if (auth.isSignedIn()) await api.removeFriendOnline(id);
+    if (onlineFarm) await api.removeFriendOnline(id);
     else state.removeFriend(id);
   };
   hud.onBlockFriend = async (accountId) => {
@@ -2249,7 +2251,7 @@ async function main() {
   // On boot, if signed in, renew the access token (keeps a long-lived tab fresh
   // against the shorter session TTL) and surface any waiting gifts / friend
   // requests with a gentle toast.
-  if (auth.isSignedIn()) {
+  if (onlineFarm) {
     // Bootstrap already supplied session gameplay/social summaries. Full friend
     // and inbox data remains on-demand when those menus open.
     void hud.refreshInbox?.().then(() => {
@@ -2300,7 +2302,7 @@ async function main() {
     const selectedNames = new Map(zombies.roster().map((z) => [z.id, z.name]));
     let party: ReturnType<typeof zombies.roster> = [];
     let epicSessionId: string | null = null;
-    if (auth.isSignedIn()) {
+    if (onlineFarm) {
       try {
         await economy?.settleBeforeDependency();
         // Settlement may replace an optimistic harvest id, or remove that unit if
@@ -2386,7 +2388,7 @@ async function main() {
         const currency = result.defeatedLevel === null
           ? { brains: 0, gold: 0 }
           : epicBossCurrencyReward(result.defeatedLevel, def.maxLevel);
-        if (result.defeatedLevel !== null && !auth.isSignedIn()) {
+        if (result.defeatedLevel !== null && !onlineFarm) {
           state.addBrains(currency.brains, "epic_boss_victory");
           state.addGold(currency.gold, "epic_boss_victory");
           questBus.post(QuestEvent.EpicStageEnemyDefeated, String(result.defeatedLevel), 1);
@@ -2417,7 +2419,7 @@ async function main() {
           audio.exitRaid();
         });
         };
-        if (auth.isSignedIn() && epicSessionId) {
+        if (onlineFarm && epicSessionId) {
           void finishEpicBossOnline(epicSessionId, finalTick, inputs).then((server) => {
             zombies.recordInvasion(server.survivors);
             zombies.removeCasualties(server.losses);
@@ -2464,7 +2466,7 @@ async function main() {
     // launch; if it's still on cooldown (and no voucher bypass), decline so the army
     // screen stays up. On success beginRaid runs with serverAuthorized so it doesn't
     // re-gate the (now server-owned) cooldown.
-    if (auth.isSignedIn()) {
+    if (onlineFarm) {
       try {
         const selectedNames = new Map(zombies.roster().map((z) => [z.id, z.name]));
         await economy?.settleBeforeDependency();
@@ -2534,7 +2536,7 @@ async function main() {
     }
     const setup = raids.beginRaid(raidId, partyIds, opts);
     // Offline play has no server timestamp, but uses the same gentle relaunch delay.
-    if (setup && !auth.isSignedIn()) raidLaunchLockedUntil = Date.now() + 15_000;
+    if (setup && !onlineFarm) raidLaunchLockedUntil = Date.now() + 15_000;
     if (!setup) return false; // gated (cooldown/army) — the army screen stays up
     raidActive = true;
     world.visible = false;
@@ -2565,7 +2567,7 @@ async function main() {
         // `serverReward`, which we submit through the balance client (POST /raid/finish).
         // That call also starts the server-owned cooldown and returns the authoritative
         // balance + lastRaidAt + the rolled drop, which the client reconciles.
-        const online = auth.isSignedIn() && !!raidSessionId && !!economy;
+        const online = onlineFarm && !!raidSessionId && !!economy;
         const view = raids.finishRaid(setup.raid, setup.party, outcome, setup.dice, online, setup.brainDrop);
         const casualtyParty = setup.party.filter((zombie) => outcome.losses.includes(zombie.id));
         let settlementPromise: Promise<api.RaidFinishResult> | null = null;
@@ -2593,14 +2595,24 @@ async function main() {
           void settlementPromise.catch(async (error) => {
             economy!.onRaidSettled = null;
             const code = error instanceof api.ApiError ? error.code : "unknown_error";
+            const verificationMessage = code === "truncated_transcript"
+              ? "The invasion result could not be verified. No rewards were granted, and the normal invasion cooldown still applies."
+              : code === "stale_ruleset"
+                ? "The game was updated during this invasion. Its result could not be settled, and the normal invasion cooldown still applies."
+                : null;
             try {
               await economy!.refreshAuthoritative();
-              hud.showToast(`Invasion settlement failed (${code}). Your farm was resynced.`, 6000);
+              hud.showToast(verificationMessage ?? `Invasion settlement failed (${code}). Your farm was resynced.`, 6000);
             } catch {
-              hud.showToast(`Invasion settlement failed (${code}). Reconnecting will resync your farm.`, 6000);
+              hud.showToast(
+                verificationMessage
+                  ? `${verificationMessage} Reconnecting will resync your farm.`
+                  : `Invasion settlement failed (${code}). Reconnecting will resync your farm.`,
+                6000
+              );
             }
           });
-        } else if (auth.isSignedIn() && raidSessionId) {
+        } else if (onlineFarm && raidSessionId) {
           // Signed in but no balance client (shouldn't happen): report finish for the
           // cooldown only; rewards were credited locally by finishRaid above.
           const sid = raidSessionId;
@@ -2646,7 +2658,7 @@ async function main() {
                 return true;
               });
             }).catch(() => { /* the settlement observer above already recovered/reported */ });
-          } else if (!auth.isSignedIn()) {
+          } else if (!onlineFarm) {
             hud.openZombieRevival(revivalViews, state.brains, (reviveIds) => {
               if (!state.spendBrains(reviveIds.length, "zombie_revive")) return false;
               const accepted = new Set(reviveIds);
@@ -3779,7 +3791,7 @@ async function main() {
   // prompt from covering the loading art, while its dedicated top layer keeps it
   // above the tutorial and any writer/device-lock dialog already on the HUD.
   const offerMobileFullscreen = () =>
-    offerFullscreenPrompt(hud, isMobile(), auth.isSignedIn());
+    offerFullscreenPrompt(hud, isMobile(), onlineFarm);
   if (boot) boot.ready(() => {
     // Use the explicit "Click to Start" gesture to satisfy browser/PWA media
     // policies. Constructor autoplay is only a best-effort early attempt.
