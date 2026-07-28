@@ -177,6 +177,75 @@
   border: 2px solid #490c17; border-radius: 10px 10px 0 0; color: #fff;
   font-weight: 700; font-size: 12px; text-shadow: 0 1px 1px #000; }
 
+/* Farmer's Guide: a compact book with persistent chapter navigation. */
+#hud .guide-panel { width: min(760px, 94vw); height: min(590px, calc(100dvh - 28px));
+  min-width: 0; padding: 0; overflow: hidden; display: flex; flex-direction: column;
+  background: linear-gradient(105deg, #724822 0 29%, #f0dfb5 29.2% 100%);
+  color: #3b2918; text-shadow: none; border-color: #2c180a; }
+#hud .guide-panel > .panelclose { top: 8px; right: 8px; z-index: 2; }
+#hud .guide-header { flex: 0 0 auto; display: flex; align-items: center; gap: 12px;
+  min-height: 76px; padding: 10px 64px 10px 20px; box-sizing: border-box;
+  color: #fff6d9; text-shadow: 0 2px 2px #2d170b;
+  background: linear-gradient(#70451f, #4b2b13); border-bottom: 3px solid #2d190b; }
+#hud .guide-mark { display: grid; place-items: center; width: 48px; height: 48px;
+  flex: 0 0 auto; border: 2px solid #2d190b; border-radius: 50%;
+  background: #e4c16e; font-size: 27px; box-shadow: inset 0 2px 0 #fff5, 0 2px 4px #0006; }
+#hud .guide-header h2 { margin: 0; font: 900 24px/1.05 Georgia, serif; }
+#hud .guide-header p { margin: 3px 0 0; color: #dbc89e; font-size: 12px; }
+#hud .guide-layout { flex: 1 1 auto; min-height: 0; display: grid;
+  grid-template-columns: 29% 71%; }
+#hud .guide-nav { min-width: 0; padding: 14px 10px; overflow-y: auto;
+  background: linear-gradient(90deg, #6c431f, #5b3518); border-right: 2px solid #3d220e; }
+#hud .guide-nav-button { display: block; width: 100%; margin: 0 0 5px; padding: 10px 12px;
+  border: 1px solid transparent; border-radius: 9px; cursor: pointer; text-align: left;
+  color: #ead9b5; background: transparent; font: 800 13px system-ui, sans-serif; }
+#hud .guide-nav-button:hover { background: #ffffff12; }
+#hud .guide-nav-button.active { color: #39230f; background: linear-gradient(#f4df9f, #d8ba69);
+  border-color: #321d0b; box-shadow: 0 2px 3px #0005; }
+#hud .guide-article { min-width: 0; padding: 24px 28px; overflow-y: auto;
+  background: repeating-linear-gradient(0deg, transparent 0 27px, #a8885222 27px 28px),
+    linear-gradient(90deg, #e7d29f, #f7e9c5 9%, #f0dfb5); }
+#hud .guide-eyebrow { color: #8a5a22; font: 900 10px system-ui, sans-serif;
+  letter-spacing: .16em; text-transform: uppercase; }
+#hud .guide-article h3 { margin: 3px 0 8px; color: #3b2918; font: 900 27px/1.1 Georgia, serif; }
+#hud .guide-article .guide-intro { margin: 0 0 18px; color: #654728; font-size: 14px;
+  line-height: 1.5; }
+#hud .guide-article section { margin: 0 0 13px; padding: 11px 13px;
+  border: 1px solid #9a783f66; border-radius: 10px; background: #fff8e580; }
+#hud .guide-article h4 { margin: 0 0 4px; color: #563819; font-size: 14px; }
+#hud .guide-article section p { margin: 0; color: #4c3822; font-size: 13px; line-height: 1.5; }
+#hud .guide-link { display: inline-block; margin-top: 9px; padding: 7px 11px;
+  border: 2px solid #34200f; border-radius: 8px; color: #fff; background: #5e8b2d;
+  font: 800 12px system-ui, sans-serif; text-decoration: none; box-shadow: 0 2px 0 #2f4917; }
+#hud .guide-link:hover { filter: brightness(1.1); }
+#hud .guide-footer { flex: 0 0 auto; display: flex; align-items: center;
+  justify-content: space-between; min-height: 54px; padding: 7px 14px 7px calc(29% + 14px);
+  box-sizing: border-box; background: #e3cb91; border-top: 2px solid #9c763c; }
+#hud .guide-position { color: #765327; font: 800 12px system-ui, sans-serif; }
+#hud .guide-controls { display: flex; gap: 7px; }
+#hud .guide-button { min-width: 94px; padding: 7px 11px; border: 2px solid #34200f;
+  border-radius: 8px; cursor: pointer; color: #fff; background: linear-gradient(#7b5430, #553419);
+  font: 800 12px system-ui, sans-serif; text-shadow: 0 1px 1px #000; }
+#hud .guide-button.guide-next { background: linear-gradient(#79ad3c, #517f27); }
+#hud .guide-button:disabled { opacity: .38; cursor: default; filter: grayscale(.4); }
+
+@media (max-width: 600px) {
+  #hud .guide-panel { width: 100%; height: 100%; max-width: none; max-height: none;
+    border-radius: 0; border-width: 0; }
+  #hud .guide-header { min-height: 67px; padding-left: 12px; }
+  #hud .guide-mark { width: 42px; height: 42px; font-size: 23px; }
+  #hud .guide-header h2 { font-size: 21px; }
+  #hud .guide-layout { display: flex; flex-direction: column; }
+  #hud .guide-nav { flex: 0 0 auto; display: flex; gap: 5px; padding: 7px 8px;
+    overflow-x: auto; overflow-y: hidden; border-right: 0; border-bottom: 2px solid #3d220e; }
+  #hud .guide-nav-button { flex: 0 0 auto; width: auto; margin: 0; padding: 7px 10px;
+    white-space: nowrap; }
+  #hud .guide-article { padding: 17px 16px; }
+  #hud .guide-article h3 { font-size: 23px; }
+  #hud .guide-footer { padding: 7px 10px; padding-bottom: max(7px, env(safe-area-inset-bottom)); }
+  #hud .guide-button { min-width: 86px; }
+}
+
 /* bottom-center: farming tools */
 #hud .tools { position: fixed; left: 50%; transform: translateX(-50%); bottom: 10px;
   display: flex; gap: 10px; pointer-events: auto;
@@ -1180,6 +1249,24 @@
     overflow: hidden; text-overflow: ellipsis; }
   #hud .st-boost { min-width: 0; }
   #hud .rcv-card, #hud .rcv-nm { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+}
+
+/* In portrait, the full ONLINE · SYNCED badge crowds the currency bar. Keep its
+   account-menu hit target, but reduce the visible status to a small dot: green
+   when fully synced and blue whenever work may still need to reach the server. */
+@media (orientation: portrait) and (max-width: 760px) {
+  #hud .play-status {
+    display: grid; place-items: center; flex: 0 0 28px;
+    width: 28px; height: 32px; padding: 0; border: 0;
+    color: transparent; background: transparent !important;
+    font-size: 0; letter-spacing: 0; box-shadow: none;
+  }
+  #hud .play-status::before {
+    content: ""; display: block; width: 12px; height: 12px;
+    border: 2px solid rgba(11, 25, 7, .78); border-radius: 50%;
+    background: #43bf58; box-shadow: 0 1px 3px #0008;
+  }
+  #hud .play-status:not(.synced)::before { background: #3d9fe8; }
 }
 
 /* A phone held sideways has enough width for a two-column card but very little

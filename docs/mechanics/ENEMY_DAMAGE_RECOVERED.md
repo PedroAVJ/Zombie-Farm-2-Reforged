@@ -75,12 +75,32 @@ its un-modelled `speedMultiplier` partly cancelled the error).
 | --- | --- | --- |
 | boss `throw` | the bossAction's `damage` field, applied **verbatim** | `ZFFightPhysics throwProjectile:` copies @"damage" into `damageAmount`; `damageZombie:withProjectile:withContact:` passes it to `[zombie damage:]` |
 | `alienLaser` | flat **200** | `AlienStageBullet collidedWith:` passes the immediate `0x43480000` |
-| `pixelFire` | picks **one** random eligible zombie and calls `setOnFire`; burning costs `hitPointsTotal/20 × dt` = **5 % of max HP per second** | `ZFFightMan pixelFire`, `ZombieActor fightUpdate:` 0x4dedc |
+| `pixelFire` | picks **one** random eligible zombie and calls `setOnFire` — an attack INTERRUPT, not a burn: see below | `ZFFightMan pixelFire`, `ZombieActor fightUpdate:` 0x4dedc |
 | `telekinesis` | **no damage** — `knockBackBy:force:` + `stunSelfFor:` only | `ZFFightMan telekinesis:` |
 
-The burn's *duration* is the one number still not recovered: the source burns the zombie while it
-runs to a destination and then swaps state, an animation the sim doesn't reproduce, so
-`PIXEL_FIRE_BURN_MS` remains a tuned constant.
+### pixelFire burns for exactly one frame
+
+The burn tick is real — `damage: hitPointsTotal/20 × dt`, 5 % of max HP per second — and the
+`tbh` jump table in `fightUpdate:` confirms it belongs to state **0x31**, precisely what
+`setOnFire` sets on the zombie (the table does `subs r0, #6` before `cmp #0x2b`, so it covers
+states 6–49 and 0x31 is its last entry; states 0x2d/0x2e enter the same block earlier and branch
+past the tick).
+
+But it never accumulates. `setOnFire` calls `[self moveToPoint: [self position]]` — the zombie's
+destination is **where it already is** — and the state-0x31 block burns once, then compares
+`position` to `destinationPoint`, finds them equal, and leaves for state 0x28. So the effect is one
+frame: `5 % ÷ 60 ≈ 0.083 %` of max HP, about 2 damage on a 3000 HP zombie. Nothing holds the lock
+either (the only `setLockState: 0` is on an unrelated path).
+
+That is near-certainly a source bug — the surrounding code fetches the enemy, and moving to your own
+position is a no-op — but it is what ships. **`pixelFire` is an attack interrupt with a cosmetic
+flourish** (cancelled swing, `stun.wav`, `pixelExplosion` particles), not a damage-over-time. The
+reimpl models exactly that, and `PIXEL_FIRE_BURN_MS` is gone. Do not "restore" the burn.
+
+Scope check: `pixelFire` appears in exactly ONE unit's `bossActions` in the whole game —
+`VideoGameStageBossActor`, raid 9 (unlock level 43). Likewise `telekinesis` (RobotStageActorBrainBot,
+whose action carries an explicit `"damage": "0"`, corroborating the no-damage reading) and
+`turnZombie` (the same Video Games boss).
 
 ## Not in the data at all
 

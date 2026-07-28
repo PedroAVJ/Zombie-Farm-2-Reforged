@@ -22,6 +22,7 @@ import {
   farmRaidEnemyPace,
   ALIEN_LASER_DAMAGE,
   BURN_MAX_HP_FRACTION_PER_SEC,
+  SOURCE_FRAME_SEC,
   POWER_PER_STR,
   HP_PER_CON,
 } from "./combatStats";
@@ -269,6 +270,11 @@ describe("farmRaidEnemyPace — Old McDonnell's level ramp (raid 1 only)", () =>
 
 describe("recovered flat hazard values", () => {
   it("the alien laser bolt is a hard 200", () => expect(ALIEN_LASER_DAMAGE).toBe(200));
-  it("burning costs 5% of MAX hp per second", () =>
-    expect(BURN_MAX_HP_FRACTION_PER_SEC).toBe(0.05));
+  it("burning costs 5% of MAX hp per second — but for ONE frame only", () => {
+    expect(BURN_MAX_HP_FRACTION_PER_SEC).toBe(0.05);
+    // `setOnFire` parks the zombie at its own position, so the burning state exits after a
+    // single tick. The whole effect is ~0.083 % of max HP; anything larger means someone
+    // has turned pixelFire back into a damage-over-time it never was.
+    expect(BURN_MAX_HP_FRACTION_PER_SEC * SOURCE_FRAME_SEC).toBeCloseTo(0.00083, 5);
+  });
 });

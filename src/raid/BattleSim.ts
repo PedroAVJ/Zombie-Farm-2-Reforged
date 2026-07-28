@@ -37,6 +37,7 @@ import {
   applyDamage,
   BURN_MAX_HP_FRACTION_PER_SEC,
   deriveHitDamage,
+  SOURCE_FRAME_SEC,
   lineupDamageBand,
   lineupSpeedBand,
   mirroredAttackIntervalSec,
@@ -150,13 +151,9 @@ const ENRAGE_DMG_MULT = 1.5; // boss melee damage grows
 // ONE zombie on fire; turnZombie removes your front zombie (it's turned against you);
 // telekinesis lifts + slams a zombie for knockback and stun but NO damage. summonBoss
 // spawns a capped reinforcement and wall spawns a single standing blocker — both go
-// through spawnEnemy and join the normal queue. Damage values are ground truth
-// (see combatStats); only the two durations below are un-recovered.
+// through spawnEnemy and join the normal queue. Damage values are all ground truth
+// (see combatStats); only the telekinesis hold below is un-recovered.
 const LASER_SPEED = 900; // straight-bolt speed (sim px/s)
-// How long a `setOnFire` zombie burns. The source burns it while it runs to its
-// destination and then swaps state, so the duration is emergent from a movement the
-// sim doesn't reproduce; 6 s (≈30 % of max HP) is the one tuned number left here.
-const PIXEL_FIRE_BURN_MS = 6000;
 // Telekinesis hold. `stunSelfFor:` takes its duration from the action, which this
 // data doesn't carry, so the sim uses the same 1 s as an ordinary stun attack.
 const TELEKINESIS_STUN_MS = 1000;
@@ -359,9 +356,6 @@ export interface SimUnit {
   taken: boolean;
   /** Enemy that ignores its dex clock and mirrors its opponent's (Pirate Scallywag). */
   mirrorsOpponentSpeed: boolean;
-  /** Ms of `setOnFire` burn left on a zombie (boss pixelFire) — ticks
-   *  BURN_MAX_HP_FRACTION_PER_SEC of max HP per second while > 0. */
-  burnMs: number;
 }
 
 /** A Trapeze Artist grab hazard, consumed by the renderer. Sweeps in, seizes a zombie,
@@ -557,7 +551,6 @@ function toSim(u: CombatUnit, i: number): SimUnit {
     passedWall: false,
     taken: false,
     mirrorsOpponentSpeed: !isPlayer && !!u.mirrorsOpponentSpeed,
-    burnMs: 0,
   };
 }
 
@@ -734,7 +727,6 @@ export class BattleSim {
       oneShotProtectionUsed: u.oneShotProtectionUsed ?? (u.team === "player" && u.hp <= 1),
       passedWall: u.passedWall ?? false,
       mirrorsOpponentSpeed: u.mirrorsOpponentSpeed ?? false,
-      burnMs: u.burnMs ?? 0,
     })));
     this.players = this.units.filter((u) => u.team === "player");
     this.enemies = this.units.filter((u) => u.team === "enemy");
@@ -1180,20 +1172,6 @@ export class BattleSim {
     return true;
   }
 
-  /** Tick the `setOnFire` burn (boss pixelFire). Ground truth `ZombieActor fightUpdate:`:
-   *  `damage: hitPointsTotal/20 × dt` every frame — 5 % of MAX HP per second, through the
-   *  normal damage path (so damage reduction and the one-shot floor both apply). */
-  private stepBurn(dtMs: number) {
-    for (const p of this.players) {
-      if (!p.alive || p.burnMs <= 0) continue;
-      const tick = Math.min(dtMs, p.burnMs);
-      p.burnMs -= dtMs;
-      this.dealEnemyDamage(p, (p.maxHp * BURN_MAX_HP_FRACTION_PER_SEC * tick) / 1000);
-      p.struckThisTick = true;
-      if (p.burnMs <= 0) p.burnMs = 0;
-    }
-  }
-
   /** Apply an ordinary enemy hit through the recovered player-zombie one-shot floor. */
   private dealEnemyDamage(foe: SimUnit, dmg: number) {
     if (dmg > 0 && foe.abilities.includes("block") && this.abilityRoll(foe) > 90) return;
@@ -1405,7 +1383,6 @@ export class BattleSim {
 
     this.assignFormation();
     this.stepHealing(dtMs);
-    this.stepBurn(dtMs);
     const frontX = this.frontX;
 
     // Zombies.
@@ -1719,8 +1696,12 @@ export class BattleSim {
       }
       case "pixelFire": {
         // Source (`ZFFightMan pixelFire`): picks ONE random eligible zombie and calls
-        // `setOnFire` — it is a single-target burn, not an AoE burst. The burn ticks
-        // 5 %/s of max HP through the normal damage path while the zombie runs.
+        // `setOnFire` — single-target, and an INTERRUPT rather than a damage-over-time.
+        // `setOnFire` cancels the zombie's scheduled swing and puts it in the burning
+        // state, but with its destination set to its own position, so the state burns for
+        // exactly one frame and leaves. That is the whole effect: a cancelled attack, the
+        // stun sfx + pixel-explosion particles, and ~0.08 % of max HP. See
+        // combatStats.BURN_MAX_HP_FRACTION_PER_SEC — do NOT turn this back into a DoT.
         const eligible = this.players.filter(
           (p) => p.alive && !p.taken && (p.state === "advance" || p.state === "fight")
         );
@@ -1728,7 +1709,13 @@ export class BattleSim {
           ? eligible[Math.floor(hash(this.specialCount * 7 + 5) * eligible.length) % eligible.length]
           : null;
         if (victim) {
-          victim.burnMs = PIXEL_FIRE_BURN_MS;
+          victim.windupKey = null; // the cancelled swing
+          victim.windupMs = 0;
+          victim.timerMs = this.cycleMs(victim, null);
+          this.dealEnemyDamage(
+            victim,
+            victim.maxHp * BURN_MAX_HP_FRACTION_PER_SEC * SOURCE_FRAME_SEC
+          );
           victim.struckThisTick = true;
         }
         break;

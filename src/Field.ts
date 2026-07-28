@@ -892,6 +892,12 @@ export class Field {
   private objectScale(): number {
     return TILE_W / this.assets.field.tileW;
   }
+  // One-tile fence art bridges from its occupied tile into the next tile, while
+  // gates use a true multi-tile footprint. Center the fence panel on that bridge
+  // (half a tile lower on screen) so its end posts share the gate's ground points.
+  private objectRenderY(def: PlaceableDef, y: number): number {
+    return y + (def.collideExtend?.length ? HH : 0);
+  }
   // Which sprite to show: a fruit tree that isn't ripe shows its growing frame.
   private objectSpriteName(def: PlaceableDef, ready: boolean): string {
     return !ready && def.growingSprite ? def.growingSprite : def.sprite;
@@ -976,7 +982,7 @@ export class Field {
     sp.texture = texture;
     sp.tint = tint;
     sp.scale.set(scaleX, s);
-    sp.position.set(a.x, a.y);
+    sp.position.set(a.x, this.objectRenderY(def, a.y));
     // Depth-sorts by the object's full footprint (see depthSort): an actor on the
     // object's own tiles or south of it draws in front, one behind it is covered.
     setFootprint(sp, oc, or, oc + def.tileW - 1, or + def.tileH - 1);
@@ -1472,7 +1478,7 @@ export class Field {
     const s = this.objectScale();
     this.objGhost.scale.set(flipped ? -s : s, s); // preview the chosen orientation
     const a = this.footprintAnchor(oc, or, def.tileW, def.tileH);
-    this.objGhost.position.set(a.x, a.y);
+    this.objGhost.position.set(a.x, this.objectRenderY(def, a.y));
     this.objGhost.alpha = 0.6;
     this.objGhost.tint = multiplyObjectTint(
       objectTint(def.color),

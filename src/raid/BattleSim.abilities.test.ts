@@ -446,7 +446,7 @@ describe("enemy cadence and boss hazard damage (ground truth)", () => {
     expect(zombieHits).toBeGreaterThan(enemyHits * 1.8); // ~2× as many enemy swings
   });
 
-  it("pixelFire sets ONE zombie alight for 5%/s of max HP, not an AoE chip", () => {
+  it("pixelFire interrupts ONE zombie for a single frame of burn, not an AoE chip", () => {
     const a = player({ id: "a", hp: 1e6, maxHp: 1e6 });
     const b = unit({ id: "b", sourceKey: "ZombieActorRegularTier1", team: "player", hp: 1e6, maxHp: 1e6 });
     const boss = enemy({ id: "boss", isBoss: true, str: 0, hp: 1e7, maxHp: 1e7 });
@@ -454,13 +454,15 @@ describe("enemy cadence and boss hazard damage (ground truth)", () => {
       { name: "pixelFire", weight: 1, castMs: 0, cooldownMs: 1e6, damage: 0 },
     ]);
     onTheLine(sim);
-    for (let i = 0; i < 20; i++) sim.step(50); // 1 s: cast + burn
-    const burned = sim.units.filter((u) => u.team === "player" && u.hp < u.maxHp);
-    expect(burned).toHaveLength(1); // single target
-    // ~5 % of max HP per second of burn (the cast lands on the first step).
-    const lost = burned[0].maxHp - burned[0].hp;
-    expect(lost).toBeGreaterThan(burned[0].maxHp * 0.03);
-    expect(lost).toBeLessThan(burned[0].maxHp * 0.06);
+    for (let i = 0; i < 20; i++) sim.step(50); // 1 s — far longer than the effect lasts
+    const hit = sim.units.filter((u) => u.team === "player" && u.hp < u.maxHp);
+    expect(hit).toHaveLength(1); // single target, never an AoE
+    // Ground truth: `setOnFire` parks the zombie at its OWN position, so the burning state
+    // ticks once and exits — 5 %/s for one 60 fps frame ≈ 0.083 % of max HP. It must NOT
+    // keep burning: a second of exposure costs the same as the first frame.
+    const lost = hit[0].maxHp - hit[0].hp;
+    expect(lost).toBeCloseTo(hit[0].maxHp * 0.05 / 60, 0);
+    expect(lost).toBeLessThan(hit[0].maxHp * 0.001);
   });
 
   it("telekinesis knocks back and stuns but deals NO damage", () => {

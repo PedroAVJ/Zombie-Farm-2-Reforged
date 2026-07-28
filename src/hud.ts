@@ -46,6 +46,7 @@ import {
   buildAccountBlock, buildDevicesBlock,
 } from "./ui/panels/settings";
 import { openStorage as openStoragePanel } from "./ui/panels/storage";
+import { openFarmersGuide } from "./ui/panels/farmersGuide";
 // View-model types + the grave classifier live in hudTypes so panel modules can
 // import them without depending on the whole Hud class. Re-exported below for the
 // existing `from "./hud"` importers (main.ts).
@@ -621,6 +622,12 @@ export class Hud {
     state: "synced" | "saving" | "reconnecting" | "cached" = "synced",
     pending = 0,
   ) {
+    const statusLabel = mode === "local"
+      ? "Saved on this device"
+      : state === "synced" ? "Everything synced"
+      : state === "saving" ? `${pending || "Some"} change${pending === 1 ? "" : "s"} waiting to sync`
+      : state === "reconnecting" ? "Reconnecting; changes may be waiting to sync"
+      : "Offline view; changes may be waiting to sync";
     this.playStatusEl.className = `play-status ${mode} ${state}`;
     this.playStatusEl.textContent = mode === "local"
       ? "LOCAL FARM"
@@ -630,8 +637,9 @@ export class Hud {
       : "ONLINE · SYNCED";
     this.playStatusEl.setAttribute(
       "aria-label",
-      `Current farm: ${mode === "local" ? "Local Farm" : "Online Farm"}. Choose Local or Online.`
+      `${mode === "local" ? "Local Farm" : "Online Farm"}: ${statusLabel}. Choose Local or Online.`
     );
+    this.playStatusEl.title = `${statusLabel}. Choose Local or Online.`;
   }
 
   // Brief top-center banner for quest completion (messageComplete).
@@ -682,6 +690,7 @@ export class Hud {
       ...(this.playMode === "online"
         ? [{ label: "Social", icon: UI("button_friends.png"), shortcut: "" }]
         : []),
+      { label: "Guide", icon: UI("button_menu.png"), shortcut: "" },
     ];
     const col = document.createElement("div");
     col.className = "menucol";
@@ -712,6 +721,8 @@ export class Hud {
                   ? this.openRaids()
                   : m.label === "Social"
                     ? this.openSocial()
+                    : m.label === "Guide"
+                      ? openFarmersGuide(this.el)
                     : this.openPanel(m.label, "Coming soon.");
       col.appendChild(btn);
     }
