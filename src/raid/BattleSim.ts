@@ -32,8 +32,16 @@
 // lineup-depth band (1.0/0.85/0.7/0.55; enemies ×1.0). See combatStats.lineupDamageBand.
 import type { BossSpecial, BossThrowConfig, CombatUnit, CrabConfig, GrabberConfig, RaidOutcome } from "./types";
 import { ACTIVATED_ABILITY, activatedKeyFor, teamAbilitiesIn } from "../zombie/abilities";
-import { applyDamage, deriveHitDamage, lineupDamageBand, POWER_PER_STR } from "./combatStats";
-import { BOSS_SPECIAL_DAMAGE_MULT, PROJECTILE_DAMAGE_MULT } from "./balance";
+import {
+  ALIEN_LASER_DAMAGE,
+  applyDamage,
+  BURN_MAX_HP_FRACTION_PER_SEC,
+  deriveHitDamage,
+  lineupDamageBand,
+  lineupSpeedBand,
+  mirroredAttackIntervalSec,
+  POWER_PER_STR,
+} from "./combatStats";
 
 /** Logical field the sim runs in; RaidScene scales this to the viewport. */
 export const FIELD_W = 1000;
@@ -123,12 +131,10 @@ const PREDICT_SPEED_CAP = 150; // sim px/s — never lead a target faster than t
 // perch↔ground) rather than walking — its measured velocity is discarded (max real
 // step is moveSpeed≤260 × dt≤0.05s ≈ 13 px).
 export const TELEPORT_PX = 40;
-// Boss-action throw damage is an independently authored chip-damage value, not a
-// Strength stat. Do not run it through POWER_PER_STR: that made McDonnell's raw
-// 6/12/18 throws deal 120/240/360 after the projectile multiplier. The exact source
-// conversion is not recovered, so retain the play-tested chip scale used before that
-// unsupported conversion was introduced.
-const PROJ_DMG_SCALE = 1.75;
+// Boss-action throw damage is an independently authored chip value applied VERBATIM:
+// `ZFFightPhysics throwProjectile:` reads the bossAction's @"damage" straight into the
+// projectile's `damageAmount`, and the contact handler passes that to `[zombie damage:]`.
+// No conversion, no scaling — McDonnell's 6/12/18 really are 6/12/18 against con×100 HP.
 
 // ---- Round timer + enrage (ZFFightMan updateTimer:/showEnrageTimer) ----
 // The fight is a countdown; when it expires the boss ENRAGES. The reference build
@@ -140,13 +146,20 @@ const ENRAGE_SPECIAL_MULT = 0.6; // special cooldowns shorten
 const ENRAGE_DMG_MULT = 1.5; // boss melee damage grows
 
 // ---- Boss special actions (non-throw bossActions) ----
-// alienLaser fires a fast straight bolt; pixelFire is an AoE burst; turnZombie
-// removes your front zombie (it's turned against you); telekinesis is a heavy
-// single hit. summonBoss spawns a capped reinforcement and wall spawns a single
-// standing blocker — both go through spawnEnemy and join the normal queue.
+// alienLaser fires a fast straight bolt (flat 200, ALIEN_LASER_DAMAGE); pixelFire sets
+// ONE zombie on fire; turnZombie removes your front zombie (it's turned against you);
+// telekinesis lifts + slams a zombie for knockback and stun but NO damage. summonBoss
+// spawns a capped reinforcement and wall spawns a single standing blocker — both go
+// through spawnEnemy and join the normal queue. Damage values are ground truth
+// (see combatStats); only the two durations below are un-recovered.
 const LASER_SPEED = 900; // straight-bolt speed (sim px/s)
-const DEFAULT_SPECIAL_DMG = 8; // data carries no damage for most specials
-const SPECIAL_DMG_SCALE = 1.75; // same chip-scaling as thrown projectiles (see PROJ_DMG_SCALE)
+// How long a `setOnFire` zombie burns. The source burns it while it runs to its
+// destination and then swaps state, so the duration is emergent from a movement the
+// sim doesn't reproduce; 6 s (≈30 % of max HP) is the one tuned number left here.
+const PIXEL_FIRE_BURN_MS = 6000;
+// Telekinesis hold. `stunSelfFor:` takes its duration from the action, which this
+// data doesn't carry, so the sim uses the same 1 s as an ordinary stun attack.
+const TELEKINESIS_STUN_MS = 1000;
 
 // ---- Knockback (Actor knockBackBy:force:) ----
 // A knockback attack interrupts the struck zombie and, in the source, calls
@@ -344,6 +357,11 @@ export interface SimUnit {
    *  source state 38 is not the death path) but out of this fight, so it counts as a
    *  survivor while no longer keeping the battle alive. */
   taken: boolean;
+  /** Enemy that ignores its dex clock and mirrors its opponent's (Pirate Scallywag). */
+  mirrorsOpponentSpeed: boolean;
+  /** Ms of `setOnFire` burn left on a zombie (boss pixelFire) — ticks
+   *  BURN_MAX_HP_FRACTION_PER_SEC of max HP per second while > 0. */
+  burnMs: number;
 }
 
 /** A Trapeze Artist grab hazard, consumed by the renderer. Sweeps in, seizes a zombie,
@@ -538,6 +556,8 @@ function toSim(u: CombatUnit, i: number): SimUnit {
     isWall: false,
     passedWall: false,
     taken: false,
+    mirrorsOpponentSpeed: !isPlayer && !!u.mirrorsOpponentSpeed,
+    burnMs: 0,
   };
 }
 
@@ -713,6 +733,8 @@ export class BattleSim {
       // its protection. New checkpoints persist the explicit latch.
       oneShotProtectionUsed: u.oneShotProtectionUsed ?? (u.team === "player" && u.hp <= 1),
       passedWall: u.passedWall ?? false,
+      mirrorsOpponentSpeed: u.mirrorsOpponentSpeed ?? false,
+      burnMs: u.burnMs ?? 0,
     })));
     this.players = this.units.filter((u) => u.team === "player");
     this.enemies = this.units.filter((u) => u.team === "enemy");
@@ -862,7 +884,7 @@ export class BattleSim {
     p.windupKey = null;
     p.windupMs = 0;
     if (ab.useOnce && !p.usedAbilities.includes(key)) p.usedAbilities.push(key);
-    p.timerMs = p.cooldownMs; // resume normal attacks after a beat
+    p.timerMs = this.cycleMs(p, null); // resume normal attacks after a beat
   }
 
   /** Dismount a Mini Buddy at the line. The shipped ram stuns the enemy for two
@@ -884,7 +906,7 @@ export class BattleSim {
     mini.charge = 1;
     mini.formOrder = carrier.formOrder + 0.25;
     mini.state = "advance";
-    mini.timerMs = mini.cooldownMs;
+    mini.timerMs = this.cycleMs(mini, null);
   }
 
   /** Authentic Garden support. Heal selects the most injured OTHER deployed
@@ -1046,12 +1068,27 @@ export class BattleSim {
     u.laserTimerMs += interval;
   }
 
+  /** One attack cycle in ms for `u` while facing `foe` — ground truth
+   *  `-[Actor getFightAttackSpeed]`. `cooldownMs` already carries the raw dex clock
+   *  (2/dex zombie, 1/dex enemy) times the attack's `speedMultiplier`; on top of that:
+   *   - a player zombie deeper than the front five swings slower (lineupSpeedBand);
+   *   - a Scallywag throws its own clock away and mirrors its opponent's cycle.
+   *  Everything that re-arms an attack timer goes through here. */
+  private cycleMs(u: SimUnit, foe: SimUnit | null): number {
+    if (u.team === "player") return u.cooldownMs * lineupSpeedBand(u.lineupIndex);
+    if (u.mirrorsOpponentSpeed && foe && foe.team === "player") {
+      const foeSec = (foe.cooldownMs * lineupSpeedBand(foe.lineupIndex)) / 1000;
+      return mirroredAttackIntervalSec(foeSec) * 1000;
+    }
+    return u.cooldownMs;
+  }
+
   /** Land a hit from `u` on `foe` when its clock is ready; else re-arm. An enemy
    *  hit can also knock the zombie back (to the back of the line) and/or stun it. */
   private tryAttack(u: SimUnit, foe: SimUnit, dtMs: number) {
     u.timerMs -= dtMs;
     if (u.timerMs > 0) return;
-    u.timerMs += u.cooldownMs;
+    u.timerMs += this.cycleMs(u, foe);
     // Player normal swings take the lineup-depth band (front five full, then 0.85/0.7/0.55);
     // enemies always hit at band 1.0. See combatStats.lineupDamageBand (ground truth).
     const dmg =
@@ -1097,7 +1134,7 @@ export class BattleSim {
     p.x = Math.max(CHARGE_X, p.x - KNOCKBACK_PX);
     p.formOrder = this.releaseSeq++; // last in the formation → back column
     p.state = "advance";
-    p.timerMs = p.cooldownMs;
+    p.timerMs = this.cycleMs(p, null);
   }
 
   private dealDamage(foe: SimUnit, dmg: number, fromPlayer: boolean) {
@@ -1134,13 +1171,27 @@ export class BattleSim {
     defeated.prevX = defeated.x;
     defeated.prevY = defeated.y;
     defeated.formOrder = this.releaseSeq++;
-    defeated.timerMs = defeated.cooldownMs;
+    defeated.timerMs = this.cycleMs(defeated, null);
     defeated.windupKey = null;
     defeated.windupMs = 0;
     defeated.stunMs = 0;
     defeated.oneShotProtectionUsed = false;
     defeated.healFxSeq++;
     return true;
+  }
+
+  /** Tick the `setOnFire` burn (boss pixelFire). Ground truth `ZombieActor fightUpdate:`:
+   *  `damage: hitPointsTotal/20 × dt` every frame — 5 % of MAX HP per second, through the
+   *  normal damage path (so damage reduction and the one-shot floor both apply). */
+  private stepBurn(dtMs: number) {
+    for (const p of this.players) {
+      if (!p.alive || p.burnMs <= 0) continue;
+      const tick = Math.min(dtMs, p.burnMs);
+      p.burnMs -= dtMs;
+      this.dealEnemyDamage(p, (p.maxHp * BURN_MAX_HP_FRACTION_PER_SEC * tick) / 1000);
+      p.struckThisTick = true;
+      if (p.burnMs <= 0) p.burnMs = 0;
+    }
   }
 
   /** Apply an ordinary enemy hit through the recovered player-zombie one-shot floor. */
@@ -1354,6 +1405,7 @@ export class BattleSim {
 
     this.assignFormation();
     this.stepHealing(dtMs);
+    this.stepBurn(dtMs);
     const frontX = this.frontX;
 
     // Zombies.
@@ -1398,7 +1450,7 @@ export class BattleSim {
           if (d > 2) {
             p.x += (dx / d) * Math.min(stepd, d);
             p.y += (dy / d) * Math.min(stepd, d);
-            p.timerMs = p.cooldownMs;
+            p.timerMs = this.cycleMs(p, null);
           } else {
             this.stepCharge(p, dtMs);
           }
@@ -1406,14 +1458,14 @@ export class BattleSim {
         }
         case "carried": {
           p.buddyMountMs = Math.max(0, p.buddyMountMs - dtMs);
-          p.timerMs = p.cooldownMs;
+          p.timerMs = this.cycleMs(p, null);
           break;
         }
         default: {
           // Stunned by an enemy hit — can't move or attack until it wears off.
           if (p.stunMs > 0) {
             p.stunMs -= dtMs;
-            p.timerMs = p.cooldownMs;
+            p.timerMs = this.cycleMs(p, null);
             break;
           }
           // Move to the assigned formation slot (never past the enemy).
@@ -1453,7 +1505,7 @@ export class BattleSim {
             else this.tryAttack(p, foe, dtMs);
           } else {
             p.state = "advance";
-            p.timerMs = p.cooldownMs;
+            p.timerMs = this.cycleMs(p, null);
           }
         }
       }
@@ -1464,12 +1516,12 @@ export class BattleSim {
       if (!e.alive || e.state === "queued" || e.state === "structure") continue;
       if (e.isWall) {
         e.state = "hold";
-        e.timerMs = e.cooldownMs;
+        e.timerMs = this.cycleMs(e, null);
         continue;
       }
       if (e.state === "falling") {
         e.y = Math.min(CENTER_Y, e.y + (EPIC_BOSS_FALL_SPEED * dtMs) / 1000);
-        e.timerMs = e.cooldownMs;
+        e.timerMs = this.cycleMs(e, null);
         if (e.y >= CENTER_Y) {
           e.y = CENTER_Y;
           e.state = "landing";
@@ -1481,7 +1533,7 @@ export class BattleSim {
         e.timerMs -= dtMs;
         if (e.timerMs <= 0) {
           e.state = "hold";
-          e.timerMs = e.cooldownMs;
+          e.timerMs = this.cycleMs(e, null);
         }
         continue;
       }
@@ -1495,7 +1547,7 @@ export class BattleSim {
           e.y = Math.min(CENTER_Y, e.y + (dy * dtMs) / BOSS_JUMP_MS);
           const t = clamp((e.y - BOSS_STRUCT_Y) / dy, 0, 1);
           e.x = BOSS_STRUCT_X + (ENEMY_HOLD_X - BOSS_STRUCT_X) * t;
-          e.timerMs = e.cooldownMs;
+          e.timerMs = this.cycleMs(e, null);
           if (e.y >= CENTER_Y) {
             e.x = ENEMY_HOLD_X;
             e.y = CENTER_Y;
@@ -1509,7 +1561,7 @@ export class BattleSim {
         // re-enter — no floating diagonally toward the middle.
         const sx = (EMERGE_SPEED * dtMs) / 1000;
         e.x = Math.min(ENEMY_SPAWN_X, e.x + sx); // walk out to the hidden spawn
-        e.timerMs = e.cooldownMs;
+        e.timerMs = this.cycleMs(e, null);
         if (e.x >= ENEMY_SPAWN_X) {
           e.x = ENEMY_SPAWN_X;
           e.y = CENTER_Y; // now a ground unit, hidden off the right edge
@@ -1523,7 +1575,7 @@ export class BattleSim {
         const sx = (EMERGE_SPEED * dtMs) / 1000;
         e.x = Math.max(ENEMY_HOLD_X, e.x - sx);
         e.y = CENTER_Y;
-        e.timerMs = e.cooldownMs;
+        e.timerMs = this.cycleMs(e, null);
         if (e.x <= ENEMY_HOLD_X) {
           e.x = ENEMY_HOLD_X;
           e.y = CENTER_Y;
@@ -1534,7 +1586,7 @@ export class BattleSim {
       // Stunned (by an Explode) — can't act; hold its attack clock.
       if (e.stunMs > 0) {
         e.stunMs -= dtMs;
-        e.timerMs = e.cooldownMs;
+        e.timerMs = this.cycleMs(e, null);
         continue;
       }
       const foe = this.playerInRange(e);
@@ -1543,7 +1595,7 @@ export class BattleSim {
         this.tryAttack(e, foe, dtMs);
       } else {
         e.state = "hold";
-        e.timerMs = e.cooldownMs;
+        e.timerMs = this.cycleMs(e, null);
       }
     }
 
@@ -1655,20 +1707,29 @@ export class BattleSim {
   /** Land a boss special. Effects that need spawned entities (summonBoss, wall) go
    *  through spawnEnemy; both are capped so the fight still resolves. */
   private runSpecial(sp: BossSpecial) {
-    const dmg = Math.max(1, Math.round((sp.damage || DEFAULT_SPECIAL_DMG) * SPECIAL_DMG_SCALE));
     switch (sp.name) {
       case "alienLaser": {
+        // Flat 200 per bolt — a hard constant in the source, not a stat-derived value
+        // (`AlienStageBullet collidedWith:` passes the immediate 200.0f to `damage:`).
         const target = this.throwTarget();
-        if (target) this.launchProjectile(target, dmg, "", 20, { straight: true });
+        if (target) {
+          this.launchProjectile(target, sp.damage || ALIEN_LASER_DAMAGE, "", 20, { straight: true });
+        }
         break;
       }
       case "pixelFire": {
-        // AoE burst: chip every zombie that has moved out to fight.
-        for (const p of this.players) {
-          if (p.alive && (p.state === "advance" || p.state === "fight")) {
-            this.dealEnemyDamage(p, dmg * BOSS_SPECIAL_DAMAGE_MULT);
-            p.struckThisTick = true;
-          }
+        // Source (`ZFFightMan pixelFire`): picks ONE random eligible zombie and calls
+        // `setOnFire` — it is a single-target burn, not an AoE burst. The burn ticks
+        // 5 %/s of max HP through the normal damage path while the zombie runs.
+        const eligible = this.players.filter(
+          (p) => p.alive && !p.taken && (p.state === "advance" || p.state === "fight")
+        );
+        const victim = eligible.length
+          ? eligible[Math.floor(hash(this.specialCount * 7 + 5) * eligible.length) % eligible.length]
+          : null;
+        if (victim) {
+          victim.burnMs = PIXEL_FIRE_BURN_MS;
+          victim.struckThisTick = true;
         }
         break;
       }
@@ -1682,10 +1743,12 @@ export class BattleSim {
         break;
       }
       case "telekinesis": {
-        // A heavy single-target lift+slam.
+        // Source (`ZFFightMan telekinesis:`) deals NO damage: it lifts the zombie,
+        // `knockBackBy:force:` it down the lane and `stunSelfFor:` holds it there.
         const victim = this.frontFighter() ?? this.throwTarget();
         if (victim) {
-          this.dealEnemyDamage(victim, dmg * 2 * BOSS_SPECIAL_DAMAGE_MULT);
+          this.knockBackZombie(victim);
+          victim.stunMs = Math.max(victim.stunMs, TELEKINESIS_STUN_MS);
           victim.struckThisTick = true;
         }
         break;
@@ -1939,7 +2002,7 @@ export class BattleSim {
       if (z && z.alive) {
         z.state = "advance"; // released: back on the lane, re-advances from the rear
         z.y = CENTER_Y;
-        z.timerMs = z.cooldownMs;
+        z.timerMs = this.cycleMs(z, null);
         z.stunMs = 0;
         z.formOrder = this.releaseSeq++;
       }
@@ -2005,7 +2068,7 @@ export class BattleSim {
         // Dropped: it just falls back to the lane and resumes advancing/fighting.
         z.state = "advance";
         z.y = CENTER_Y;
-        z.timerMs = z.cooldownMs;
+        z.timerMs = this.cycleMs(z, null);
         z.stunMs = 0;
         z.formOrder = this.releaseSeq++; // re-enters at the back of the formation
       }
@@ -2036,12 +2099,7 @@ export class BattleSim {
     const opt = weightedPick(opts, this.throwCount, 0x7a20b055);
     if (!opt) return;
     this.throwCount++;
-    this.launchProjectile(
-      target,
-      opt.damage > 0 ? Math.max(1, Math.round(opt.damage * PROJ_DMG_SCALE)) : 0,
-      opt.sprite,
-      opt.spriteSize
-    );
+    this.launchProjectile(target, opt.damage, opt.sprite, opt.spriteSize);
   }
 
   /** Launch a projectile at a target, LEADING its (capped) motion so it connects with
@@ -2085,7 +2143,7 @@ export class BattleSim {
       vy,
       rot: 0,
       rotSpeed: (vx < 0 ? -1 : 1) * 7,
-      damage: damage > 0 ? Math.max(1, Math.round(damage * PROJECTILE_DAMAGE_MULT)) : 0,
+      damage: damage > 0 ? Math.max(1, Math.round(damage)) : 0,
       sprite,
       spriteSize,
       done: false,

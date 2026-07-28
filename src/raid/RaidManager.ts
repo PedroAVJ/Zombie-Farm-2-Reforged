@@ -357,7 +357,12 @@ export class RaidManager {
     // the raid. `party` is already in launch order and filtered to live zombies.
     this.state.raidAttackOrder = party.map((z) => z.id);
 
-    const enemyUnits = buildEnemyUnits(stage, this.assets.enemyStats, this.assets.raidAttacks);
+    // raidId + playerLevel drive the farm raid's enemy speed-up (see buildEnemyUnits).
+    // The server's raidVerifier passes the same pair — keep them in step.
+    const enemyUnits = buildEnemyUnits(stage, this.assets.enemyStats, this.assets.raidAttacks, {
+      raidId: raid.id,
+      playerLevel: this.state.level,
+    });
     const hasBoss = enemyUnits.some((unit) => unit.isBoss);
     const brainDrop = hasBoss
       ? opts.serverAuthorized

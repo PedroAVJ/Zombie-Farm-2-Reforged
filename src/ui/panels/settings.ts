@@ -5,7 +5,7 @@
 import type { Hud } from "../../hud";
 import { openModal } from "../Modal";
 import { APP_VERSION } from "../../version";
-import { getSpriteSet, setSpriteSet, getEdition, setEdition, FARM_BACKGROUNDS } from "../../prefs";
+import { getSpriteSet, setSpriteSet, FARM_BACKGROUNDS } from "../../prefs";
 import { ABILITY_POOL, ABILITY_TIER, TIER_BOSS } from "../../zombie/traits";
 
 // A label + ON/OFF toggle row.
@@ -157,14 +157,6 @@ export function openSettings(hud: Hud): void {
     setSpriteSet(v ? "zf2" : "zf1")
   );
   const spriteNote = noteEl("Original (ZF1) vs sequel (ZF2) art. Art swapping isn't wired yet.");
-
-  // Edition: Reforged (all modern additions — online account, brain gifting) vs
-  // Traditional (the OG single-player experience). Persisted only for now — the
-  // feature gates it will drive aren't wired yet (see prefs.isReforged).
-  const editionRow = row("Reforged", getEdition() === "reforged", (v) =>
-    setEdition(v ? "reforged" : "traditional")
-  );
-  const editionNote = noteEl("Reforged adds brain gifting & online features; Traditional is the OG experience. (Gating not wired yet.)");
 
   // Signed-in players can change the same display name they chose on first login.
   // The server remains the source of truth for normalization and validation.
@@ -322,8 +314,7 @@ export function openSettings(hud: Hud): void {
     ...accountBlock,
     ...ambienceBlock,
     ...bgBlock,
-    spriteRow, spriteNote,
-    editionRow, editionNote
+    spriteRow, spriteNote
   );
   const version = document.createElement("div");
   version.className = "set-version";

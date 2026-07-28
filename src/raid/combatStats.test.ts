@@ -16,6 +16,12 @@ import {
   deriveHitDamage,
   lineupDamageBand,
   LINEUP_DAMAGE_BANDS,
+  lineupSpeedBand,
+  LINEUP_SPEED_BANDS,
+  mirroredAttackIntervalSec,
+  farmRaidEnemyPace,
+  ALIEN_LASER_DAMAGE,
+  BURN_MAX_HP_FRACTION_PER_SEC,
   POWER_PER_STR,
   HP_PER_CON,
 } from "./combatStats";
@@ -202,4 +208,67 @@ describe("pickByFrequency — cumulative arc4random_uniform(Σfreq)", () => {
     }
     expect(common).toBe(90); // exactly the 90% weight band
   });
+});
+
+// ---------------------------------------------------------------------------
+// Attack cadence — ground truth `-[Actor getFightAttackSpeed]` + the two
+// startAnim:interrupt: overrides that schedule doneAttacking: at that interval.
+// These pin the rules that retired the old ENEMY_ATTACK_PACE=2 fudge.
+
+describe("lineupSpeedBand — player-zombie depth SLOWDOWN (getFightAttackSpeed)", () => {
+  it("front band of five keeps the raw clock", () => {
+    expect(LINEUP_SPEED_BANDS[0]).toBe(1);
+    for (let i = 0; i < 5; i++) expect(lineupSpeedBand(i)).toBe(1);
+  });
+  it("stretches the interval in groups of five: ×1.425 / ×2 / ×4", () => {
+    expect(lineupSpeedBand(5)).toBe(1.425);
+    expect(lineupSpeedBand(9)).toBe(1.425);
+    expect(lineupSpeedBand(10)).toBe(2);
+    expect(lineupSpeedBand(15)).toBe(4);
+    expect(lineupSpeedBand(999)).toBe(4); // clamps to the rearmost band
+  });
+  it("bypass (special-attack states) and invalid index → raw clock", () => {
+    expect(lineupSpeedBand(12, true)).toBe(1);
+    expect(lineupSpeedBand(-1)).toBe(1);
+  });
+  it("is the cadence twin of the damage band — same grouping, opposite direction", () => {
+    expect(LINEUP_SPEED_BANDS).toHaveLength(LINEUP_DAMAGE_BANDS.length);
+    // a rear zombie hits softer AND slower
+    expect(lineupDamageBand(15)).toBeLessThan(1);
+    expect(lineupSpeedBand(15)).toBeGreaterThan(1);
+  });
+});
+
+describe("mirroredAttackIntervalSec — the Pirate Scallywag override", () => {
+  it("mirrors the opponent's cycle as opp² / 0.8", () => {
+    expect(mirroredAttackIntervalSec(2)).toBeCloseTo(5); // vs a dex-1 zombie (2 s)
+    expect(mirroredAttackIntervalSec(1)).toBeCloseTo(1.25); // vs a dex-2 zombie (1 s)
+  });
+  it("floors at 0.5 s against very fast zombies", () => {
+    expect(mirroredAttackIntervalSec(2 / 3)).toBeCloseTo(0.5556); // dex 3 → above the floor
+    expect(mirroredAttackIntervalSec(0.4)).toBe(0.5); // dex 5 → clamped
+    expect(mirroredAttackIntervalSec(0)).toBe(0.5);
+  });
+});
+
+describe("farmRaidEnemyPace — Old McDonnell's level ramp (raid 1 only)", () => {
+  it("speeds the farm's enemies up as the player out-levels it", () => {
+    expect(farmRaidEnemyPace(1, 9)).toBe(1);
+    expect(farmRaidEnemyPace(1, 10)).toBe(0.66);
+    expect(farmRaidEnemyPace(1, 14)).toBe(0.66);
+    expect(farmRaidEnemyPace(1, 15)).toBe(0.44);
+    expect(farmRaidEnemyPace(1, 60)).toBe(0.44);
+  });
+  it("leaves every other raid (and an unknown level) alone", () => {
+    expect(farmRaidEnemyPace(2, 40)).toBe(1);
+    expect(farmRaidEnemyPace(9, 50)).toBe(1);
+    expect(farmRaidEnemyPace(1, undefined)).toBe(1);
+    expect(farmRaidEnemyPace(undefined, 40)).toBe(1);
+  });
+});
+
+describe("recovered flat hazard values", () => {
+  it("the alien laser bolt is a hard 200", () => expect(ALIEN_LASER_DAMAGE).toBe(200));
+  it("burning costs 5% of MAX hp per second", () =>
+    expect(BURN_MAX_HP_FRACTION_PER_SEC).toBe(0.05));
 });

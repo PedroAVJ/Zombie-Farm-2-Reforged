@@ -8,7 +8,12 @@ import type { RaidOutcome } from "./types";
 // resurrection, and fight duration. This bump prevents a newer client and an older
 // Worker from accepting a fight under the same identifier and then disagreeing on
 // whether its transcript reached a completed outcome.
-export const RAID_RULESET_VERSION = 7;
+// 8: enemy CADENCE corrected to the disassembled clock — `ENEMY_ATTACK_PACE=2` retired
+// (enemies attack at 1/dex, twice as often as an equal-dex zombie), per-attack
+// `speedMultiplier`, the Scallywag's opponent mirror, the farm raid's level speed-up, the
+// player lineup-depth slowdown band, and ground-truth boss throw / laser / burn /
+// telekinesis values. Every one of those changes the deterministic transcript.
+export const RAID_RULESET_VERSION = 8;
 export const RAID_TICK_MS = 50;
 export const RAID_MAX_TICKS = 4 * 60 * 1000 / RAID_TICK_MS;
 export const RAID_MAX_INPUTS = 512;

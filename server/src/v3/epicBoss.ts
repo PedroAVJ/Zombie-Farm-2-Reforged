@@ -210,7 +210,8 @@ export async function start(
   const boss: CombatUnit = {
     id:`epic:${row.run_id}:${row.level}`,sourceKey:`EpicBoss:${def.id}`,team:"enemy",name:def.name,
     str:def.unitStats.str,dex:def.unitStats.dex,con:def.unitStats.con,focus:0,hp:row.current_hp,maxHp:row.max_hp,
-    attackCooldownMs:deriveAttackIntervalMs(def.unitStats.dex,"enemy")*2,
+    // Raw enemy clock (1/dex); mirrors src/epicBoss/combat.ts — keep the two in step.
+    attackCooldownMs:deriveAttackIntervalMs(def.unitStats.dex,"enemy"),
     attacks:def.unitStats.attacks.map((attack) => ({...attack,mult:attack.mult ?? 1})),isBoss:true,alive:true,isGarden:false,isHeadless:false,
     abilities:[],attackDamageTiming:0.88,
   };

@@ -226,7 +226,9 @@ export async function buildPinnedRaid(
     const idx = pool.indexOf(key);
     return idx >= 0 && idx < Math.min(pool.length, wins.get(tier) ?? 0);
   };
-  const enemyUnits = buildEnemyUnits(stage, enemyStats, attacks);
+  // raidId + playerLevel drive the farm raid's enemy speed-up; the client passes the
+  // same pair in RaidManager.beginRaid — they MUST match or the replay diverges.
+  const enemyUnits = buildEnemyUnits(stage, enemyStats, attacks, { raidId, playerLevel: level });
   return {
     ok: true,
     config: {
@@ -318,7 +320,9 @@ export async function buildPinnedV3Raid(
     const index = pool.indexOf(key);
     return index >= 0 && index < Math.min(pool.length, winsObject[String(tier)] ?? 0);
   };
-  const enemyUnits = buildEnemyUnits(stage, enemyStats, attacks);
+  // raidId + playerLevel drive the farm raid's enemy speed-up; the client passes the
+  // same pair in RaidManager.beginRaid — they MUST match or the replay diverges.
+  const enemyUnits = buildEnemyUnits(stage, enemyStats, attacks, { raidId, playerLevel: level });
   return {
     ok: true,
     config: {

@@ -1,22 +1,14 @@
 // Player-facing preferences persisted in local storage.
 // These are persisted to localStorage and read at the points that care about them.
 //
-// Two toggles live here today, both surfaced in Settings:
+// The sprite toggle is surfaced in Settings:
 //
 //   • Sprite set — "zf1" (original Zombie Farm art) vs "zf2" (the sequel's art
 //     this reimplementation is built from). This is a PLACEHOLDER: the value is
 //     persisted and exposed, but nothing swaps art on it yet. Wiring the ZF1 art
 //     pack in is future work (see README "Current Gaps").
-//
-//   • Edition — "traditional" vs "reforged". "reforged" is the full modern build
-//     (online account, brain gifting, and any other additions layered on top of
-//     the original single-player game); "traditional" is intended to give the OG
-//     experience by hiding those additions. Like the sprite toggle, the choice is
-//     persisted and exposed but NOT yet enforced anywhere — the feature gates it
-//     will drive are future work. isReforged() is the seam those gates read.
 
 export type SpriteSet = "zf1" | "zf2";
-export type Edition = "traditional" | "reforged";
 // How lush the decorative foliage ringing the farm is. All three fill the whole
 // camera view out to the max zoom-out edge; they differ only in tree density.
 export type FarmBackground = "deep-forest" | "woodland" | "light-meadow";
@@ -28,7 +20,6 @@ export function isFarmBackground(value: unknown): value is FarmBackground {
 }
 
 const SPRITE_KEY = "zf2r.spriteSet";
-const EDITION_KEY = "zf2r.edition";
 const FARM_BG_KEY = "zf2r.farmBackground";
 const DAY_NIGHT_KEY = "zf2r.dayNight";
 
@@ -39,15 +30,6 @@ export function getSpriteSet(): SpriteSet {
 
 export function setSpriteSet(set: SpriteSet): void {
   localStorage.setItem(SPRITE_KEY, set);
-}
-
-/** Which edition the player wants. Defaults to Reforged (all features on). */
-export function getEdition(): Edition {
-  return localStorage.getItem(EDITION_KEY) === "traditional" ? "traditional" : "reforged";
-}
-
-export function setEdition(edition: Edition): void {
-  localStorage.setItem(EDITION_KEY, edition);
 }
 
 // Foliage density per background, as a fraction of the base (Deep Forest) tree
@@ -92,10 +74,4 @@ export function setDayNightMode(mode: DayNightMode): void {
 export function isLocalNight(at = new Date()): boolean {
   const hour = at.getHours();
   return hour >= 19 || hour < 7;
-}
-
-/** Convenience gate for the modern additions (brain gifting, online, …). The
- *  feature checks that consume this are not wired yet — see the module note. */
-export function isReforged(): boolean {
-  return getEdition() === "reforged";
 }

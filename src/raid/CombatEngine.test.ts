@@ -242,3 +242,98 @@ describe("buildPlayerUnits — binary-authentic zombie abilities", () => {
     expect(fast.walkingSpeedMult).toBe(2);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Enemy cadence. Ground truth: one attack cycle is exactly getFightAttackSpeed —
+// speedMultiplier × (1/dex) for an enemy — with no animation gate. (This replaced
+// the old ENEMY_ATTACK_PACE=2 fudge, which halved every enemy's sustained DPS.)
+
+describe("buildEnemyUnits — attack cadence", () => {
+  const stats = {
+    Farmhand: { str: 2, dex: 1, con: 3, attacks: [{ name: "poke", frequency: 100 }] },
+    Lumberjack: {
+      str: 1.5,
+      dex: 2,
+      con: 4,
+      attacks: [
+        { name: "slice", frequency: 90 },
+        { name: "special", frequency: 10 },
+      ],
+    },
+    PirateStageActorScallywag: { str: 50, dex: 0.5, con: 40, attacks: [{ name: "poke", frequency: 100 }] },
+  };
+  const attacks = {
+    poke: {},
+    slice: {},
+    special: { damageMultiplier: 1.5, speedMultiplier: 5 },
+  };
+  const build = (key: string, opts = {}) =>
+    buildEnemyUnits({ enemyKeys: [key] }, stats, attacks, opts)[0];
+
+  it("runs on the raw 1/dex clock — twice as often as an equal-dex zombie", () => {
+    expect(build("Farmhand").attackCooldownMs).toBeCloseTo(1000); // 1.0 / dex 1
+    expect(build("Lumberjack").attackCooldownMs / 2).toBeCloseTo(350); // see below
+  });
+
+  it("folds each attack's speedMultiplier in, so a heavy swing is slower AND harder", () => {
+    const lumberjack = build("Lumberjack");
+    // cycle = mean(0.9×1 + 0.1×5) × (1/2 s) = 1.4 × 500 ms
+    expect(lumberjack.attackCooldownMs).toBeCloseTo(700);
+    // damage = str1.5×10 × mean(0.9×1 + 0.1×1.5) = 15 × 1.05
+    expect(lumberjack.attacks[0].mult).toBeCloseTo(1.05);
+    // Sustained DPS matches the real renewal process E[dmg]/E[cycle] = 22.5.
+    const dps = (lumberjack.str * 10 * lumberjack.attacks[0].mult) /
+      (lumberjack.attackCooldownMs / 1000);
+    expect(dps).toBeCloseTo(22.5, 1);
+  });
+
+  it("flags the Scallywag as mirroring its opponent's speed", () => {
+    expect(build("PirateStageActorScallywag").mirrorsOpponentSpeed).toBe(true);
+    expect(build("Farmhand").mirrorsOpponentSpeed).toBe(false);
+  });
+
+  it("speeds Old McDonnell's farm up as the player out-levels it — and only that raid", () => {
+    expect(build("Farmhand", { raidId: 1, playerLevel: 5 }).attackCooldownMs).toBeCloseTo(1000);
+    expect(build("Farmhand", { raidId: 1, playerLevel: 10 }).attackCooldownMs).toBeCloseTo(660);
+    expect(build("Farmhand", { raidId: 1, playerLevel: 15 }).attackCooldownMs).toBeCloseTo(440);
+    expect(build("Farmhand", { raidId: 3, playerLevel: 40 }).attackCooldownMs).toBeCloseTo(1000);
+  });
+});
+
+describe("resolveRaid — recovered cadence rules reach the resolver", () => {
+  // An unkillable, harmless punching bag: the fight runs to the sim cap, so
+  // `playerDamage` is a clean measure of the army's sustained output.
+  const bag = () => mk({ id: "e", team: "enemy", str: 0, hp: 1e9, maxHp: 1e9 });
+  const zombie = (i: number) =>
+    mk({ id: `p${i}`, team: "player", str: 5, hp: 1e9, maxHp: 1e9, attackCooldownMs: 1000 });
+
+  it("a rear zombie's depth band slows it down as well as softening it", () => {
+    const front = resolveRaid(Array.from({ length: 5 }, (_, i) => zombie(i)), [bag()]);
+    const deep = resolveRaid(Array.from({ length: 16 }, (_, i) => zombie(i)), [bag()]);
+    // 16 zombies out-damage 5 — but nowhere near 3.2×, because everything past the
+    // front five hits softer (×0.85/0.7/0.55) AND slower (×1.425/2/4).
+    expect(deep.playerDamage).toBeGreaterThan(front.playerDamage);
+    expect(deep.playerDamage).toBeLessThan(front.playerDamage * 3.2);
+    expect(deep.playerDamage / front.playerDamage).toBeCloseTo(1.97, 1);
+  });
+
+  it("a Scallywag mirrors its opponent instead of using its own dex", () => {
+    // The zombie swings every 2 s and dies to two hits; the enemy's own clock is 2 s.
+    const foe = () => mk({ id: "p", team: "player", str: 5, hp: 1000, maxHp: 1000, attackCooldownMs: 2000 });
+    const enemy = (mirror: boolean) =>
+      mk({
+        id: "e",
+        team: "enemy",
+        str: 50,
+        hp: 1e9,
+        maxHp: 1e9,
+        attackCooldownMs: 2000,
+        mirrorsOpponentSpeed: mirror,
+      });
+    // Mirrored against a 2 s zombie the Scallywag runs at 2²/0.8 = 5 s, not its own
+    // 2 s — so that zombie lives long enough to land far more swings.
+    const vsMirror = resolveRaid([foe()], [enemy(true)]);
+    const vsPlain = resolveRaid([foe()], [enemy(false)]);
+    expect(vsMirror.playerDamage).toBeGreaterThan(vsPlain.playerDamage);
+  });
+});

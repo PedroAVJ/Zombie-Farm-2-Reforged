@@ -170,7 +170,7 @@ describe("Garden healing and formation depth", () => {
     expect(sim.units.find((u) => u.id === "enemy")!.damage).toBe(50);
   });
 
-  it("doubles boss projectile damage", () => {
+  it("throws boss debris for its authored damage, unscaled", () => {
     const player = unit({ id: "player", sourceKey: "ZombieActorRegularTier1", team: "player" });
     const wall = unit({ id: "wall", sourceKey: "FarmStageActorFarmhand", team: "enemy", con: 300 });
     const boss = unit({ id: "boss", sourceKey: "FarmStageActorBoss", team: "enemy", isBoss: true, con: 300 });
@@ -180,7 +180,9 @@ describe("Garden healing and formation depth", () => {
     }, true);
     sim.units.find((u) => u.id === "player")!.state = "advance";
     sim.step(50);
-    expect(sim.projectiles[0]?.damage).toBe(22); // round(raw 6 × chip scale 1.75) × projectile multiplier 2
+    // Ground truth: the bossAction's `damage` reaches `[zombie damage:]` verbatim
+    // (ZFFightPhysics throwProjectile: → setDamageAmount). No chip scaling.
+    expect(sim.projectiles[0]?.damage).toBe(6);
   });
 
   it("preserves explicitly harmless debris at zero damage", () => {
@@ -412,5 +414,76 @@ describe("lasers, resurrection, and activated attacks", () => {
     (sim as any).stepWindup(p, e, 4000);
     expect(e.hp).toBe(10_000);
     expect(sim.activate("explode")).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Enemy damage rate + boss hazards, against the disassembled values.
+// (See combatStats "Attack CADENCE" and enemy-damage ground truth.)
+
+describe("enemy cadence and boss hazard damage (ground truth)", () => {
+  const player = (over: Partial<CombatUnit> = {}) =>
+    unit({ id: "player", sourceKey: "ZombieActorRegularTier1", team: "player", ...over });
+  const enemy = (over: Partial<CombatUnit> = {}) =>
+    unit({ id: "enemy", sourceKey: "FarmStageActorFarmhand", team: "enemy", ...over });
+  /** Put the boss on its holding spot and the zombies out fighting, so the special
+   *  scheduler is live from the first step (it only runs while the boss is engaged). */
+  const onTheLine = (sim: BattleSim) => {
+    for (const u of sim.units) u.state = u.team === "enemy" ? "hold" : "advance";
+  };
+
+  it("an enemy strikes on its raw 1/dex clock — twice per equal-dex zombie swing", () => {
+    // dex 2: zombie cycle 1000 ms, enemy cycle 500 ms (CombatEngine derives these; here
+    // they arrive pre-derived, so assert the sim honours them without a pace multiplier).
+    const p = player({ hp: 1e7, maxHp: 1e7, attackCooldownMs: 1000 });
+    const e = enemy({ str: 10, hp: 1e7, maxHp: 1e7, attackCooldownMs: 500 });
+    const sim = new BattleSim([p], [e], null, true);
+    const zombie = sim.units.find((u) => u.id === "player")!;
+    const foe = sim.units.find((u) => u.id === "enemy")!;
+    for (let i = 0; i < 400; i++) sim.step(50); // 20 s of contact
+    const zombieHits = (zombie.maxHp - zombie.hp) / foe.damage;
+    const enemyHits = (foe.maxHp - foe.hp) / zombie.damage;
+    expect(zombieHits).toBeGreaterThan(enemyHits * 1.8); // ~2× as many enemy swings
+  });
+
+  it("pixelFire sets ONE zombie alight for 5%/s of max HP, not an AoE chip", () => {
+    const a = player({ id: "a", hp: 1e6, maxHp: 1e6 });
+    const b = unit({ id: "b", sourceKey: "ZombieActorRegularTier1", team: "player", hp: 1e6, maxHp: 1e6 });
+    const boss = enemy({ id: "boss", isBoss: true, str: 0, hp: 1e7, maxHp: 1e7 });
+    const sim = new BattleSim([a, b], [boss], null, true, [
+      { name: "pixelFire", weight: 1, castMs: 0, cooldownMs: 1e6, damage: 0 },
+    ]);
+    onTheLine(sim);
+    for (let i = 0; i < 20; i++) sim.step(50); // 1 s: cast + burn
+    const burned = sim.units.filter((u) => u.team === "player" && u.hp < u.maxHp);
+    expect(burned).toHaveLength(1); // single target
+    // ~5 % of max HP per second of burn (the cast lands on the first step).
+    const lost = burned[0].maxHp - burned[0].hp;
+    expect(lost).toBeGreaterThan(burned[0].maxHp * 0.03);
+    expect(lost).toBeLessThan(burned[0].maxHp * 0.06);
+  });
+
+  it("telekinesis knocks back and stuns but deals NO damage", () => {
+    const p = player({ hp: 1e6, maxHp: 1e6 });
+    const boss = enemy({ id: "boss", isBoss: true, str: 0, hp: 1e7, maxHp: 1e7 });
+    const sim = new BattleSim([p], [boss], null, true, [
+      { name: "telekinesis", weight: 1, castMs: 0, cooldownMs: 1e6, damage: 12 },
+    ]);
+    onTheLine(sim);
+    for (let i = 0; i < 4; i++) sim.step(50);
+    const victim = sim.units.find((u) => u.id === "player")!;
+    expect(victim.hp).toBe(victim.maxHp);
+    expect(victim.stunMs).toBeGreaterThan(0);
+  });
+
+  it("the alien laser bolt carries the flat 200 from the binary", () => {
+    const p = player({ hp: 1e6, maxHp: 1e6 });
+    const boss = enemy({ id: "boss", isBoss: true, str: 0, hp: 1e7, maxHp: 1e7 });
+    const sim = new BattleSim([p], [boss], null, true, [
+      { name: "alienLaser", weight: 1, castMs: 0, cooldownMs: 1e6, damage: 0 },
+    ]);
+    onTheLine(sim);
+    for (let i = 0; i < 5 && !sim.projectiles.length; i++) sim.step(50);
+    expect(sim.projectiles[0]?.damage).toBe(200);
   });
 });

@@ -21,8 +21,12 @@ import {
   deriveMaxHp,
   deriveAttackIntervalMs,
   deriveHitDamage,
+  farmRaidEnemyPace,
   lineupDamageBand,
+  lineupSpeedBand,
+  mirroredAttackIntervalSec,
   POWER_PER_STR,
+  SCALLYWAG_KEY,
 } from "./combatStats";
 import type {
   AttackDef,
@@ -31,23 +35,32 @@ import type {
   RaidOutcome,
   RaidStage,
 } from "./types";
-import { ENEMY_ATTACK_PACE } from "./balance";
 
 const STEP_MS = 100; // simulation tick
 const MAX_SIM_MS = 20 * 60 * 1000; // safety cap (min-damage 1 prevents true stalls)
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
-/** Frequency-weighted mean damage multiplier for a unit's attack list. */
-function avgMult(
+/** Frequency-weighted mean of one Attacks.json field over a unit's attack list.
+ *
+ *  The binary rolls a fresh attack every cycle (`Actor setAttackVariation` →
+ *  `rollAgainstFrequencyInArray:`), and the rolled attack sets BOTH that swing's
+ *  `damageMultiplier` and its cycle length (`speedMultiplier`). This resolver is
+ *  deterministic, so it collapses the roll to its expectation — and because the
+ *  long-run DPS of a renewal process is `E[damage] / E[cycle]`, taking the mean of
+ *  each field independently reproduces the real sustained DPS exactly. (For the
+ *  Lumberjack: 0.9×1.0 + 0.1×1.5 damage over 0.9×1 + 0.1×5 cycles = the true 22.5
+ *  dps, where using the mean damage at the base cadence would have said 30.) */
+function avgField(
   attacks: { name: string; frequency: number }[] | undefined,
-  table: Record<string, AttackDef>
+  table: Record<string, AttackDef>,
+  field: "damageMultiplier" | "speedMultiplier"
 ): number {
   if (!attacks || attacks.length === 0) return 1;
   let wsum = 0;
   let fsum = 0;
   for (const a of attacks) {
-    const mult = table[a.name]?.damageMultiplier ?? 1;
+    const mult = table[a.name]?.[field] ?? 1;
     const f = a.frequency || 0;
     wsum += mult * f;
     fsum += f;
@@ -67,7 +80,10 @@ function unit(
   mult: number,
   isBoss: boolean,
   isGarden = false,
-  isHeadless = false
+  isHeadless = false,
+  /** Cycle-length multiplier: the rolled attack's `speedMultiplier` (enemies) times any
+   *  per-raid pace rule. 1 = the raw dex clock. See combatStats "Attack CADENCE". */
+  speedMult = 1
 ): CombatUnit {
   // Ground-truth stat->fight-data derivation (initFightDataAfterLoad):
   //   maxHp = con × 100; attack interval = (2s zombie / 1s enemy) ÷ dex.
@@ -83,8 +99,7 @@ function unit(
     focus,
     hp: maxHp,
     maxHp,
-    attackCooldownMs:
-      deriveAttackIntervalMs(dex, team) * (team === "enemy" ? ENEMY_ATTACK_PACE : 1),
+    attackCooldownMs: deriveAttackIntervalMs(dex, team) * speedMult,
     attacks: [{ name: "", frequency: 1, mult }],
     isBoss,
     alive: true,
@@ -259,13 +274,22 @@ function weightedPopulation(stage: RaidStage): string[] {
 }
 
 /** Build one enemy wave's combat line from a raid stage + stat/attack tables.
- *  Weighted-population waves fall back to filling `population` from the table. */
+ *  Weighted-population waves fall back to filling `population` from the table.
+ *
+ *  `opts` carries the two context-dependent cadence rules recovered from
+ *  `-[Actor getFightAttackSpeed]`; pass BOTH client- and server-side or the
+ *  deterministic replay diverges:
+ *   - `raidId` + `playerLevel` → Old McDonnell's farm speeds its enemies up as you
+ *     out-level it (×0.66 at L10, ×0.44 at L15). No other raid scales.
+ *   - the Scallywag is flagged here and mirrors its opponent at fight time. */
 export function buildEnemyUnits(
   stage: RaidStage,
   stats: Record<string, EnemyStat>,
-  attacks: Record<string, AttackDef>
+  attacks: Record<string, AttackDef>,
+  opts: { raidId?: number; playerLevel?: number } = {}
 ): CombatUnit[] {
   const out: CombatUnit[] = [];
+  const pace = farmRaidEnemyPace(opts.raidId, opts.playerLevel);
   const add = (key: string, boss: boolean) => {
     const st = stats[key];
     if (!st) return;
@@ -278,9 +302,13 @@ export function buildEnemyUnits(
       st.dex ?? 1,
       st.con ?? 1,
       st.focus ?? 0,
-      avgMult(st.attacks, attacks),
-      boss
+      avgField(st.attacks, attacks, "damageMultiplier"),
+      boss,
+      false,
+      false,
+      avgField(st.attacks, attacks, "speedMultiplier") * pace
     );
+    u.mirrorsOpponentSpeed = key === SCALLYWAG_KEY;
     const fx = attackEffects(st.attacks, attacks);
     u.knockBack = fx.knockBack;
     u.stunMs = fx.stunMs;
@@ -314,10 +342,20 @@ export function resolveRaid(
   const p = player.map((u) => ({ ...u, hp: u.maxHp, alive: true }));
   const e = enemy.map((u) => ({ ...u, hp: u.maxHp, alive: true }));
   const cd = new Map<string, number>(); // unit id -> ms until next attack
-  for (const u of [...p, ...e]) cd.set(u.id, u.attackCooldownMs);
-  // Lineup index per player (front = 0) for the depth-damage band. This simple resolver
+  // Lineup index per player (front = 0) for the depth bands. This simple resolver
   // doesn't re-slot on knockback, so the static party order is the lineup.
   const lineup = new Map<string, number>(p.map((u, i) => [u.id, i]));
+  /** A unit's effective cycle in ms: the depth SLOWDOWN band for zombies (ground truth
+   *  `getFightAttackSpeed`), and for a Scallywag the mirror of its current foe's cycle. */
+  const cycleMs = (u: CombatUnit, foe: CombatUnit | null) => {
+    if (u.team === "player") return u.attackCooldownMs * lineupSpeedBand(lineup.get(u.id) ?? 0);
+    if (u.mirrorsOpponentSpeed && foe) {
+      const foeSec = (foe.attackCooldownMs * lineupSpeedBand(lineup.get(foe.id) ?? 0)) / 1000;
+      return mirroredAttackIntervalSec(foeSec) * 1000;
+    }
+    return u.attackCooldownMs;
+  };
+  for (const u of [...p, ...e]) cd.set(u.id, cycleMs(u, null));
 
   const firstAlive = (arr: CombatUnit[]) => arr.find((u) => u.alive) ?? null;
   let rounds = 0;
@@ -332,13 +370,13 @@ export function resolveRaid(
     for (const u of actors) {
       if (!u.alive) continue;
       const foes = u.team === "player" ? e : p;
+      const target = firstAlive(foes);
       const left = (cd.get(u.id) ?? u.attackCooldownMs) - STEP_MS;
       if (left > 0) {
         cd.set(u.id, left);
         continue;
       }
-      cd.set(u.id, u.attackCooldownMs); // reset regardless of a valid target
-      const target = firstAlive(foes);
+      cd.set(u.id, cycleMs(u, target)); // reset regardless of a valid target
       if (!target) continue;
       // Binary `Actor damage:`: flat armor subtracts first, then % reduction.
       const dmg = applyDamage(

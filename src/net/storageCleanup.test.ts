@@ -21,7 +21,6 @@ describe("retired online storage cleanup", () => {
       "zf2r.profiles.v1": "profiles",
       "zf2r.play-mode.v1": "local",
       "zf2r.spriteSet": "zf2",
-      "zf2r.edition": "reforged",
       "zf2r.farmBackground": "classic",
       "zf2r.dayNight": "auto",
       "zf2r.v3.settings": "settings",
@@ -35,7 +34,7 @@ describe("retired online storage cleanup", () => {
 
     purgeRetiredOnlineStorage(storage);
 
-    expect(storage.length).toBe(15);
+    expect(storage.length).toBe(14);
   });
 
   it("removes only known retired online credentials and outboxes", () => {

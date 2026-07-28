@@ -180,6 +180,10 @@ export interface CombatUnit {
   /** Walking-only multiplier. Turbo Walking Speed changes this without changing
    *  DEX or the attack interval. */
   walkingSpeedMult?: number;
+  /** This enemy ignores its own dex clock and MIRRORS its opponent's attack interval
+   *  (`combatStats.mirroredAttackIntervalSec`) — the Pirate Scallywag's override.
+   *  Recomputed against the current foe every time it re-arms. Players: false. */
+  mirrorsOpponentSpeed?: boolean;
 }
 
 /** One item the boss can throw, derived from UnitStats bossActions. */

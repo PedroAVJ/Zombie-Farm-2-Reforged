@@ -132,6 +132,81 @@ export const HP_PER_CON = 100; // hitPointsTotal = con × 100
 export const ATTACK_INTERVAL_SEC = { player: 2.0, enemy: 1.0 } as const;
 
 // ---------------------------------------------------------------------------
+// Attack CADENCE — GROUND TRUTH (`-[Actor getFightAttackSpeed]` 0x368e0, and the two
+// `startAnim:interrupt:` overrides that consume it: `CivilianActorFight` 0x69be0 for
+// enemies, `ZombieActor` 0x45898 for zombies). Pinned 2026-07-27.
+//
+// One attack cycle is EXACTLY `getFightAttackSpeed` seconds. Entering the attack state
+// sets `attacking = YES` and schedules a REPEATING `doneAttacking:` at that interval;
+// the moment `attacking` clears, the fight update re-arms `fightAttack:` with interval 0
+// (i.e. the next frame). The attack ANIMATION does not gate anything — it is started by
+// `fightAttack:` and the swing lands at `interval × damageTiming` inside the same cycle.
+// So the raw fight-data clock IS the cadence, and the 2× player/enemy asymmetry above is
+// real: at equal dex an enemy attacks twice as often as a zombie. (This retires the old
+// `ENEMY_ATTACK_PACE = 2` fudge, which halved every enemy's DPS on a wrong rationale.)
+//
+//   interval = speedMultiplier × (ATTACK_INTERVAL_SEC[side] / dex) × lineupSpeedBand
+//
+// `speedMultiplier` comes from the attack rolled for THIS cycle (Attacks.json, default
+// 1.0), so a heavy attack is both harder and slower — e.g. LumberjackSpecial is ×1.5
+// damage on a ×5 cycle, ZombieDoubleStrike ×0.25 damage on a ×0.2 cycle.
+
+/** Player-zombie lineup-depth SLOWDOWN bands — the cadence twin of LINEUP_DAMAGE_BANDS.
+ *  Binary (0x36aae–0x36b4c): after `interval = speedMultiplier × finalAttackSpeed`, a
+ *  player zombie's interval is multiplied by band[min(floor(index/5), 3)], so zombies
+ *  behind the front five swing progressively slower as well as softer. Gated exactly
+ *  like the damage band: only for units in `[fightMan zombies]`, skipped when
+ *  `state ∈ {0x20, 0x1c}` and when `floor(index/5) == 0`. ENEMIES never pass through it. */
+export const LINEUP_SPEED_BANDS = [1.0, 1.425, 2.0, 4.0] as const;
+
+/** Interval multiplier for a player zombie at `index` in the army lineup (front = 0).
+ *  1.0 for the front five, then ×1.425 / ×2 / ×4 per group of five. `bypass` (the
+ *  special-attack states) or a negative/absent index → 1.0. GROUND TRUTH, see above. */
+export function lineupSpeedBand(index: number, bypass = false): number {
+  if (bypass || !(index >= 0)) return 1;
+  const band = Math.floor(index / 5);
+  return LINEUP_SPEED_BANDS[Math.min(band, LINEUP_SPEED_BANDS.length - 1)];
+}
+
+/** The Pirate Scallywag's attack-speed override (binary: `getFightAttackSpeed` 0x36960,
+ *  reached via `isKindOfClass: PirateStageActorScallywag`). It throws away its own dex
+ *  clock and MIRRORS the zombie it is facing:
+ *
+ *    finalAttackSpeed = max(0.5, opponentInterval² / 0.8)
+ *
+ *  The square is almost certainly a source bug (the same opponent value is fetched twice
+ *  and multiplied), but it is what ships: against a fast zombie the Scallywag is fast,
+ *  against a slow one it is very slow. `opponentIntervalSec` is the opponent's CURRENT
+ *  effective interval in seconds. This is why a Scallywag reads as "swings every ~4 s"
+ *  in reference footage while every other enemy runs at the raw 1/dex clock. */
+export const SCALLYWAG_KEY = "PirateStageActorScallywag";
+export function mirroredAttackIntervalSec(opponentIntervalSec: number): number {
+  return Math.max(0.5, (opponentIntervalSec * opponentIntervalSec) / 0.8);
+}
+
+/** Old McDonnell's Farm (raid 1) enemy speed-up — GROUND TRUTH (`getFightAttackSpeed`
+ *  tail, 0x36b8e–0x36be6). When `zfGameData.currentEnemy == 1` the interval of every
+ *  NON-zombie actor is multiplied by 0.66 at player level ≥ 10 and 0.44 at ≥ 15, so the
+ *  starter raid keeps biting as you out-level it. No other raid does this. */
+export const FARM_RAID_ID = 1;
+export function farmRaidEnemyPace(raidId: number | undefined, playerLevel: number | undefined): number {
+  if (raidId !== FARM_RAID_ID || playerLevel == null) return 1;
+  if (playerLevel >= 15) return 0.44;
+  if (playerLevel >= 10) return 0.66;
+  return 1;
+}
+
+/** Burn damage per second while a zombie is on fire (boss `pixelFire` → `setOnFire`).
+ *  Binary (`ZombieActor fightUpdate:` 0x4dedc): `damage: hitPointsTotal / 20 × dt`
+ *  every frame, i.e. 5 % of MAX HP per second, routed through the normal `damage:`
+ *  path (so armor / DR / the one-shot floor all apply). */
+export const BURN_MAX_HP_FRACTION_PER_SEC = 0.05;
+
+/** Flat damage of the Alien boss's laser bolt (`AlienStageBullet collidedWith:`,
+ *  immediate 0x43480000 = 200.0f). Not a stat-derived value — a hard constant. */
+export const ALIEN_LASER_DAMAGE = 200;
+
+// ---------------------------------------------------------------------------
 // Lineup-depth damage falloff — GROUND TRUTH (`-[Actor damageIn:]` 0x372bc–0x37348, pinned
 // 2026-07-17). A player zombie's per-swing damage is scaled by its INDEX in the army lineup
 // (`[fightMan zombies] indexOfObject: self`), in groups of 5: only the front five hit at full

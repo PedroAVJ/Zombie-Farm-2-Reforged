@@ -283,7 +283,7 @@ export const OBJECTS: Readonly<Record<string, ObjectEcon>> = {
   "witchsCauldron": { cost: 0, brains: false, xp: 0, level: -1 },
   "yellowGift": { cost: 0, brains: false, xp: 0, level: -1 },
   "zenGarden": { cost: 2, brains: true, xp: 300, level: 44 },
-  "zombieCombiner": { cost: 500, brains: false, xp: 500, level: 3, purchaseLimit: 3 },
+  "zombieCombiner": { cost: 500, brains: false, xp: 5, level: 3, purchaseLimit: 3 },
   "zombieGift": { cost: 5, brains: true, xp: 0, level: -1 },
   "zombieTopiaryNormal": { cost: 1750, brains: false, xp: 18, level: 15 },
   "zombieXingSign": { cost: 1, brains: true, xp: 500, level: 15 },

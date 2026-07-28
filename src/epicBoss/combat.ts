@@ -1,6 +1,5 @@
 import type { GameAssets } from "../assets";
 import { deriveAttackIntervalMs } from "../raid/combatStats";
-import { ENEMY_ATTACK_PACE } from "../raid/balance";
 import { buildPlayerUnits } from "../raid/CombatEngine";
 import type { CombatUnit, RaidDef } from "../raid/types";
 import type { GameState } from "../GameState";
@@ -39,7 +38,10 @@ export function buildEpicBossSetup(
     focus: 0,
     hp: run.currentHp,
     maxHp: run.maxHp,
-    attackCooldownMs: deriveAttackIntervalMs(def.unitStats.dex, "enemy") * ENEMY_ATTACK_PACE,
+    // Raw enemy clock (1/dex) — an epic boss is an ordinary fight-scene enemy, so it
+    // uses the same recovered cadence as every other one. MUST stay identical to
+    // server/src/v3/epicBoss.ts or the authoritative replay diverges.
+    attackCooldownMs: deriveAttackIntervalMs(def.unitStats.dex, "enemy"),
     attacks: def.unitStats.attacks.map((attack) => ({ ...attack, mult: attack.mult ?? 1 })),
     isBoss: true,
     alive: true,

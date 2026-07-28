@@ -62,6 +62,7 @@ describe("planObjectBuy — exact price + xp", () => {
   it("debits the right currency and computes buy xp", () => {
     expect(planObjectBuy(objectEcon("daisy"), bal(100, 0), 0, MAX_LEVEL)).toEqual({ ok: true, currency: "gold", cost: 10, xp: 0 });
     expect(planObjectBuy(objectEcon("skeletonCouple"), bal(0, 100), 0, MAX_LEVEL)).toEqual({ ok: true, currency: "brains", cost: 3, xp: 300 });
+    expect(planObjectBuy(objectEcon("zombieCombiner"), bal(1000, 0), 0, MAX_LEVEL)).toEqual({ ok: true, currency: "gold", cost: 500, xp: 5 });
   });
   it("rejects unknown, unaffordable, and free/promo (not purchasable) objects", () => {
     expect(planObjectBuy(objectEcon("nope"), bal(), 0, MAX_LEVEL)).toMatchObject({ ok: false, error: "bad_item" });

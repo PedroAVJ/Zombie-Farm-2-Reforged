@@ -663,7 +663,7 @@ describe("protocol v3 command engine", () => {
     expect(bought.state.zombiePotBought).toBe(true);
     expect(bought.state.balance.gold).toBe(500);
     expect(bought.state.balance.brains).toBe(97); // 3 spent on the repeat pot; leveling grants no brains
-    expect(bought.state.balance.xp).toBe(815); // +500 gold-buy XP, then 3 brains * 80
+    expect(bought.state.balance.xp).toBe(320); // +5 gold-buy XP, then 3 brains * 80
     expect(bought.state.objects.objects).toEqual(expect.arrayContaining([
       expect.objectContaining({ instanceId: "pot-1", catalogKey: "zombieCombiner", purchaseCost: 500, purchaseCurrency: "gold" }),
       expect.objectContaining({ instanceId: "pot-2", catalogKey: "zombieCombiner", purchaseCost: 3, purchaseCurrency: "brains" }),
