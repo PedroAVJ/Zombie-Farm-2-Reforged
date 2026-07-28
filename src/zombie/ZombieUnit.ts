@@ -96,8 +96,6 @@ export class ZombieUnit {
   private hitH = 60;
   private fertilizeCastMs = 0;
   private fertilizeCloud = new Graphics();
-  private drool: Graphics | null = null;
-  private droolPhase = Math.random() * Math.PI * 2;
   private invasionBubble!: Sprite;
   private specialHeadFx: SpecialHeadFx | null = null;
 
@@ -257,15 +255,6 @@ export class ZombieUnit {
     this.fertilizeCloud.zIndex = 25;
     this.fertilizeCloud.visible = false;
     this.root.addChild(this.fertilizeCloud);
-
-    if (this.data.group === "Large" && this.data.key !== "ZombieActorLargeTier1") {
-      this.drool = new Graphics()
-        .roundRect(-1.5, 0, 3, 13, 1.5).fill({ color: 0x8fe875, alpha: 0.72 })
-        .circle(0, 14, 2.5).fill({ color: 0x8fe875, alpha: 0.8 });
-      this.drool.position.set(this.neck.x - 8, this.neck.y + 15);
-      this.drool.zIndex = 22;
-      this.root.addChild(this.drool);
-    }
   }
 
   // Attach crop-mutation parts for this unit's mutation mask. Each bit maps to a
@@ -427,7 +416,7 @@ export class ZombieUnit {
     this.applyArmPose();
   }
 
-  private updateFarmEffects(dt: number) {
+  private updateFarmEffects() {
     if (this.fertilizeCloud.visible) {
       const progress = 1 - this.fertilizeCastMs / FERTILIZE_CAST_MS;
       this.fertilizeCloud.alpha = Math.sin(Math.min(1, progress) * Math.PI);
@@ -435,12 +424,6 @@ export class ZombieUnit {
       this.fertilizeCloud.scale.set(scale);
       this.fertilizeCloud.y = -23 - progress * 13;
       if (this.fertilizeCastMs <= 0) this.fertilizeCloud.visible = false;
-    }
-    if (this.drool) {
-      this.droolPhase = (this.droolPhase + dt * 1.8) % (Math.PI * 2);
-      const stretch = 0.72 + (Math.sin(this.droolPhase) + 1) * 0.28;
-      this.drool.scale.y = stretch;
-      this.drool.alpha = 0.58 + (Math.sin(this.droolPhase) + 1) * 0.16;
     }
   }
 
@@ -494,7 +477,7 @@ export class ZombieUnit {
     this.tilt(dt, walking);
     this.legs(walking, dt);
     this.poseArms(walking, dt);
-    this.updateFarmEffects(dt);
+    this.updateFarmEffects();
     this.specialHeadFx?.update(dt);
     this.root.scale.set(this.renderScale * this.facing, this.renderScale);
     this.syncInvasionBubble();
