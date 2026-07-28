@@ -1,8 +1,13 @@
 // Helpers for the integration suite. These drive the real `wrangler dev` Worker
 // (booted by globalSetup) over HTTP. Tests isolate by using UNIQUE account ids —
 // the database is shared across the run, so never reuse a devSub between tests.
+import { CLIENT_INTEGRITY_VERSION } from "../../../src/net/protocol";
+
 const BASE = process.env.IT_BASE ?? "http://127.0.0.1:8799";
 const writerByToken = new Map<string, { clientId: string; generation: number; token: string }>();
+export const currentIntegrityHeaders = {
+  "x-integrity-version": String(CLIENT_INTEGRITY_VERSION),
+};
 
 let counter = 0;
 /** A unique devSub so each signed-in account is isolated from other tests. */
@@ -29,7 +34,10 @@ export async function call<T = unknown>(
   body?: unknown,
   extraHeaders: Record<string, string> = {}
 ): Promise<ApiResponse<T>> {
-  const headers: Record<string, string> = { "content-type": "application/json", "x-integrity-version": "4" };
+  const headers: Record<string, string> = {
+    "content-type": "application/json",
+    ...currentIntegrityHeaders,
+  };
   if (token) {
     headers["authorization"] = `Bearer ${token}`;
     const writer = writerByToken.get(token);

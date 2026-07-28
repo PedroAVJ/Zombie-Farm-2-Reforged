@@ -12,6 +12,7 @@ const operation = (prefix: string) => `${prefix}-${crypto.randomUUID()}`;
 describe("Black Market", () => {
   it("allows 10 concurrent posts and explains the active limit on the 11th", async () => {
     const poster = await signIn(uniqueSub("market-active-limit"));
+    await grantBalance(poster, { brains: 20 });
     const initial = await bootstrap(poster);
     let expectedAccountVersion = initial.accountVersion;
 
@@ -173,6 +174,7 @@ describe("Black Market", () => {
   it("escrows and atomically fulfills a zombie sale", async () => {
     const seller = await signIn(uniqueSub("market-seller"));
     const buyer = await signIn(uniqueSub("market-buyer"));
+    await grantBalance(buyer, { brains: 5 });
     const unitId = `market-unit-${crypto.randomUUID()}`;
     await grantRoster(seller, [{ id: unitId, key: "ZombieActorRegularTier1", mutation: 4, invasions: 3 }]);
 
@@ -234,6 +236,7 @@ describe("Black Market", () => {
 
   it("refunds a cancelled brain request and does not refund the daily post count", async () => {
     const requester = await signIn(uniqueSub("market-requester"));
+    await grantBalance(requester, { brains: 7 });
     const before = await bootstrap(requester);
     const operationId = operation("request");
     const created = await call<any>("POST", "/black-market/orders", requester.token, {
@@ -256,6 +259,7 @@ describe("Black Market", () => {
   it("allows multiple requested mutations and ORs alternatives in the same slot", async () => {
     const requester = await signIn(uniqueSub("market-specific-requester"));
     const seller = await signIn(uniqueSub("market-specific-seller"));
+    await grantBalance(requester, { brains: 2 });
     const wrongId = `market-wrong-mutation-${crypto.randomUUID()}`;
     const matchingId = `market-matching-mutation-${crypto.randomUUID()}`;
     await grantRoster(seller, [
@@ -341,6 +345,10 @@ describe("Black Market", () => {
     const seller = await signIn(uniqueSub("market-race-seller"));
     const buyerA = await signIn(uniqueSub("market-race-a"));
     const buyerB = await signIn(uniqueSub("market-race-b"));
+    await Promise.all([
+      grantBalance(buyerA, { brains: 3 }),
+      grantBalance(buyerB, { brains: 3 }),
+    ]);
     const unitId = `market-race-unit-${crypto.randomUUID()}`;
     await grantRoster(seller, [{ id: unitId, key: "ZombieActorRegularTier1" }]);
     const sellerState = await bootstrap(seller);

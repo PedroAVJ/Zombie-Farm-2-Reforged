@@ -180,7 +180,9 @@ describe("protocol v3 command engine", () => {
     expect(result.state.farm.plots["15:12"]).toMatchObject({
       state: "planted", cropKey: "ZombieActorRegularTier1", zombie: true,
     });
-    expect(result.state.balance).toMatchObject({ gold: 355, brains: 1 });
+    // The free-placed plot costs 45 gold, and buying Insta-Grow consumes the
+    // fresh account's one starter brain.
+    expect(result.state.balance).toMatchObject({ gold: 355, brains: 0 });
   });
 
   it("rejects a new free-placed plot whose footprint overlaps another plot", () => {

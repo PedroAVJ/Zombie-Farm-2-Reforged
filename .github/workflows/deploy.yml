@@ -1,13 +1,14 @@
 name: Deploy to GitHub Pages
 
-# On every push to main, build the Vite app and publish the built dist/ to the
-# gh-pages branch, which GitHub Pages serves. Uses the built-in GITHUB_TOKEN, so
-# no personal access token or repo secret is needed.
+# After the full CI workflow succeeds on main, build the Vite app and publish the
+# triggering commit's dist/ to the gh-pages branch. A separate push-triggered
+# deploy used to race CI and could publish while the server suite was red.
 
 on:
-  push:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
     branches: [main]
-  workflow_dispatch:
 
 permissions:
   contents: write
@@ -19,9 +20,15 @@ concurrency:
 
 jobs:
   build-and-deploy:
+    # A completed-but-failed/cancelled CI run still triggers workflow_run; only a
+    # successful full client + server run may reach production.
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Deploy exactly the commit CI validated, not a newer moving main.
+          ref: ${{ github.event.workflow_run.head_sha }}
       - uses: actions/setup-node@v4
         with:
           node-version: 20

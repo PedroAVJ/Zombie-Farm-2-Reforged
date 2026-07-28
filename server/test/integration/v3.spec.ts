@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { befriend, call, grantBalance, signIn, uniqueSub } from "./helpers";
+import {
+  befriend, call, currentIntegrityHeaders, grantBalance, signIn, uniqueSub,
+} from "./helpers";
 
 const deviceA = "device-aaaaaaaa";
 const commandBody = (
@@ -117,20 +119,20 @@ describe("protocol v3 API", () => {
     const clientB = "writer-client-bbbbbbbb";
     const tokenA = "a".repeat(64);
     const tokenB = "b".repeat(64);
-    const v4 = { "x-integrity-version": "4" };
+    const currentIntegrity = currentIntegrityHeaders;
     const credential = (clientId: string, generation: number, token: string) => ({
-      ...v4,
+      ...currentIntegrity,
       "x-writer-client": clientId,
       "x-writer-generation": String(generation),
       "x-writer-token": token,
     });
 
-    const initial = await call<any>("POST", "/bootstrap", session.token, {}, v4);
+    const initial = await call<any>("POST", "/bootstrap", session.token, {}, currentIntegrity);
     expect(initial.status, JSON.stringify(initial.body)).toBe(200);
     expect(initial.body.writer).toMatchObject({ status: "free", generation: 0 });
     const acquired = await call<any>("POST", "/writer/acquire", session.token, {
       clientId: clientA, token: tokenA, observedGeneration: 0, takeover: false,
-    }, v4);
+    }, currentIntegrity);
     expect(acquired.status).toBe(200);
     const aHeaders = credential(clientA, acquired.body.writerGeneration, tokenA);
     const ownedA = await call<any>("POST", "/bootstrap", session.token, {}, aHeaders);
@@ -149,15 +151,15 @@ describe("protocol v3 API", () => {
     expect(legacyTakeover.status).toBe(400);
     expect(legacyTakeover.body.error).toBe("bad_writer_command");
 
-    const observedB = await call<any>("POST", "/bootstrap", session.token, {}, v4);
+    const observedB = await call<any>("POST", "/bootstrap", session.token, {}, currentIntegrity);
     expect(observedB.body.writer.status).toBe("other");
     const refused = await call<any>("POST", "/writer/acquire", session.token, {
       clientId: clientB, token: tokenB, observedGeneration: observedB.body.writer.generation, takeover: false,
-    }, v4);
+    }, currentIntegrity);
     expect(refused.status).toBe(423);
     const takeover = await call<any>("POST", "/writer/acquire", session.token, {
       clientId: clientB, token: tokenB, observedGeneration: observedB.body.writer.generation, takeover: true,
-    }, v4);
+    }, currentIntegrity);
     expect(takeover.status).toBe(200);
     const bHeaders = credential(clientB, takeover.body.writerGeneration, tokenB);
 
@@ -189,7 +191,7 @@ describe("protocol v3 API", () => {
     const originalToken = "r".repeat(64);
     const replacementToken = "s".repeat(64);
     const headers = (token: string, generation: number) => ({
-      "x-integrity-version": "4",
+      ...currentIntegrityHeaders,
       "x-writer-client": clientId,
       "x-writer-generation": String(generation),
       "x-writer-token": token,
