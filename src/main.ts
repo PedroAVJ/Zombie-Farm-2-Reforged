@@ -66,7 +66,7 @@ import { epicZombieRewardNotes, visibleEpicBosses } from "./epicBoss/market";
 import { dropsEpicBossToken, EPIC_BOSS_FIGHT_BRAIN_COST } from "./epicBoss/tokens";
 import { offerFullscreenPrompt } from "./ui/panels/fullscreenPrompt";
 import {
-  choosePlayMode, clearPreferredPlayMode, setPreferredPlayMode, showOnlineUnavailable,
+  choosePlayMode, setPreferredPlayMode, showOnlineUnavailable,
   showLocalUnavailable, usesOnlineGameplay, type PlayMode,
 } from "./playMode";
 
@@ -2038,11 +2038,11 @@ async function main() {
   } : null;
   hud.onRenameProfile = playMode === "local" ? (id, name) => profiles.renameProfile(id, name) : null;
   hud.onDeleteProfile = playMode === "local" ? (id) => profiles.deleteProfile(id) : null;
-  hud.onSwitchFarm = () => {
+  hud.onSwitchFarm = (destination) => {
     saveManager.flush();
     void economy?.flush().catch(() => {});
     saveManager.suspend();
-    clearPreferredPlayMode();
+    setPreferredPlayMode(destination);
     location.reload();
   };
   hud.onExportLocal = playMode === "local" ? () => {
@@ -3376,6 +3376,7 @@ async function main() {
           // Tap the Zombie Patch: call all zombies to nap, or wake them.
           const napping = zombies.toggleGather(field.patchRestTiles());
           const wp = field.objectWorkPoint(objId);
+          saveManager.flushCritical();
           if (wp) floatText(wp.x, wp.y - 24, napping ? "Zzz…" : "Awake!");
         } else if (objId && objDef && objDef.zombiePot) {
           activePotId = objId;

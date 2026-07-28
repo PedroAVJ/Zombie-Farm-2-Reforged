@@ -2,6 +2,14 @@ export type PlayMode = "local" | "online";
 
 const MODE_KEY = "zf2r.play-mode.v1";
 
+export function otherPlayMode(mode: PlayMode): PlayMode {
+  return mode === "local" ? "online" : "local";
+}
+
+export function playModeDestinationLabel(mode: PlayMode): string {
+  return mode === "local" ? "Go to Online Farm" : "Go to Local Farm";
+}
+
 /** The selected farm—not a retained auth session—owns the gameplay boundary. */
 export function usesOnlineGameplay(mode: PlayMode): boolean {
   return mode === "online";

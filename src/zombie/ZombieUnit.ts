@@ -250,9 +250,9 @@ export class ZombieUnit {
 
   private buildFarmEffects() {
     this.fertilizeCloud
-      .circle(-10, 0, 9).fill({ color: 0x70c94b, alpha: 0.34 })
-      .circle(0, -4, 12).fill({ color: 0x91db58, alpha: 0.3 })
-      .circle(12, 1, 8).fill({ color: 0x55a93c, alpha: 0.3 });
+      .circle(-11, 0, 10).fill({ color: 0x5aaa3f, alpha: 0.38 })
+      .circle(0, -4, 13.5).fill({ color: 0x75c649, alpha: 0.34 })
+      .circle(13, 1, 9).fill({ color: 0x438d32, alpha: 0.34 });
     this.fertilizeCloud.position.set(6, -23);
     this.fertilizeCloud.zIndex = 25;
     this.fertilizeCloud.visible = false;

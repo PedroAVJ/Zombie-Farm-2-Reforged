@@ -26,7 +26,11 @@ export type FarmLoadResult =
 
 type PresentationData = {
   player?: { name?: string; farmer?: { col: number; row: number }; farmerAppearance?: SaveGame["player"]["farmerAppearance"] };
-  farm?: { climate?: string; background?: SaveGame["farm"]["background"] };
+  farm?: {
+    climate?: string;
+    background?: SaveGame["farm"]["background"];
+    zombiePatchGathered?: boolean;
+  };
   objectLayout?: { id: string; key?: string; oc: number; or: number; rotation?: number }[];
   rosterLayout?: { id: string; name?: string; pos?: { col: number; row: number }; stored?: boolean; color?: [number, number, number] }[];
   zombiePot?: SaveGame["zombiePot"];
@@ -123,6 +127,7 @@ export class SaveManager {
         background: getFarmBackground(),
         ownedClimates: this.state.ownedClimates,
         plots: this.field.serialize(),
+        zombiePatchGathered: this.zombies.isGathered,
       },
       objects: this.field.serializeObjects(),
       ownedZombies: this.zombies.serialize(),
@@ -148,7 +153,11 @@ export class SaveManager {
           bodyId: blob.player.farmerAppearance?.bodyId,
         },
       },
-      farm: { climate: blob.farm.climate, background: blob.farm.background },
+      farm: {
+        climate: blob.farm.climate,
+        background: blob.farm.background,
+        zombiePatchGathered: blob.farm.zombiePatchGathered,
+      },
       // The free starter shed is presentation-only, so its key must travel with
       // its layout or it cannot be reconstructed after a signed-in refresh.
       objectLayout: (blob.objects ?? []).map((o) => ({ id: o.id,
@@ -391,7 +400,8 @@ export class SaveManager {
       },
       farm: { fieldId: "default", w: boot.gameplay.farmSize, h: boot.gameplay.farmSize,
         climate: p.farm?.climate ?? "grass", background: p.farm?.background,
-        ownedClimates: boot.gameplay.climates, plots },
+        ownedClimates: boot.gameplay.climates, plots,
+        zombiePatchGathered: p.farm?.zombiePatchGathered },
       objects,
       ownedZombies: roster,
       zombiePots: Object.keys(pots).length ? pots : undefined,
@@ -480,6 +490,7 @@ export class SaveManager {
     }));
     this.field.restoreObjects(objects, (key) => this.placeCatalog.get(key));
     this.zombies.restore(data.ownedZombies ?? []);
+    this.zombies.restoreGathered(data.farm.zombiePatchGathered, this.field.patchRestTiles());
     this.zombies.restorePots(data.zombiePots, data.zombiePot);
     const epicRun = this.state.epicBossRun;
     const epicDef = epicBossById(epicRun?.bossId);

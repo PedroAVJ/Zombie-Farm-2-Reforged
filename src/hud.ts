@@ -26,7 +26,7 @@ import { classTierRank } from "./zombie/taxonomy";
 import { BASE } from "./base";
 import { compareCropMarketOrder } from "./marketOrder";
 import { fillPartySelection, orderPartyRoster } from "./raid/partySelection";
-import type { PlayMode } from "./playMode";
+import { otherPlayMode, playModeDestinationLabel, type PlayMode } from "./playMode";
 import type {
   BlackMarketListResponse, BlackMarketMutationResponse, BlackMarketOrderKind,
   BlackMarketOrderView,
@@ -1173,9 +1173,9 @@ export class Hud {
   onRenameProfile: ((id: string, name: string) => void) | null = null;
   /** Delete a non-active profile and its save (no reload). */
   onDeleteProfile: ((id: string) => void) | null = null;
-  /** Current independent farm mode and deliberate return to the mode selector. */
+  /** Current independent farm mode and direct switch to the other farm. */
   playMode: PlayMode = "local";
-  onSwitchFarm: (() => void) | null = null;
+  onSwitchFarm: ((mode: PlayMode) => void) | null = null;
   onExportLocal: (() => void) | null = null;
   onImportLocal: ((raw: string) => boolean) | null = null;
   onResetLocal: (() => void) | null = null;
@@ -2234,10 +2234,11 @@ export class Hud {
     switchActions.className = "zbtns";
     const switchFarm = document.createElement("button");
     switchFarm.className = "zbtn locate";
-    switchFarm.textContent = "Choose Local / Online";
+    const destination = otherPlayMode(this.playMode);
+    switchFarm.textContent = playModeDestinationLabel(this.playMode);
     switchFarm.onclick = () => {
       close();
-      this.onSwitchFarm?.();
+      this.onSwitchFarm?.(destination);
     };
     switchActions.appendChild(switchFarm);
     panel.appendChild(switchActions);

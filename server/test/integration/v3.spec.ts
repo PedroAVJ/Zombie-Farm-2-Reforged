@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   befriend, call, currentIntegrityHeaders, grantBalance, grantRoster, signIn, uniqueSub,
 } from "./helpers";
+import { RAID_RULESET_VERSION } from "../../../src/raid/replay";
 
 const deviceA = "device-aaaaaaaa";
 const commandBody = (
@@ -434,11 +435,11 @@ describe("protocol v3 API", () => {
     const stale = await call<any>("POST", "/raid/start", session.token, {
       raidId: 1, orderedUnitIds: [unitId], rulesetVersion: 2,
     });
-    expect(stale).toMatchObject({ status: 426, body: { error: "stale_ruleset", rulesetVersion: 7 } });
+    expect(stale).toMatchObject({ status: 426, body: { error: "stale_ruleset", rulesetVersion: RAID_RULESET_VERSION } });
     const started = await call<any>("POST", "/raid/start", session.token, {
       raidId: 1,
       orderedUnitIds: [unitId],
-      rulesetVersion: 7,
+      rulesetVersion: RAID_RULESET_VERSION,
     });
     expect(started.status, JSON.stringify(started.body)).toBe(200);
 
@@ -457,7 +458,7 @@ describe("protocol v3 API", () => {
     const next = await call<any>("POST", "/raid/start", session.token, {
       raidId: 1,
       orderedUnitIds: [unitId],
-      rulesetVersion: 7,
+      rulesetVersion: RAID_RULESET_VERSION,
     });
     expect(next.status).toBe(429);
     expect(next.body.error).toBe("cooldown");
@@ -486,7 +487,7 @@ describe("protocol v3 API", () => {
     const raid = {
       raidId: 1,
       orderedUnitIds: ["voucher-raid-zombie"],
-      rulesetVersion: 7,
+      rulesetVersion: RAID_RULESET_VERSION,
     };
     const first = await call<any>("POST", "/raid/start", session.token, raid);
     expect(first.status, JSON.stringify(first.body)).toBe(200);
@@ -567,7 +568,7 @@ describe("raid finish — clientWin concession", () => {
       ]));
     const unitId = grown.body.createdZombieIds[0];
     const started = await call<any>("POST", "/raid/start", session.token, {
-      raidId: 1, orderedUnitIds: [unitId], rulesetVersion: 7,
+      raidId: 1, orderedUnitIds: [unitId], rulesetVersion: RAID_RULESET_VERSION,
     });
     return { session, sessionId: started.body.sessionId, unitId };
   };

@@ -66,12 +66,18 @@ the recovered **1.0/0.85/0.7/0.55 lineup-depth band** (`lineupDamageBand`, used 
 `CombatEngine.hitDamage` + `BattleSim`) and enemies always hit at **band ×1.0**. The old
 `ENEMY_DAMAGE_MULT=2` per-hit enemy inflation is **gone**, and the anti-one-shot 1-HP floor is now
 implemented (`BattleSim.ONE_SHOT_FLOOR` — note it fires **once per unit**, gated on
-`oneShotProtectionUsed` and requiring `hp > 1`, not on every hit). The remaining deliberate knobs
-in `balance.ts` are `ENEMY_ATTACK_PACE=2`, `PROJECTILE_DAMAGE_MULT=2`, and
-`BOSS_SPECIAL_DAMAGE_MULT=2`. On the first: the disassembled enemy clock is `1/dex`, but because the sim
-doesn't model attack-animation time, enemy cadence is kept at `2/dex` to match reference footage
-(a Pirate brute at dex 0.5 hitting ~every 4 s). Per-hit enemy damage is faithful (×1.0); only the
-tempo is fudged.
+`oneShotProtectionUsed` and requiring `hp > 1`, not on every hit).
+
+**✓ CADENCE CORRECTION (2026-07-27) — `balance.ts` is gone.** The three knobs that lived there
+(`ENEMY_ATTACK_PACE=2`, `PROJECTILE_DAMAGE_MULT=2`, `BOSS_SPECIAL_DAMAGE_MULT=2`) were all wrong
+and have been replaced with disassembled values; see `ENEMY_DAMAGE_RECOVERED.md` for the full
+write-up. Headline: **one attack cycle is exactly `getFightAttackSpeed`** — entering the attack
+state schedules a *repeating* `doneAttacking:` at that interval (`CivilianActorFight
+startAnim:interrupt:` 0x69be0 for enemies, `ZombieActor` 0x45898 for zombies) and the fight update
+re-arms `fightAttack:` the frame `attacking` clears. The animation gates nothing, so the raw
+`1/dex` enemy clock IS the cadence and `ENEMY_ATTACK_PACE=2` was halving every enemy's DPS. The
+"Pirate brute swings every ~4 s" footage that justified it is the **Scallywag's** opponent-mirroring
+override (`max(0.5, oppInterval²/0.8)`), not a global pace.
 
 **Still NOT recovered (the large stateful sim — decompiler territory):** the battle loop itself —
 target selection, melee-range/lineup/priority, attack scheduling/timing, boss-action scheduling,

@@ -1216,7 +1216,7 @@ app.get("/friends/:id/save", async (c) => {
   const boot = await v3.bootstrap(c.env.DB, target, Date.now(), false, minProtocolVersion(c.env));
   const targetAccount = await db.accountById(c.env.DB, target);
   const p = boot.presentation.data as {
-    farm?: { climate?: string; background?: string };
+    farm?: { climate?: string; background?: string; zombiePatchGathered?: boolean };
     objectLayout?: { id: string; key?: string; oc: number; or: number; rotation?: number }[];
     rosterLayout?: { id: string; name?: string; pos?: { col: number, row: number }; color?: [number, number, number] }[];
   };
@@ -1239,6 +1239,7 @@ app.get("/friends/:id/save", async (c) => {
       fieldId: "default", w: boot.gameplay.farmSize, h: boot.gameplay.farmSize,
       climate: p.farm?.climate ?? "grass",
       background: safeBackground,
+      zombiePatchGathered: p.farm?.zombiePatchGathered === true,
       plots: Object.entries(boot.gameplay.farm.plots).map(([key, plot]) => {
         const [oc, or] = key.split(":").map(Number);
         if (plot.state === "plowed") return { oc, or, state: "plowed" as const };

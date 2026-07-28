@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { call, grantRoster, signIn, xpForLevel, type Session } from "./helpers";
+import { RAID_RULESET_VERSION } from "../../../src/raid/replay";
 
 // Server-owned boost inventory (P11): buy debits the exact catalog price + grants,
 // use decrements, seed/sync is one-time, and the invasion voucher is consumed
@@ -182,7 +183,7 @@ describe("inventory — server-owned boosts", () => {
   it("consumes an invasion voucher server-side to bypass the raid cooldown; refuses without one", async () => {
     const s = await player();
     await grantRoster(s, [{ id: "raid-z1", key: "ZombieActorRegularTier1" }]);
-    const raid = { raidId: 1, orderedUnitIds: ["raid-z1"], rulesetVersion: 7 };
+    const raid = { raidId: 1, orderedUnitIds: ["raid-z1"], rulesetVersion: RAID_RULESET_VERSION };
     // Raid + finish to arm the cooldown.
     const start = await call<{ sessionId: string }>("POST", "/raid/start", s.token, raid);
     await call("POST", "/raid/finish", s.token, { sessionId: start.body.sessionId, finalTick: 0, inputs: [{ seq: 1, tick: 0, type: "retreat" }] });

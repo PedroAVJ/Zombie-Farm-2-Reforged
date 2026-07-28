@@ -516,6 +516,12 @@ export class ZombieField {
     return this.gathered;
   }
 
+  /** Restore the Zombie Patch's nap state after its object and roster exist. */
+  restoreGathered(gathered: boolean | undefined, tiles: { col: number; row: number }[] | null) {
+    if (gathered && tiles?.length) this.gatherTo(tiles);
+    else this.wakeAll();
+  }
+
   serialize(): OwnedZombieSave[] {
     const live = this.units.map((u) => {
       const d = u.getData();
@@ -588,6 +594,7 @@ export class ZombieField {
     this.units = [];
     this.stored = [];
     this.selected = null;
+    this.gathered = false;
     let maxN = 0;
     for (const s of saves) {
       const def = this.resolve(s.key);

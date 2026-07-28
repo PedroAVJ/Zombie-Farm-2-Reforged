@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { call, grantRoster, signIn } from "./helpers";
+import { RAID_RULESET_VERSION } from "../../../src/raid/replay";
 
 describe("raid finish — replay-derived and idempotent", () => {
   it("never accepts client outcome or reward claims", async () => {
@@ -7,7 +8,7 @@ describe("raid finish — replay-derived and idempotent", () => {
     await call("POST", "/economy/sync", s.token, { seed: { gold: 0, brains: 0, xp: 0 } });
     await grantRoster(s, [{ id: "z1", key: "ZombieActorRegularTier1" }]);
     const start = await call<{ sessionId: string }>("POST", "/raid/start", s.token, {
-      raidId: 1, orderedUnitIds: ["z1"], rulesetVersion: 7,
+      raidId: 1, orderedUnitIds: ["z1"], rulesetVersion: RAID_RULESET_VERSION,
     });
     const forged = await call<{ error: string }>("POST", "/raid/finish", s.token, {
       sessionId: start.body.sessionId, win: true, gold: 999999, xp: 999999,
@@ -23,7 +24,7 @@ describe("raid finish — replay-derived and idempotent", () => {
     await call("POST", "/economy/sync", s.token, { seed: { gold: 0, brains: 0, xp: 0 } });
     await grantRoster(s, [{ id: "z1", key: "ZombieActorRegularTier1" }]);
     const start = await call<{ sessionId: string }>("POST", "/raid/start", s.token, {
-      raidId: 1, orderedUnitIds: ["z1"], rulesetVersion: 7,
+      raidId: 1, orderedUnitIds: ["z1"], rulesetVersion: RAID_RULESET_VERSION,
     });
     const body = { sessionId: start.body.sessionId, finalTick: 0, inputs: [{ seq: 1, tick: 0, type: "retreat" }] };
     const first = await call<Record<string, unknown>>("POST", "/raid/finish", s.token, body);

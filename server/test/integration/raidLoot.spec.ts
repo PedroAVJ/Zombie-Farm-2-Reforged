@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { call, grantRoster, signIn } from "./helpers";
+import { RAID_RULESET_VERSION } from "../../../src/raid/replay";
 
 async function startedRaid() {
   const s = await signIn();
   await call("POST", "/economy/sync", s.token, { seed: { gold: 0, brains: 0, xp: 0 } });
   await grantRoster(s, [{ id: "z1", key: "ZombieActorRegularTier1" }]);
   const start = await call<{ sessionId: string }>("POST", "/raid/start", s.token, {
-    raidId: 1, orderedUnitIds: ["z1"], rulesetVersion: 7,
+    raidId: 1, orderedUnitIds: ["z1"], rulesetVersion: RAID_RULESET_VERSION,
   });
   return { s, sessionId: start.body.sessionId };
 }

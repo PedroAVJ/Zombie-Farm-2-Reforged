@@ -1,0 +1,106 @@
+# Enemy damage — recovered from the binary (2026-07-27)
+
+Method: `ZF2R_extracted/tools/re/objc_disasm.py` against `app-internals/executable/ZF2R`, with an
+annotator pass that also resolves direct `add rX, pc` cfstring loads and `vldr [pc, #imm]` literal
+pools (the stock tool leaves both unannotated). Companion to `COMBAT_STATS_RECOVERED.md`, which
+covers the per-hit damage math; this file covers **how often** enemies hit and what their hazards
+actually do.
+
+Enemies are `StageActor → CivilianActorFight → Actor`. Player zombies are `ZombieActor → Actor`.
+Both share `Actor`'s attack plumbing, which is why the two sides differ only by data.
+
+## What was already right
+
+`-[StageActor initFightDataAfterLoad]` (0xd34f8) confirms the enemy half of the stat conversion:
+
+| field | source |
+| --- | --- |
+| `hitPoints` / `finalHitPointsTotal` | `con × 100` (literal `100.0f` at 0xd3724) |
+| `power` | `str × 10` |
+| `attackSpeed` | `1 ÷ dex` |
+
+Per-swing damage is `finalPower × damageMultiplier` (`Actor damageIn:`), with the lineup-depth
+band gated on `isKindOfClass: ZombieActor` — enemies always swing at band 1.0. Enemy stats are
+**not** scaled by stage or player level: `Enemies.json stageSettings` ramps difficulty purely by
+enemy composition, so the straight pass-through in `prep_raids.py` is correct.
+
+## The cadence bug (`ENEMY_ATTACK_PACE`)
+
+`-[Actor getFightAttackSpeed]` (0x368e0) returns
+
+```
+interval = attackVariation.speedMultiplier (default 1) × fightData.finalAttackSpeed
+```
+
+and the attack loop consumes it as the **whole cycle**:
+
+1. `CivilianActorFight startAnim:interrupt:` on the attack state sets `attacking = YES` and calls
+   `schedule: doneAttacking: interval: <that value>` — a *repeating* cocos2d timer (0x69be0).
+2. `civilianUpdate` re-arms `fightAttack:` with interval 0 (next frame) the moment `attacking`
+   clears.
+3. `fightAttack:` unschedules itself, schedules `damageIn:` at `interval × damageTiming`, and
+   starts the animation — all inside the same cycle.
+
+`ZombieActor startAnim:interrupt:` (0x45898) does the identical thing with its own
+`getFightAttackSpeed`. **The animation gates nothing.** So the raw fight-data clock is the cadence,
+and the 2× asymmetry is intentional: at equal dex an enemy attacks twice as often as a zombie.
+
+The retired `ENEMY_ATTACK_PACE = 2` therefore halved every enemy's sustained DPS — measured across
+all 37 raid units, every one was at exactly 0.50× its real output (the Lumberjack at 0.71×, because
+its un-modelled `speedMultiplier` partly cancelled the error).
+
+## The rest of `getFightAttackSpeed`
+
+- **`speedMultiplier` is per-rolled-attack.** `Actor setAttackVariation` rolls the unit's
+  `attacks[]` through `rollAgainstFrequencyInArray:` every cycle, and the rolled attack sets both
+  that swing's damage and its cycle length. `LumberjackSpecial` is ×1.5 damage on a ×5 cycle;
+  `ZombieDoubleStrike` is ×0.25 on a ×0.2 cycle. The deterministic resolver collapses the roll to
+  its expectation, taking the mean of each field independently — correct for sustained DPS,
+  because a renewal process delivers `E[damage] / E[cycle]`.
+- **Player lineup-depth SLOWDOWN** (0x36aae–0x36b4c): a zombie's interval is multiplied by
+  `[1.0, 1.425, 2.0, 4.0][min(floor(index/5), 3)]`, gated exactly like the damage band (skipped in
+  states 0x20 / 0x1c and for the front five). Rear zombies hit softer *and* slower.
+- **Pirate Scallywag override** (0x36960): `finalAttackSpeed = max(0.5, opponentInterval² / 0.8)`.
+  The same opponent value is fetched twice and multiplied, which is almost certainly a source bug,
+  but it ships: against a dex-1 zombie (2 s) the Scallywag runs at 5 s, against a dex-3 zombie
+  (0.67 s) it clamps to the 0.5 s floor. This — not a global pace — is where the "pirate brute
+  swings every ~4 s" reference observation comes from.
+- **Old McDonnell's farm level ramp** (0x36b8e–0x36be6): when `zfGameData.currentEnemy == 1`, every
+  NON-zombie actor's interval is multiplied by 0.66 at player level ≥ 10 and 0.44 at ≥ 15. Only
+  raid 1 does this; it keeps the starter raid dangerous as you out-level it.
+
+## Hazard damage
+
+| hazard | ground truth | source |
+| --- | --- | --- |
+| boss `throw` | the bossAction's `damage` field, applied **verbatim** | `ZFFightPhysics throwProjectile:` copies @"damage" into `damageAmount`; `damageZombie:withProjectile:withContact:` passes it to `[zombie damage:]` |
+| `alienLaser` | flat **200** | `AlienStageBullet collidedWith:` passes the immediate `0x43480000` |
+| `pixelFire` | picks **one** random eligible zombie and calls `setOnFire`; burning costs `hitPointsTotal/20 × dt` = **5 % of max HP per second** | `ZFFightMan pixelFire`, `ZombieActor fightUpdate:` 0x4dedc |
+| `telekinesis` | **no damage** — `knockBackBy:force:` + `stunSelfFor:` only | `ZFFightMan telekinesis:` |
+
+The burn's *duration* is the one number still not recovered: the source burns the zombie while it
+runs to a destination and then swaps state, an animation the sim doesn't reproduce, so
+`PIXEL_FIRE_BURN_MS` remains a tuned constant.
+
+## Not in the data at all
+
+`enrage` appears in no plist. `ZFFightMan enrageTimeInterval` reads ability tag 11's
+`timerActivateIn`, so the round-timer enrage in `BattleSim` (3:00 → ×1.5 boss damage, faster
+throws) is invented. It is still there — flagged, not removed, because there is no recovered
+behaviour to replace it with.
+
+## Where this lives in the reimpl
+
+`src/raid/combatStats.ts` holds the pure ground truth (`lineupSpeedBand`,
+`mirroredAttackIntervalSec`, `farmRaidEnemyPace`, `ALIEN_LASER_DAMAGE`,
+`BURN_MAX_HP_FRACTION_PER_SEC`). `CombatEngine.buildEnemyUnits` folds `speedMultiplier` and the
+farm ramp into `attackCooldownMs` and flags the Scallywag; `BattleSim.cycleMs` applies the depth
+band and the mirror at fight time. `src/raid/balance.ts` is deleted.
+
+**This changes the deterministic transcript**, so `RAID_RULESET_VERSION` went 7 → 8 and
+`server/src/raidVerifier.ts` passes the same `{ raidId, playerLevel }` the client does. The epic
+boss builders (`src/epicBoss/combat.ts` and `server/src/v3/epicBoss.ts`) both dropped their ×2 —
+they must stay identical or the authoritative replay diverges.
+
+**Balance check** (headless, real data, 16-zombie army, abilities unlocked): every raid is winnable
+with a tier-appropriate army and lost with an under-tiered one. No content rebalance was needed.

@@ -181,6 +181,9 @@ export interface FarmSave {
   ownedClimates?: string[];
   /** Every placed farming plot (free-placement 4x4 blocks). */
   plots: PlotSave[];
+  /** Whether the placed Zombie Patch has gathered the deployed zombies to nap.
+   *  Absent in older saves, which restores the original awake behavior. */
+  zombiePatchGathered?: boolean;
 }
 
 export interface TerrainOverride {

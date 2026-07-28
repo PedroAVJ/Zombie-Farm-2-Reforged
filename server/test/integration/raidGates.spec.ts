@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { call, grantRoster, signIn } from "./helpers";
+import { RAID_RULESET_VERSION } from "../../../src/raid/replay";
 
 async function raidPlayer() {
   const s = await signIn();
@@ -13,16 +14,16 @@ describe("raid start — pinned server state", () => {
     const s = await raidPlayer();
     const stale = await call<{ error: string }>("POST", "/raid/start", s.token, { raidId: 1, orderedUnitIds: ["z1"], rulesetVersion: 1 });
     expect(stale).toMatchObject({ status: 426, body: { error: "stale_ruleset" } });
-    const foreign = await call<{ error: string }>("POST", "/raid/start", s.token, { raidId: 1, orderedUnitIds: ["not-owned"], rulesetVersion: 7 });
+    const foreign = await call<{ error: string }>("POST", "/raid/start", s.token, { raidId: 1, orderedUnitIds: ["not-owned"], rulesetVersion: RAID_RULESET_VERSION });
     expect(foreign.body.error).toBe("unit_not_owned");
-    const duplicate = await call<{ error: string }>("POST", "/raid/start", s.token, { raidId: 1, orderedUnitIds: ["z1", "z1"], rulesetVersion: 7 });
+    const duplicate = await call<{ error: string }>("POST", "/raid/start", s.token, { raidId: 1, orderedUnitIds: ["z1", "z1"], rulesetVersion: RAID_RULESET_VERSION });
     expect(duplicate.body.error).toBe("bad_roster");
   });
 
   it("locks participating units until the verified raid closes", async () => {
     const s = await raidPlayer();
     const started = await call<{ ok: boolean; sessionId: string }>("POST", "/raid/start", s.token, {
-      raidId: 1, orderedUnitIds: ["z1"], rulesetVersion: 7,
+      raidId: 1, orderedUnitIds: ["z1"], rulesetVersion: RAID_RULESET_VERSION,
     });
     expect(started.body.ok).toBe(true);
     const sale = await call<{ results: { error?: string }[] }>("POST", "/roster/actions", s.token, {

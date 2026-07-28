@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   choosePlayMode, clearPreferredPlayMode, getPreferredPlayMode, setPreferredPlayMode,
-  usesOnlineGameplay,
+  otherPlayMode, playModeDestinationLabel, usesOnlineGameplay,
 } from "./playMode";
 
 function memoryStorage(): Storage {
@@ -45,5 +45,12 @@ describe("play mode preference", () => {
     // switches farms. That retained login must not change Local Farm behavior.
     expect(usesOnlineGameplay("local")).toBe(false);
     expect(usesOnlineGameplay("online")).toBe(true);
+  });
+
+  it("labels a direct switch to the other independent farm", () => {
+    expect(otherPlayMode("local")).toBe("online");
+    expect(playModeDestinationLabel("local")).toBe("Go to Online Farm");
+    expect(otherPlayMode("online")).toBe("local");
+    expect(playModeDestinationLabel("online")).toBe("Go to Local Farm");
   });
 });

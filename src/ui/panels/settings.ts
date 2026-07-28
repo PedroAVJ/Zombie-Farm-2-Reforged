@@ -7,6 +7,18 @@ import { openModal } from "../Modal";
 import { APP_VERSION } from "../../version";
 import { getSpriteSet, setSpriteSet, FARM_BACKGROUNDS } from "../../prefs";
 import { ABILITY_POOL, ABILITY_TIER, TIER_BOSS } from "../../zombie/traits";
+import { otherPlayMode, playModeDestinationLabel } from "../../playMode";
+
+export async function confirmLocalFarmReset(
+  hud: Pick<Hud, "confirmInGame" | "onResetLocal">,
+): Promise<void> {
+  const confirmed = await hud.confirmInGame(
+    "Reset Local Farm?",
+    "This permanently deletes the current Local Farm and its automatic recovery copy from this browser. Downloaded export files and your Online Farm will not be affected.",
+    "Reset Farm",
+  );
+  if (confirmed) hud.onResetLocal?.();
+}
 
 // A label + ON/OFF toggle row.
 function settingRow(label: string, on: boolean, set: (v: boolean) => void) {
@@ -246,8 +258,9 @@ export function openSettings(hud: Hud): void {
   farmModeLabel.textContent = hud.playMode === "local" ? "Local Farm" : "Online Farm";
   const switchFarm = document.createElement("button");
   switchFarm.className = "set-action";
-  switchFarm.textContent = "Switch Farm";
-  switchFarm.onclick = () => hud.onSwitchFarm?.();
+  const destination = otherPlayMode(hud.playMode);
+  switchFarm.textContent = playModeDestinationLabel(hud.playMode);
+  switchFarm.onclick = () => hud.onSwitchFarm?.(destination);
   farmMode.append(farmModeLabel, switchFarm);
   const farmModeNote = noteEl(hud.playMode === "local"
     ? "Saved on this device only. Online Farm has separate progress."
@@ -282,11 +295,7 @@ export function openSettings(hud: Hud): void {
     const resetButton = document.createElement("button");
     resetButton.className = "set-action";
     resetButton.textContent = "Reset";
-    resetButton.onclick = () => {
-      if (window.confirm("Reset this Local Farm? Online Farm will not be affected.")) {
-        hud.onResetLocal?.();
-      }
-    };
+    resetButton.onclick = () => void confirmLocalFarmReset(hud);
     controls.append(exportButton, importButton, resetButton, picker);
     actions.append(label, controls);
     localStorageControls.push(
