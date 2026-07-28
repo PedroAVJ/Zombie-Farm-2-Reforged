@@ -121,7 +121,7 @@ export const FARMERS_GUIDE_PAGES: GuidePage[] = [
       },
       {
         title: "Acknowledgements",
-        body: "Created and maintained by DoctorNerd. Special thanks to Brain for starting and maintaining the Zombie Farm Archive, without which this project would never have existed. Thank you as well to every alpha tester for early feedback and testing.",
+        body: "Created and maintained by DoctorNerd. Special thanks to Brain for starting and maintaining the Zombie Farm Archive, without which this project would never have existed. Thank you as well to our alpha testers—Dan, Biggoard, SuperKiwi, and EnchantedKT—for their early feedback and testing.",
       },
     ],
   },
