@@ -32,6 +32,22 @@ describe("Mini Buddy", () => {
     expect(sim.units.find((candidate) => candidate.id === "mutant")?.mutation).toBe(1 | 8);
   });
 
+  it("accepts special zombies classified as Large, including Dapper", () => {
+    const dapper = unit({
+      id: "dapper", sourceKey: "ZombieActorDapper", group: "Large", team: "player",
+      abilities: ["attachMini"],
+    });
+    const imp = unit({
+      id: "imp", sourceKey: "ZombieActorSmallTier4", group: "Small", team: "player",
+    });
+    const enemy = unit({ id: "enemy", sourceKey: "FarmStageActorFarmhand", team: "enemy" });
+    const sim = new BattleSim([dapper, imp], [enemy], null, true);
+
+    expect(sim.activatedStatus()).toContainEqual({ key: "attachMini", ready: 1 });
+    expect(sim.activate("attachMini")).toBe(true);
+    expect(sim.units.find((candidate) => candidate.id === "dapper")?.buddyId).toBe("imp");
+  });
+
   it("mounts before deployment, doubles the carrier run, then deploys both with a stun", () => {
     const brute = unit({
       id: "brute", sourceKey: "ZombieActorLargeTier2", team: "player",

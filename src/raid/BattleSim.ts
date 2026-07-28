@@ -772,11 +772,11 @@ export class BattleSim {
   // ---- activated abilities (player-triggered from the battle strip) ----
 
   private isLarge(p: SimUnit): boolean {
-    return /^ZombieActorLarge/i.test(p.sourceKey);
+    return p.group === "Large" || /^ZombieActorLarge/i.test(p.sourceKey);
   }
 
   private isSmall(p: SimUnit): boolean {
-    return /^ZombieActorSmall/i.test(p.sourceKey);
+    return p.group === "Small" || /^ZombieActorSmall/i.test(p.sourceKey);
   }
 
   private isHealer(p: SimUnit): boolean {
