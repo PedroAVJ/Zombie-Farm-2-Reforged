@@ -26,7 +26,8 @@ interface QueueOptions {
   now?: () => number;
 }
 
-const OUTBOX_PREFIX = "zf2r.v3.commands";
+const OUTBOX_PREFIX = "zf2r.online.outbox.v1";
+const LEGACY_OUTBOX_PREFIX = "zf2r.v3.commands";
 const uuid = (): string => crypto.randomUUID();
 
 /** One durable, ordered mutation lane for every non-raid gameplay command. */
@@ -50,6 +51,7 @@ export class CommandQueue {
   onUnavailable: ((reason: string) => void) | null = null;
   onWriterReplaced: (() => void) | null = null;
   onStateConflict: (() => void) | null = null;
+  onSizeChange: ((size: number) => void) | null = null;
 
   constructor(private readonly accountId: string, options: QueueOptions = {}) {
     this.windowMs = options.windowMs ?? COMMAND_BATCH_WINDOW_MS;
@@ -131,6 +133,7 @@ export class CommandQueue {
     if (!this.pending.length) this.queuedAt = this.now();
     this.pending.push({ sequence, command });
     this.persist();
+    this.onSizeChange?.(this.size);
     if (this.pending.length >= COMMAND_BATCH_LIMIT) void this.flush();
     else this.scheduleFromFirstCommand();
     return sequence;
@@ -200,6 +203,7 @@ export class CommandQueue {
       this.takeWriter = false;
       this.inFlight = null;
       this.persist();
+      this.onSizeChange?.(this.size);
       this.onProjection?.(response);
       // Commands queued while the request was in flight wait in the next fixed
       // window unless their own deadline already elapsed.
@@ -249,6 +253,7 @@ export class CommandQueue {
     this.pending = [];
     this.inFlight = null;
     this.queuedAt = 0;
+    this.onSizeChange?.(0);
   }
 
   private scheduleFromFirstCommand(): void {
@@ -280,7 +285,9 @@ export class CommandQueue {
 
   private restore(): void {
     try {
-      const value = JSON.parse(localStorage.getItem(this.storageKey()) ?? "null") as StoredQueue | null;
+      const raw = localStorage.getItem(this.storageKey()) ??
+        localStorage.getItem(`${LEGACY_OUTBOX_PREFIX}::${this.accountId}`);
+      const value = JSON.parse(raw ?? "null") as StoredQueue | null;
       if (!value || !Array.isArray(value.pending)) return;
       this.nextSequence = Number.isSafeInteger(value.nextSequence) ? value.nextSequence : 1;
       this.queuedAt = Number.isFinite(value.queuedAt) ? value.queuedAt : 0;
@@ -289,6 +296,9 @@ export class CommandQueue {
       this.accountVersion = Number.isSafeInteger(value.accountVersion) ? value.accountVersion! : 0;
       this.writerGeneration = Number.isSafeInteger(value.writerGeneration) ? value.writerGeneration! : 0;
       this.writerLost = value.writerLost === true;
+      // Copy forward only after successful validation; keep the legacy value as
+      // a recovery copy for one release.
+      this.persist();
     } catch {
       try { localStorage.removeItem(this.storageKey()); } catch { /* storage unavailable */ }
     }

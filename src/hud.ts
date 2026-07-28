@@ -26,6 +26,7 @@ import { classTierRank } from "./zombie/taxonomy";
 import { BASE } from "./base";
 import { compareCropMarketOrder } from "./marketOrder";
 import { fillPartySelection, orderPartyRoster } from "./raid/partySelection";
+import type { PlayMode } from "./playMode";
 import type {
   BlackMarketListResponse, BlackMarketMutationResponse, BlackMarketOrderKind,
   BlackMarketOrderView,
@@ -151,6 +152,7 @@ export class Hud {
   private levelEl!: HTMLElement;
   private xpFill!: HTMLElement;
   private nameEl!: HTMLElement;
+  private playStatusEl!: HTMLElement;
   private questCol!: HTMLElement;
   private questViews: QuestView[] = [];
   private tools: Record<string, HTMLButtonElement> = {};
@@ -183,10 +185,11 @@ export class Hud {
     return this.placingObj;
   }
 
-  constructor(readonly state: GameState, readonly audio: AudioManager) {
+  constructor(readonly state: GameState, readonly audio: AudioManager, playMode: PlayMode = "local") {
     // Styles are injected by the `import "./ui/hud.css"` at the top of this module.
     this.el = document.getElementById("hud")!;
     this.el.innerHTML = "";
+    this.playMode = playMode;
     this.buildTopBar();
     this.buildQuests();
     this.buildMenu();
@@ -440,27 +443,30 @@ export class Hud {
     const name = document.createElement("div");
     name.className = "nameplate";
     name.textContent = "Zombie Farmer";
-    name.title = "Account";
+    name.title = this.playMode === "local" ? "Local Farm" : "Account";
     name.setAttribute("role", "button");
     // Clicking your name opens the Account menu (who you're signed in as + Sign
     // out). Profile SWITCHING is intentionally not exposed here for now (see
     // openProfiles) — the friend code / add / gift / visit all live in Friends.
     name.onclick = () => this.openProfiles();
     this.nameEl = name;
+    this.playStatusEl = document.createElement("div");
+    this.playStatusEl.className = "play-status local";
+    this.playStatusEl.textContent = "LOCAL FARM";
 
     // Account button: a person icon just right of the nameplate. Opens the same
     // Account menu; stays visible on mobile (where the nameplate is hidden), so
     // Sign out is reachable on every platform.
     const prof = document.createElement("button");
     prof.className = "profbtn";
-    prof.title = "Account";
-    prof.setAttribute("aria-label", "Account");
+    prof.title = this.playMode === "local" ? "Local Farm" : "Account";
+    prof.setAttribute("aria-label", prof.title);
     const profImg = document.createElement("img");
     profImg.src = UI("Icon_Quest_Social.png");
     prof.appendChild(profImg);
     prof.onclick = () => this.openProfiles();
 
-    bar.append(gear, chips, spacer, ...(devHot ? [devHot] : []), name, prof);
+    bar.append(gear, chips, spacer, ...(devHot ? [devHot] : []), this.playStatusEl, name, prof);
     this.el.appendChild(bar);
     this.refreshName();
   }
@@ -606,6 +612,20 @@ export class Hud {
     }
   }
 
+  setPlayStatus(
+    mode: PlayMode,
+    state: "synced" | "saving" | "reconnecting" | "cached" = "synced",
+    pending = 0,
+  ) {
+    this.playStatusEl.className = `play-status ${mode} ${state}`;
+    this.playStatusEl.textContent = mode === "local"
+      ? "LOCAL FARM"
+      : state === "cached" ? "ONLINE · OFFLINE VIEW"
+      : state === "reconnecting" ? "ONLINE · RECONNECTING"
+      : state === "saving" ? `ONLINE · SAVING${pending ? ` (${pending})` : ""}`
+      : "ONLINE · SYNCED";
+  }
+
   // Brief top-center banner for quest completion (messageComplete).
   showToast(msg: string, durationMs = 2600) {
     const t = document.createElement("div");
@@ -651,7 +671,9 @@ export class Hud {
       { label: "Boosts", icon: `${BASE}assets/boosts/insta_grow.png`, shortcut: "B" },
       { label: "Storage", icon: UI("menu_storage_icon.png"), shortcut: "R" },
       { label: "Market", icon: UI("button_market.png"), shortcut: "M" },
-      { label: "Social", icon: UI("button_friends.png"), shortcut: "" },
+      ...(this.playMode === "online"
+        ? [{ label: "Social", icon: UI("button_friends.png"), shortcut: "" }]
+        : []),
     ];
     const col = document.createElement("div");
     col.className = "menucol";
@@ -1143,6 +1165,12 @@ export class Hud {
   onRenameProfile: ((id: string, name: string) => void) | null = null;
   /** Delete a non-active profile and its save (no reload). */
   onDeleteProfile: ((id: string) => void) | null = null;
+  /** Current independent farm mode and deliberate return to the mode selector. */
+  playMode: PlayMode = "local";
+  onSwitchFarm: (() => void) | null = null;
+  onExportLocal: (() => void) | null = null;
+  onImportLocal: ((raw: string) => boolean) | null = null;
+  onResetLocal: (() => void) | null = null;
   // ---- friends (offline stub; set by main) ----
   /** The current friends list. */
   getFriends: (() => Friend[]) | null = null;
@@ -2178,7 +2206,7 @@ export class Hud {
   openProfiles() {
     const { panel } = openModal({
       host: this.el, bgClass: "prof-bg", panelClass: "profiles",
-      title: "Account", replaceSelector: ".prof-bg",
+      title: this.playMode === "local" ? "Local Farm" : "Account", replaceSelector: ".prof-bg",
     });
 
     const acctBlock = buildAccountBlock(this);
@@ -2187,10 +2215,10 @@ export class Hud {
       const devices = buildDevicesBlock(this);
       if (devices) panel.append(devices);
     } else {
-      // Offline build or signed out: nothing to manage here.
+      // Local Farm has no account or social state.
       const note = document.createElement("div");
       note.className = "fr-empty";
-      note.textContent = "Playing offline.";
+      note.textContent = "Local Farm is saved on this device. Online Farm has separate progress.";
       panel.append(note);
     }
   }

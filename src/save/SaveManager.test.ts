@@ -2,7 +2,22 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import * as api from "../net/api";
 import { SaveManager } from "./SaveManager";
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
+
+const memoryStorage = (): Storage => {
+  const values = new Map<string, string>();
+  return {
+    get length() { return values.size; },
+    clear: () => values.clear(),
+    getItem: (key) => values.get(key) ?? null,
+    key: (index) => [...values.keys()][index] ?? null,
+    removeItem: (key) => { values.delete(key); },
+    setItem: (key, value) => { values.set(key, String(value)); },
+  };
+};
 
 describe("SaveManager presentation conflicts", () => {
   it("adopts the committed server version after a lost PUT response", async () => {
@@ -35,5 +50,54 @@ describe("SaveManager presentation conflicts", () => {
       data: second,
     });
     expect((manager as any).presentationDirty).toBe(false);
+  });
+});
+
+describe("SaveManager mode isolation", () => {
+  it("never falls back to a Local Farm write from Online Farm", () => {
+    vi.stubGlobal("localStorage", memoryStorage());
+    vi.spyOn(api, "isConfigured").mockReturnValue(false);
+    const manager = new SaveManager(
+      {} as never, {} as never, {} as never, {} as never, {} as never,
+      new Map(), new Map(), async () => undefined, "online",
+    );
+    vi.spyOn(manager, "serialize").mockReturnValue({ version: 1, savedAt: 1 } as never);
+
+    manager.save();
+
+    expect(localStorage.length).toBe(0);
+  });
+
+  it("rotates a last-known-good backup for Local Farm", () => {
+    vi.stubGlobal("localStorage", memoryStorage());
+    const manager = new SaveManager(
+      {} as never, {} as never, {} as never, {} as never, {} as never,
+      new Map(), new Map(), async () => undefined, "local",
+    );
+    const first = { version: 1, savedAt: 1 };
+    const second = { version: 1, savedAt: 2 };
+
+    (manager as any).writeLocal(first);
+    (manager as any).writeLocal(second);
+
+    const keys = Array.from({ length: localStorage.length }, (_, index) => localStorage.key(index)!);
+    const primary = keys.find((key) => !key.endsWith(".backup") && !key.endsWith(".tmp") && key.includes("local.save"));
+    expect(primary).toBeTruthy();
+    expect(JSON.parse(localStorage.getItem(primary!) ?? "null")).toMatchObject(second);
+    expect(JSON.parse(localStorage.getItem(`${primary}.backup`) ?? "null")).toMatchObject(first);
+  });
+
+  it("does not rewrite a farm after persistence is suspended for a switch or reset", () => {
+    vi.stubGlobal("localStorage", memoryStorage());
+    const manager = new SaveManager(
+      {} as never, {} as never, {} as never, {} as never, {} as never,
+      new Map(), new Map(), async () => undefined, "local",
+    );
+    const write = vi.spyOn(manager as any, "writeLocal");
+
+    manager.suspend();
+    manager.flushCritical();
+
+    expect(write).not.toHaveBeenCalled();
   });
 });

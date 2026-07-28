@@ -11,9 +11,10 @@
 // reload mid-raid would be awful). Instead we surface a small toast and let the
 // player tap "Reload" when they're ready.
 import { registerSW } from "virtual:pwa-register";
+import type { PlayMode } from "./playMode";
 
 /** Wire up the service worker. Call once at startup. Safe to call in dev. */
-export function initPwa(): void {
+export function initPwa(mode: PlayMode): void {
   // Skip where service workers aren't available (older browsers, some embedded
   // webviews) — the game runs fine without offline caching.
   if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return;
@@ -23,7 +24,9 @@ export function initPwa(): void {
       showUpdateToast(() => updateSW(true)); // updateSW(true) = skip waiting + reload
     },
     onOfflineReady() {
-      showBriefToast("Ready to play offline");
+      showBriefToast(mode === "local"
+        ? "Local Farm app shell is cached. Viewed artwork is available offline."
+        : "App installed. Online Farm still requires an internet connection.");
     },
   });
 }

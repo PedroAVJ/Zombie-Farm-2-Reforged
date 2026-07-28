@@ -65,6 +65,9 @@ import { epicBossCurrencyReward } from "./epicBoss/rewards";
 import { epicZombieRewardNotes, visibleEpicBosses } from "./epicBoss/market";
 import { dropsEpicBossToken, EPIC_BOSS_FIGHT_BRAIN_COST } from "./epicBoss/tokens";
 import { offerFullscreenPrompt } from "./ui/panels/fullscreenPrompt";
+import {
+  choosePlayMode, clearPreferredPlayMode, setPreferredPlayMode, showOnlineUnavailable, type PlayMode,
+} from "./playMode";
 
 // The boot / start screen lives in index.html and paints on the first frame (no
 // empty-farm flash). We report load milestones to it and, once the game is fully
@@ -81,21 +84,21 @@ async function main() {
   // Detect device up front so <html data-platform> is set before the HUD's CSS
   // renders (drives the compact/desktop layout; re-evaluates on resize/rotate).
   initPlatform();
-  // Register the PWA service worker (production build only; no-op in dev and where
-  // service workers are unavailable). Done before the sign-in gate so offline
-  // caching + the update toast work regardless of auth state.
-  initPwa();
-  // The game is locked behind Google sign-in: block here until the player is
-  // signed in and has chosen a username (no-op on an offline build). Only then do
-  // we load assets and build the game, so nothing runs for a signed-out visitor.
-  await auth.refreshIfSignedIn();
-  await requireAuth();
+  // Local Farm and Online Farm are deliberately independent save domains. Choose
+  // before touching auth so Local Farm never makes account/gameplay server calls,
+  // even when this browser still has a valid Online Farm session.
+  const playMode: PlayMode = await choosePlayMode(auth.isOnlineAvailable());
+  initPwa(playMode);
+  if (playMode === "online") {
+    await auth.refreshIfSignedIn();
+    await requireAuth();
+  }
   // Remote revocation (including another device taking over) is surfaced by the
   // API auth bridge. Reloading re-enters requireAuth before any game state is built.
   auth.onAuthChange(() => {
     if (!auth.isSignedIn()) location.reload();
   });
-  await api.prepareWriterAccess();
+  if (playMode === "online") await api.prepareWriterAccess();
   boot?.progress(0.35); // signed in — start filling the plate bar
   const app = new Application();
   await app.init({
@@ -113,7 +116,8 @@ async function main() {
   let epicBoss = new EpicBossManager(DR_GROUNDHOG);
   state.seedFarmerCatalog(assets.farmer);
   const audio = new AudioManager(); // music/SFX default off (toggled in Settings)
-  const hud = new Hud(state, audio);
+  const hud = new Hud(state, audio, playMode);
+  hud.setPlayStatus(playMode, playMode === "online" ? "reconnecting" : "synced");
   const mutationPortraits = new MutationPortraits(app.renderer, assets);
   hud.zombieMutationPortraitOf = (key, mutation, color) => mutationPortraits.get(key, mutation, color);
   hud.setFarmerCatalog(assets.farmer);
@@ -982,9 +986,13 @@ async function main() {
   // Restore a prior farm (currencies, XP, plots, crops-with-offline-growth, farmer
   // position) if one exists, then start autosaving. Load before the loop so the
   // restored farm shows on the first frame.
-  const saveManager = new SaveManager(state, field, walk, zombies, quests, catalog, placeCatalog, (sprite) =>
-    ensureObjectTexture(assets, sprite)
+  const saveManager = new SaveManager(
+    state, field, walk, zombies, quests, catalog, placeCatalog,
+    (sprite) => ensureObjectTexture(assets, sprite),
+    playMode,
+    jobs,
   );
+  saveManager.onStorageError = (message) => hud.showToast(message);
 
   // Visit mode: if a friend farm was requested (via enterVisit → reload), hydrate
   // THEIR read-only save into these fresh singletons and — crucially — never call
@@ -992,7 +1000,7 @@ async function main() {
   // visit cannot read, write, or corrupt it. On any fetch failure we clear the
   // target and fall through to a normal load, so the player always lands on their
   // own farm.
-  const visitTarget = getVisitTarget();
+  const visitTarget = playMode === "online" ? getVisitTarget() : null;
   let visiting = false;
   let visitError = "";
   let restored = false;
@@ -1023,7 +1031,24 @@ async function main() {
     }
   }
   if (!visiting) {
-    restored = await saveManager.load();
+    let loadResult = await saveManager.load();
+    if (loadResult.kind === "online-unavailable") {
+      await showOnlineUnavailable(
+        async () => {
+          loadResult = await saveManager.load();
+          return loadResult.kind !== "online-unavailable";
+        },
+        () => {
+          setPreferredPlayMode("local");
+          location.reload();
+        },
+      );
+    }
+    restored = loadResult.kind === "local-existing" ||
+      loadResult.kind === "online-cached" ||
+      (loadResult.kind === "online-authoritative" && loadResult.restored);
+    if (loadResult.kind === "online-cached") hud.setPlayStatus("online", "cached");
+    else if (loadResult.kind === "online-authoritative") hud.setPlayStatus("online", "synced");
     // The foliage was initially built before the signed-in presentation arrived.
     // Reapply its saved density to both the live scene and device preference.
     const restoredBackground = saveManager.loadedFarmBackground;
@@ -1039,7 +1064,11 @@ async function main() {
     // Backfill newly-added presentation fields (such as woodland density) even
     // when an existing player does not immediately change another farm value.
     saveManager.save();
-    console.log(restored ? "[save] restored existing farm" : "[save] fresh farm");
+    console.log(
+      loadResult.kind === "online-cached"
+        ? `[save] showing cached Online Farm from ${new Date(loadResult.savedAt).toISOString()}`
+        : restored ? "[save] restored existing farm" : "[save] fresh farm"
+    );
   }
   // Server-authoritative currency (online, own-farm only). Wire the money hook so
   // every gold/brains/xp change mirrors to the server ledger, then start() adopts
@@ -1098,9 +1127,16 @@ async function main() {
   };
   const storedObjectIds = new Map<string, string[]>();
   const objectPurchases = new Map<string, { cost: number; currency: "gold" | "brains" }>();
-  if (!visiting && auth.isSignedIn()) {
+  if (!visiting && playMode === "online" && auth.isSignedIn()) {
     const acct = api.getSession()?.accountId ?? "anon";
-    economy = new EconomyClient(state, acct);
+    economy = new EconomyClient(state, acct, { requireReady: true });
+    economy.onAuthoritativeSettled = (serverTime) => {
+      // Let synchronous projection listeners finish rebuilding Field/Zombie state
+      // before serializing the read-only reconnect snapshot.
+      queueMicrotask(() => saveManager.cacheAuthoritativeSnapshot(serverTime));
+    };
+    economy.onPendingChange = (pending) =>
+      hud.setPlayStatus("online", pending > 0 ? "saving" : "synced", pending);
     state.canMutateOnline = () => economy!.available;
     state.onMoney = (currency, delta, reason) => economy!.record(currency, delta, reason);
     // Veggie plant/harvest go through the server's EXACT economics engine instead of
@@ -1271,7 +1307,10 @@ async function main() {
       state.setTutorial(reconcileTutorialCompletion(state.tutorial, true));
       tutorial?.completeFromAuthority();
     };
-    economy.onGameplayUnavailable = () => hud.showToast("Gameplay paused — reconnect to continue.");
+    economy.onGameplayUnavailable = () => {
+      hud.setPlayStatus("online", "reconnecting");
+      hud.showToast("Online gameplay paused — reconnecting to your farm.");
+    };
     const showWriterLock = () => {
       saveManager.setOnlineWritable(false);
       hud.showWriterLock(async () => {
@@ -1283,6 +1322,7 @@ async function main() {
     economy.onWriterReplaced = showWriterLock;
     economy.onWriterAvailable = () => {
       saveManager.setOnlineWritable(true);
+      hud.setPlayStatus("online", "synced");
       hud.hideWriterLock();
     };
     economy.onCommandRejected = (command, error) => {
@@ -1964,25 +2004,58 @@ async function main() {
 
   // ---- save profiles: switch/create flush + reload so the whole game reloads
   // cleanly from the target profile; rename/delete just update the index. ----
-  hud.getProfiles = () => profiles.listProfiles();
+  hud.getProfiles = playMode === "local" ? () => profiles.listProfiles() : null;
   // Flush the current game to its (still-active) profile, then STOP saving before
   // moving the active pointer — otherwise this page's beforeunload/autosave would
   // write the outgoing game into the profile we're switching into. The reload
   // then loads the target profile cleanly (fresh, for a brand-new one).
-  hud.onSwitchProfile = (id) => {
+  hud.onSwitchProfile = playMode === "local" ? (id) => {
     saveManager.save();
     saveManager.suspend();
     profiles.setActive(id);
     location.reload();
-  };
-  hud.onCreateProfile = (name) => {
+  } : null;
+  hud.onCreateProfile = playMode === "local" ? (name) => {
     saveManager.save();
     saveManager.suspend();
     profiles.setActive(profiles.createProfile(name)); // fresh (no save) → new game on reload
     location.reload();
+  } : null;
+  hud.onRenameProfile = playMode === "local" ? (id, name) => profiles.renameProfile(id, name) : null;
+  hud.onDeleteProfile = playMode === "local" ? (id) => profiles.deleteProfile(id) : null;
+  hud.onSwitchFarm = () => {
+    saveManager.flush();
+    void economy?.flush().catch(() => {});
+    saveManager.suspend();
+    clearPreferredPlayMode();
+    location.reload();
   };
-  hud.onRenameProfile = (id, name) => profiles.renameProfile(id, name);
-  hud.onDeleteProfile = (id) => profiles.deleteProfile(id);
+  hud.onExportLocal = playMode === "local" ? () => {
+    saveManager.flushCritical();
+    const raw = saveManager.exportLocal();
+    if (!raw) {
+      hud.showToast("Local Farm could not be exported.");
+      return;
+    }
+    const url = URL.createObjectURL(new Blob([raw], { type: "application/json" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `zombie-farm-local-${new Date().toISOString().slice(0, 10)}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+    hud.showToast("Local Farm backup exported.");
+  } : null;
+  hud.onImportLocal = playMode === "local" ? (raw) => {
+    if (!saveManager.importLocal(raw)) return false;
+    saveManager.suspend();
+    location.reload();
+    return true;
+  } : null;
+  hud.onResetLocal = playMode === "local" ? () => {
+    saveManager.suspend();
+    saveManager.clear();
+    location.reload();
+  } : null;
 
   // ---- friends: OFFLINE path (local stub, autosaved via GameState.onChange).
   // Used when no server is configured or the player is signed out. ----
@@ -2016,8 +2089,8 @@ async function main() {
   let inboxCache: { id: string; fromName: string }[] = [];
   let requestsCache: { fromAccountId: string; name: string }[] = [];
 
-  hud.onlineAvailable = () => auth.isOnlineAvailable();
-  hud.socialOnline = () => auth.isSignedIn();
+  hud.onlineAvailable = () => playMode === "online" && auth.isOnlineAvailable();
+  hud.socialOnline = () => playMode === "online" && auth.isSignedIn();
   hud.myAccount = () => {
     const s = api.getSession();
     return s ? { name: api.displayName(s), friendCode: s.friendCode } : null;
@@ -3479,9 +3552,9 @@ async function main() {
   // queued farm-job pipeline. If frames are merely throttled, each sparse frame
   // advances the missing time; if they stop, the first focus/visible event does.
   // Nothing else (notably raids) receives this elapsed time.
-  let lastJobAdvanceAt = performance.now();
+  let lastJobAdvanceAt = Date.now();
   const advanceFarmJobsToNow = (forceSilent = false) => {
-    const now = performance.now();
+    const now = Date.now();
     const elapsed = (now - lastJobAdvanceAt) / 1000;
     // A throttled/hidden tab can complete several queued jobs in one catch-up.
     // Do that work silently so their independent one-shots do not all burst at once.
@@ -3621,9 +3694,19 @@ async function main() {
     // Settle the job clock on both edges. On hide this captures the final sliver
     // after the last frame; on show it consumes the entire suspended interval.
     advanceFarmJobsToNow(true);
-    if (document.hidden) return;
+    if (document.hidden) {
+      // Save after catch-up, not before it. Mobile browsers may freeze the page
+      // before a debounced state-change timer gets another chance to run.
+      saveManager.flushCritical();
+      return;
+    }
     field.update(0);
     saveManager.save();
+  });
+  window.addEventListener("pagehide", () => {
+    advanceFarmJobsToNow(true);
+    field.update(0);
+    saveManager.flushCritical();
   });
   window.addEventListener("focus", () => advanceFarmJobsToNow(true));
 

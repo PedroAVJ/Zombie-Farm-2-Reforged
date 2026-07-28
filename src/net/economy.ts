@@ -90,8 +90,14 @@ export class EconomyClient {
   onWriterReplaced: (() => void) | null = null;
   onWriterAvailable: (() => void) | null = null;
   onCommandRejected: ((command: GameplayCommand | undefined, error: string) => void) | null = null;
+  onAuthoritativeSettled: ((serverTime: number) => void) | null = null;
+  onPendingChange: ((pending: number) => void) | null = null;
 
-  constructor(private state: GameState, private readonly accountId: string) {
+  constructor(
+    private state: GameState,
+    private readonly accountId: string,
+    private readonly options: { requireReady?: boolean } = {},
+  ) {
     this.queue = new CommandQueue(accountId);
     this.queue.onProjection = (response) => this.adoptCommandResponse(response);
     this.queue.onUnavailable = (reason) => {
@@ -100,6 +106,7 @@ export class EconomyClient {
     };
     this.queue.onWriterReplaced = () => this.onWriterReplaced?.();
     this.queue.onStateConflict = () => { void this.reloadAfterConflict(); };
+    this.queue.onSizeChange = (size) => this.onPendingChange?.(size);
     api.setWriterRejectedHandler(() => this.handleWriterLost());
     if (typeof document !== "undefined") {
       document.addEventListener("visibilitychange", () => {
@@ -133,6 +140,7 @@ export class EconomyClient {
       this.queue.adoptBootstrap(bootstrap);
       this.ready = true;
       this.adoptGameplay(bootstrap.gameplay);
+      if (this.queue.size === 0) this.onAuthoritativeSettled?.(bootstrap.serverTime);
       if (bootstrap.writer.status === "mine") this.onWriterAvailable?.();
       else this.onWriterReplaced?.();
     } catch {
@@ -169,6 +177,7 @@ export class EconomyClient {
       this.queue.adoptBootstrap(bootstrap);
       this.ready = true;
       this.adoptGameplay(bootstrap.gameplay);
+      if (this.queue.size === 0) this.onAuthoritativeSettled?.(bootstrap.serverTime);
     } catch { /* the blocking state remains until a later focus/reconnect */ }
   }
 
@@ -199,6 +208,7 @@ export class EconomyClient {
       this.queue.adoptBootstrap(bootstrap);
       this.ready = true;
       this.adoptGameplay(bootstrap.gameplay);
+      if (this.queue.size === 0) this.onAuthoritativeSettled?.(bootstrap.serverTime);
       if (!this.queue.available) {
         if (bootstrap.writer.status === "other") this.onWriterReplaced?.();
         return;
@@ -226,6 +236,10 @@ export class EconomyClient {
   }
 
   private enqueue(command: GameplayCommand, delta: Partial<OptimisticDelta> = {}): number | null {
+    if (this.options.requireReady && !this.available) {
+      this.onGameplayUnavailable?.("gameplay_unavailable");
+      return null;
+    }
     try {
       const sequence = this.queue.enqueue(command);
       this.commandsBySequence.set(sequence, command);
@@ -685,6 +699,7 @@ export class EconomyClient {
     rejectedObjectIds.forEach((id) => this.deferredRejectedObjectIds.add(id));
     this.onQuestChanges?.(response.questChanges);
     this.adoptGameplay(response.gameplay, aliases, objectAliases, rejectedObjectIds);
+    if (this.queue.size === 0) this.onAuthoritativeSettled?.(response.serverTime);
   }
 
   private adoptGameplay(

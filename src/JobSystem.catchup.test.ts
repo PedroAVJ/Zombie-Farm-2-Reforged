@@ -254,4 +254,37 @@ describe("JobSystem elapsed-time catch-up", () => {
     })).toBe(false);
     expect(notices).toEqual([["gold", 10], ["gold", 25]]);
   });
+
+  it("serializes pending Local Farm intent and replays it after reopening", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000_000);
+    const firstWalk = new FakeWalk();
+    const field = {
+      highlightLayer: new Container(), plowHighlightLayer: new Container(), labelLayer: new Container(),
+      resolveTill: (col: number, row: number) => ({ valid: true, oc: col, or: row }),
+      reserveTill: () => {}, unreserveTill: () => {},
+      plotCenterOf: (col: number, row: number) => ({ x: col, y: row }),
+      hasFastWork: () => false, hasPlowFree: () => false,
+      tillAt: () => true,
+    };
+    const state = {
+      gold: 100, spendGold: (amount: number) => { state.gold -= amount; }, addXp: () => {},
+      onFarm: null, onTreeHarvest: null, canMutateOnline: null,
+    };
+    const first = new JobSystem(
+      field as never, { setWorking: () => {} } as never, firstWalk as never, state as never, () => {},
+    );
+    first.enqueue("till", 4, 8);
+    const saved = first.serializePending();
+    expect(saved?.jobs).toMatchObject([{ kind: "till", oc: 4, or: 8 }]);
+
+    vi.setSystemTime(1_010_000);
+    const restored = new JobSystem(
+      field as never, { setWorking: () => {} } as never, new FakeWalk() as never, state as never, () => {},
+    );
+    restored.restorePending(saved, () => undefined);
+
+    expect(restored.busy).toBe(false);
+    expect(state.gold).toBe(90);
+  });
 });

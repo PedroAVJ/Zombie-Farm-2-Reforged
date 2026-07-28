@@ -12,6 +12,7 @@ import { HH, HW, TILE_W } from "./iso";
 import { QuestBus, QuestEvent } from "./quest/events";
 import { Sfx } from "./audio";
 import { harvestXp, plowXp } from "./farmRewards";
+import type { FarmJobQueueSave, FarmJobSave } from "./save/schema";
 
 export type JobKind = "till" | "plant" | "harvest";
 export type JobCurrency = "gold" | "brains";
@@ -42,6 +43,7 @@ interface Job {
   or: number;
   cx: number; // world target (plot center, or exact point for walk)
   cy: number;
+  queuedAt: number;
   diamond: Graphics | null; // green plot highlight while queued/working
   bar: Bar | null; // progress bar, created only while being worked
   cfg?: CropConfig; // what to plant (plant jobs only)
@@ -132,7 +134,7 @@ export class JobSystem {
     if (kind === "till") this.field.reserveTill(oc, or); // hold the area while queued
     const c = this.field.plotCenterOf(oc, or);
     const diamond = this.makeDiamond(c.x, c.y, PLOT, kind === "till");
-    this.queue.push({ kind, oc, or, cx: c.x, cy: c.y, diamond, bar: null, cfg, pendKey: k });
+    this.queue.push({ kind, oc, or, cx: c.x, cy: c.y, queuedAt: Date.now(), diamond, bar: null, cfg, pendKey: k });
     this.pending.add(k);
     return true;
   }
@@ -143,7 +145,10 @@ export class JobSystem {
     if (this.pending.has(k)) return false;
     const area = this.field.objectHighlightArea(objId);
     const diamond = area ? this.makeDiamond(area.x, area.y, area.tiles) : null;
-    this.queue.push({ kind: "harvestTree", oc: -1, or: -1, cx: x, cy: y, diamond, bar: null, objId, pendKey: k });
+    this.queue.push({
+      kind: "harvestTree", oc: -1, or: -1, cx: x, cy: y, queuedAt: Date.now(),
+      diamond, bar: null, objId, pendKey: k,
+    });
     this.pending.add(k);
     return true;
   }
@@ -151,11 +156,60 @@ export class JobSystem {
   // Plain move-to-point, serialized behind any queued work so it never hijacks the
   // farmer mid-job.
   enqueueWalk(x: number, y: number) {
-    this.queue.push({ kind: "walk", oc: -1, or: -1, cx: x, cy: y, diamond: null, bar: null });
+    this.queue.push({
+      kind: "walk", oc: -1, or: -1, cx: x, cy: y, queuedAt: Date.now(), diamond: null, bar: null,
+    });
   }
 
   get busy(): boolean {
     return this.active !== null || this.queue.length > 0;
+  }
+
+  /** Persist action intent, not Pixi animation state. A partially-walked/worked
+   * action safely restarts from its target and elapsed wall time replays it. */
+  serializePending(): FarmJobQueueSave | undefined {
+    const jobs = [...(this.active ? [this.active] : []), ...this.queue];
+    if (!jobs.length) return undefined;
+    return {
+      savedAt: Math.min(...jobs.map((job) => job.queuedAt)),
+      jobs: jobs.map((job): FarmJobSave => ({
+        kind: job.kind,
+        oc: job.oc,
+        or: job.or,
+        cx: job.cx,
+        cy: job.cy,
+        queuedAt: job.queuedAt,
+        cropKey: job.cfg?.key,
+        objectId: job.objId,
+      })),
+    };
+  }
+
+  /** Restore a Local Farm queue after the field and objects are hydrated. Invalid
+   * or obsolete targets are dropped by the same validation used for fresh taps. */
+  restorePending(
+    save: FarmJobQueueSave | undefined,
+    cropOf: (key: string) => CropConfig | undefined,
+  ): void {
+    if (!save || !Array.isArray(save.jobs) || this.busy) return;
+    for (const job of save.jobs) {
+      if (job.kind === "walk") this.enqueueWalk(job.cx, job.cy);
+      else if (job.kind === "harvestTree" && job.objectId) {
+        this.enqueueTreeHarvest(job.objectId, job.cx, job.cy);
+      } else if (job.kind === "plant") {
+        const crop = job.cropKey ? cropOf(job.cropKey) : undefined;
+        if (crop) this.enqueue("plant", job.oc, job.or, crop);
+      } else if (job.kind === "till" || job.kind === "harvest") {
+        this.enqueue(job.kind, job.oc, job.or);
+      }
+    }
+    const oldest = save.jobs.reduce(
+      (value, job) => Number.isFinite(job.queuedAt) ? Math.min(value, job.queuedAt!) : value,
+      Number.POSITIVE_INFINITY,
+    );
+    const savedAt = Number.isFinite(oldest) ? oldest
+      : Number.isFinite(save.savedAt) ? save.savedAt : Date.now();
+    this.advanceElapsed(Math.max(0, Date.now() - savedAt) / 1000, true);
   }
 
   /** Advance farmer movement and queued work by real elapsed time.

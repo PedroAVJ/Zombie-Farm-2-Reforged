@@ -4,13 +4,24 @@ import { PlaceableDef } from "../assets";
 import { WalkController } from "../WalkController";
 import { ZombieField } from "../zombie/ZombieField";
 import { QuestSystem } from "../quest/QuestSystem";
-import { SaveGame, SAVE_VERSION, SAVE_KEY } from "./schema";
-import { activeSaveKey } from "./profiles";
+import {
+  SaveGame, SAVE_VERSION, ONLINE_PRESENTATION_PREFIX, ONLINE_SNAPSHOT_PREFIX,
+} from "./schema";
+import { activeSaveKey, migrateLegacyProfileSaves } from "./profiles";
 import * as api from "../net/api";
 import { getFarmBackground } from "../prefs";
 import { epicBossById } from "../epicBoss/catalog";
 import { GAMEPLAY_PROTOCOL } from "../net/protocol";
 import { reconcileTutorialCompletion } from "../tutorial/steps";
+import type { PlayMode } from "../playMode";
+import type { JobSystem } from "../JobSystem";
+
+export type FarmLoadResult =
+  | { kind: "local-existing" }
+  | { kind: "local-new" }
+  | { kind: "online-authoritative"; restored: boolean }
+  | { kind: "online-cached"; savedAt: number }
+  | { kind: "online-unavailable"; reason: string };
 
 type PresentationData = {
   player?: { name?: string; farmer?: { col: number; row: number }; farmerAppearance?: SaveGame["player"]["farmerAppearance"] };
@@ -40,6 +51,7 @@ export class SaveManager {
   private lastPresentationCallAt = 0;
   private suspended = false;
   private onlineWritable = false;
+  onStorageError: ((message: string) => void) | null = null;
 
   constructor(
     private state: GameState,
@@ -49,13 +61,24 @@ export class SaveManager {
     private quests: QuestSystem,
     private catalog: Map<string, CropConfig>,
     private placeCatalog: Map<string, PlaceableDef>,
-    private preload: (sprite: string) => Promise<unknown>
-  ) {}
+    private preload: (sprite: string) => Promise<unknown>,
+    private readonly mode: PlayMode = "local",
+    private readonly jobs?: JobSystem,
+  ) {
+    if (mode === "local") migrateLegacyProfileSaves();
+  }
 
-  private isOnline(): boolean { return api.isConfigured() && !!api.getSession(); }
+  private isOnline(): boolean { return this.mode === "online" && api.isConfigured() && !!api.getSession(); }
   private cacheKey(): string {
     const session = api.getSession();
-    return session ? `${SAVE_KEY}::${session.accountId}` : activeSaveKey();
+    if (this.mode === "local") return activeSaveKey();
+    return `${ONLINE_PRESENTATION_PREFIX}::${session?.accountId ?? "unavailable"}`;
+  }
+  private snapshotKey(): string | null {
+    const session = api.getSession();
+    return this.mode === "online" && session
+      ? `${ONLINE_SNAPSHOT_PREFIX}::${session.accountId}`
+      : null;
   }
 
   hasSave(): boolean {
@@ -63,6 +86,7 @@ export class SaveManager {
   }
 
   serialize(): SaveGame {
+    const farmJobs = this.mode === "local" ? this.jobs?.serializePending() : undefined;
     return {
       version: SAVE_VERSION,
       savedAt: Date.now(),
@@ -103,6 +127,7 @@ export class SaveManager {
       epicBoss: this.state.epicBossRun ?? undefined,
       social: { friends: this.state.friends },
       tutorial: this.state.tutorial,
+      ...(farmJobs ? { farmJobs } : {}),
     };
   }
 
@@ -132,8 +157,10 @@ export class SaveManager {
   flush(): void { this.autoFlush ? this.autoFlush() : this.save(); }
   /** Persist state that must survive an immediate reload (currently Zombie Pot jobs). */
   flushCritical(): void {
+    if (this.suspended) return;
     const blob = this.serialize();
-    if (!this.isOnline()) { this.writeLocal(blob); return; }
+    if (this.mode === "local") { this.writeLocal(blob); return; }
+    if (!this.isOnline()) return;
     const data = this.presentation(blob);
     try { localStorage.setItem(this.cacheKey(), JSON.stringify(data)); } catch { /* ignore */ }
     if (this.pushing) this.pendingPresentationImmediate = true;
@@ -149,10 +176,11 @@ export class SaveManager {
   save(): void {
     if (this.suspended) return;
     const blob = this.serialize();
-    if (!this.isOnline()) {
+    if (this.mode === "local") {
       this.writeLocal(blob);
       return;
     }
+    if (!this.isOnline()) return;
     // Gameplay code calls save() at many semantic boundaries. In v3 those calls only
     // mark presentation dirty; they must not bypass the fixed one-minute deadline.
     if (this.scheduleSave) {
@@ -173,7 +201,21 @@ export class SaveManager {
   }
 
   private writeLocal(blob: SaveGame): void {
-    try { localStorage.setItem(this.cacheKey(), JSON.stringify(blob)); } catch (error) { console.warn("[save] local write failed", error); }
+    const key = this.cacheKey();
+    const temporary = `${key}.tmp`;
+    const backup = `${key}.backup`;
+    try {
+      const encoded = JSON.stringify(blob);
+      localStorage.setItem(temporary, encoded);
+      JSON.parse(localStorage.getItem(temporary) ?? "");
+      const current = localStorage.getItem(key);
+      if (current !== null) localStorage.setItem(backup, current);
+      localStorage.setItem(key, encoded);
+      localStorage.removeItem(temporary);
+    } catch (error) {
+      console.warn("[save] local write failed", error);
+      this.onStorageError?.("Local Farm could not be saved. Check browser storage or export a backup.");
+    }
   }
 
   private async push(data: Record<string, unknown>): Promise<void> {
@@ -228,21 +270,60 @@ export class SaveManager {
     }
   }
 
-  async load(): Promise<boolean> {
-    if (this.isOnline()) {
+  async load(): Promise<FarmLoadResult> {
+    if (this.mode === "online") {
+      if (!this.isOnline()) return { kind: "online-unavailable", reason: "not_configured" };
       try {
         const boot = await api.bootstrap();
         this.presentationVersion = boot.presentation.version;
         this.lastPresentation = JSON.stringify(boot.presentation.data);
-        await this.applySave(this.fromBootstrap(boot));
+        const snapshot = this.fromBootstrap(boot);
+        await this.applySave(snapshot);
         try { localStorage.setItem(this.cacheKey(), this.lastPresentation); } catch { /* ignore */ }
-        return Object.keys(boot.gameplay.farm.plots).length > 0 || boot.gameplay.objects.objects.length > 0 || boot.gameplay.roster.length > 0;
+        this.writeOnlineSnapshot(snapshot);
+        const restored = Object.keys(boot.gameplay.farm.plots).length > 0 ||
+          boot.gameplay.objects.objects.length > 0 || boot.gameplay.roster.length > 0;
+        return { kind: "online-authoritative", restored };
       } catch (error) {
-        console.warn("[bootstrap] authoritative load failed; gameplay remains unavailable", error);
-        return false;
+        console.warn("[bootstrap] authoritative load failed; trying cached snapshot", error);
+        const cached = await this.loadOnlineSnapshot();
+        return cached ?? {
+          kind: "online-unavailable",
+          reason: error instanceof api.ApiError ? error.code : "error",
+        };
       }
     }
-    return this.loadLocal();
+    return await this.loadLocal() ? { kind: "local-existing" } : { kind: "local-new" };
+  }
+
+  private writeOnlineSnapshot(snapshot: SaveGame): void {
+    const key = this.snapshotKey();
+    if (!key) return;
+    try { localStorage.setItem(key, JSON.stringify(snapshot)); } catch { /* read-only cache is optional */ }
+  }
+
+  /** Refresh the disconnected-view snapshot only after the economy client confirms
+   * there are no optimistic commands layered over the authoritative projection. */
+  cacheAuthoritativeSnapshot(serverTime = Date.now()): void {
+    if (this.mode !== "online" || !this.isOnline()) return;
+    const snapshot = this.serialize();
+    snapshot.savedAt = serverTime;
+    this.writeOnlineSnapshot(snapshot);
+  }
+
+  private async loadOnlineSnapshot(): Promise<FarmLoadResult | null> {
+    const key = this.snapshotKey();
+    if (!key) return null;
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) return null;
+      const snapshot = JSON.parse(raw) as SaveGame;
+      if (snapshot.version !== SAVE_VERSION) return null;
+      await this.applySave(snapshot);
+      return { kind: "online-cached", savedAt: snapshot.savedAt };
+    } catch {
+      return null;
+    }
   }
 
   private fromBootstrap(boot: Awaited<ReturnType<typeof api.bootstrap>>): SaveGame {
@@ -323,15 +404,26 @@ export class SaveManager {
   }
 
   private async loadLocal(): Promise<boolean> {
-    let raw: string | null = null;
-    try { raw = localStorage.getItem(this.cacheKey()); } catch { return false; }
-    if (!raw) return false;
-    try {
-      const data = JSON.parse(raw) as SaveGame;
-      if (data.version !== SAVE_VERSION) return false;
-      await this.applySave(data);
-      return true;
-    } catch { return false; }
+    const key = this.cacheKey();
+    let values: (string | null)[];
+    try { values = [localStorage.getItem(key), localStorage.getItem(`${key}.backup`)]; }
+    catch { return false; }
+    for (let index = 0; index < values.length; index++) {
+      const raw = values[index];
+      if (!raw) continue;
+      try {
+        const data = JSON.parse(raw) as SaveGame;
+        if (data.version !== SAVE_VERSION || !data.player || !data.farm) continue;
+        await this.applySave(data);
+        if (index === 1) {
+          try { localStorage.removeItem(key); } catch { /* keep backup usable */ }
+          this.writeLocal(data);
+          this.onStorageError?.("The latest Local Farm save was damaged. The previous backup was restored.");
+        }
+        return true;
+      } catch { /* try the last-known-good backup */ }
+    }
+    return false;
   }
 
   private async applySave(data: SaveGame): Promise<void> {
@@ -382,28 +474,57 @@ export class SaveManager {
     const epicActive = !!epicRun && !epicRun.completedAt && Date.now() < epicRun.expiresAt;
     this.quests.setEpicBossActive(epicActive, epicActive ? epicDef?.questIds ?? [] : []);
     this.quests.restore(data.quests);
+    if (this.mode === "local") this.jobs?.restorePending(data.farmJobs, (key) => this.catalog.get(key));
     if (player.farmer) this.walk.teleport(player.farmer.col, player.farmer.row);
   }
 
   async hydrateReadOnly(save: SaveGame): Promise<void> { await this.applySave(save); }
-  clear(): void { try { localStorage.removeItem(this.cacheKey()); } catch { /* ignore */ } }
+  exportLocal(): string | null {
+    if (this.mode !== "local") return null;
+    try { return localStorage.getItem(this.cacheKey()); } catch { return null; }
+  }
+
+  importLocal(raw: string): boolean {
+    if (this.mode !== "local") return false;
+    try {
+      const data = JSON.parse(raw) as SaveGame;
+      if (data.version !== SAVE_VERSION || !data.player || !data.farm) return false;
+      this.writeLocal(data);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  clear(): void {
+    const key = this.cacheKey();
+    try {
+      localStorage.removeItem(key);
+      if (this.mode === "local") {
+        localStorage.removeItem(`${key}.backup`);
+        localStorage.removeItem(`${key}.tmp`);
+      }
+    } catch { /* ignore */ }
+  }
 
   enableAutosave(localMs = 250, remoteMs = 60_000): void {
     let localTimer = 0;
     let remoteTimer = 0;
     let dirtySince = 0;
     const flushLocal = () => {
-      if (this.isOnline()) {
+      if (this.suspended) return;
+      if (this.mode === "online") {
+        if (!this.isOnline()) return;
         try { localStorage.setItem(this.cacheKey(), JSON.stringify(this.presentation())); } catch { /* ignore */ }
       } else this.writeLocal(this.serialize());
     };
     const fireRemote = () => { remoteTimer = 0; dirtySince = 0; this.commitPresentation(); };
     const schedule = () => {
       const encoded = JSON.stringify(this.presentation());
-      if (this.isOnline() && encoded === this.lastPresentation) return;
+      if (this.mode === "online" && encoded === this.lastPresentation) return;
       clearTimeout(localTimer);
       localTimer = window.setTimeout(flushLocal, localMs);
-      if (!this.isOnline()) return;
+      if (this.mode !== "online" || !this.isOnline()) return;
       if (!dirtySince) dirtySince = Date.now();
       if (!remoteTimer) {
         const sinceDirty = remoteMs - (Date.now() - dirtySince);

@@ -1,15 +1,16 @@
 # Zombie Farm 2 Reforged
 
 A browser-based reimplementation of **Zombie Farm 2**, built from the mechanics,
-data, and assets organized in `../ZF2R_extracted/`. It runs two ways from one
-codebase:
+data, and assets organized in `../ZF2R_extracted/`. When online services are
+configured, the title screen offers two deliberately independent farms:
 
-- **Offline/local build** — fully client-side, saves to `localStorage`, no server
-  or account needed. This is what you get when the online config is left blank.
-- **Hosted online build** — the deployed production site requires **Google
-  sign-in** and a player-chosen username, and stores protocol-v3 gameplay state in a
-  Cloudflare Worker + D1 backend. It adds cloud saves, friends, brain gifting, and
-  read-only visits to friends' farms.
+- **Local Farm** — fully client-side, saved only in this browser, with no account
+  or gameplay server required.
+- **Online Farm** — Google-authenticated and server-authoritative, with cloud
+  saves, friends, gifting, the Black Market, and friend-farm visits.
+
+The farms never merge, overwrite, or silently fall back to one another. A build
+without online configuration opens Local Farm directly.
 
 The project blends original-game fidelity work (recovered mechanics, art, and
 combat numbers) with new "Reforged" additions (the online/social layer).
@@ -76,6 +77,7 @@ must also update [SECURITY.md](SECURITY.md) and [server/README.md](server/README
 - Free-placed 4x4 plots with plow, plant, harvest, zombie-hole, and offline timers.
 - **Multi-plot plow selection**: drag to preview a rectangle of 4x4 plots (invalid plots stay visible in red and are skipped) and commit them as one batch of plow jobs. On touch the preview can be repositioned and resized with edge handles before a confirming tap.
 - Queued farm jobs keep advancing while the browser tab is hidden, and jobs replayed from elapsed offline time are stamped at their real completion moment, so growth timers stay accurate across backgrounding.
+- Local Farm persists unfinished farmer jobs across close/reopen and replays them from elapsed wall time.
 - Objects placed against the farm's south/east edge (notably fruit trees) are harvestable — their walk-to point is clamped onto the grid, and a job with an unreachable destination cancels instead of jamming the queue.
 - Source-derived crop and zombie catalogs with level/currency/grave gates.
 - Local gold, brains, XP, level curve, item economy, and level-up unlock popup.
@@ -111,6 +113,7 @@ must also update [SECURITY.md](SECURITY.md) and [server/README.md](server/README
 - Raid audio: per-stage battle BGM (farm/pirate/ninja/robot/alien themes, with `fightBGM` covering the other six raids) plus attack-keyed strike SFX (bite/poke/swipe/flail/punch) in both raids and Epic Boss fights.
 
 ### Online and social (Reforged)
+- **Explicit Local/Online choice** — Local Farm and Online Farm use isolated storage and carry a persistent in-game mode badge. Settings returns to the chooser without moving progress between them.
 - **Google account authentication** — the hosted build gates the whole game behind Sign in with Google (`src/net/gate.ts`); an offline build (no config) has no lock.
 - **Player-chosen usernames** picked on first login.
 - **Online state** across devices: the Cloudflare Worker owns protocol-v3 gameplay state, with an exclusive single-writer lease (token-hashed, account-version CAS), account-version conflict handling, an offline command outbox, and a local per-account cache.
@@ -125,14 +128,14 @@ must also update [SECURITY.md](SECURITY.md) and [server/README.md](server/README
 - One responsive build for phone and desktop: capability autodetection (`src/platform.ts`), a compact touch HUD that collapses after you pick a tool, pinch-to-zoom/pan, `env(safe-area-inset-*)` padding, short-viewport and phone-landscape breakpoints, and Android Back handling.
 - Touch input model (`src/touchInput.ts`): select taps resolve to the plot under *initial contact* (finger wobble across an isometric edge can't misfire), zombies need a 450 ms hold rather than a tap so an overlapping unit can't steal a plot tap, and pointer capture plus a native-pointerup fallback keep releases from being retargeted when the HUD collapses under the finger.
 - **Drag-select plowing** (`src/plowSelection.ts`): tapping soil drops a 4x4 anchor preview; dragging repositions it and the corner/edge handles grow it into a rectangle; a second tap inside the preview commits every valid plot at once. Commit is deferred to pointer-up so one tap can never plow twice.
-- **Installable PWA**: a web app manifest (`public/manifest.webmanifest`), maskable/Apple icons, and a `vite-plugin-pwa` service worker. The app shell, boot script, and title art are precached; `/assets` art and audio are cached `CacheFirst` on first fetch, while release-sensitive JSON catalogs use `NetworkFirst` with an offline fallback. Offline play therefore warms up progressively rather than downloading ~88 MB at install. Updates are `prompt`-mode — `src/pwa.ts` registers the worker manually (the build's CSP forbids inline script) and shows "new version ready" / "ready to play offline" toasts. The service worker is build-only; there is none in `npm run dev`.
+- **Installable PWA**: a web app manifest (`public/manifest.webmanifest`), maskable/Apple icons, and a `vite-plugin-pwa` service worker. The app shell, boot script, and title art are precached; `/assets` art and audio are cached `CacheFirst` on first fetch, while release-sensitive JSON catalogs use `NetworkFirst` with an offline fallback. Local Farm warms up progressively rather than downloading ~88 MB at install. Readiness copy distinguishes Local Farm's progressively cached assets from Online Farm's connectivity requirement. The service worker is build-only; there is none in `npm run dev`.
 - A one-time **"Play Fullscreen?"** offer on mobile after the boot overlay is dismissed (`src/ui/panels/fullscreenPrompt.ts`), skipped when already fullscreen or running installed/standalone. Settings also has a Fullscreen row and an `F` hotkey.
 - Music, sound effects, and farm ambience are enabled by default and can be toggled independently in Settings. An optional **Mute When Unfocused** setting silences all channels while the game tab or window is in the background. The mandatory first-run tutorial uses real farm actions: plow, plant a zombie, buy and use Insta-Grow, harvest, then raid. Developer controls (a separate menu opened by an invisible hotspot beside the nameplate) support testing.
 - **Farm background** setting: foliage density choices (Deep Forest / Woodland / Light Meadow) persisted in `src/prefs.ts`. This changes the density of decorative surrounding foliage — distinct from ground/climate skins, which change the farm's tile terrain.
 - Settings toggles for **ZF2 Sprites** and **Reforged** edition, both persisted preferences (`src/prefs.ts`). Their behavior is **not yet wired** — the sprite toggle doesn't swap art, and the edition toggle doesn't gate features yet.
 
 ### Saving and testing
-- Versioned save (local, or synchronized to the server when online) for farm, objects, zombies, boosts, quests, raids, Epic Boss runs, climate, and Zombie Pot jobs.
+- Versioned, isolated persistence: complete Local Farm saves with a last-known-good backup and JSON export/import; server-authoritative Online Farm state with a per-account read-only snapshot, presentation cache, and durable command outbox.
 - Automated Vitest suites exist for both client (`npm test`) and server (economy, loot, combat stats/prediction, mutations, Zombie Pot, ability unlocking, raid catalog/ordering, friend logic, and the server-side friend-visit save projection). Coverage is incomplete; the GitHub Pages deploy is gated by the client suite, and the Worker deploy is gated by migration validation, the server suite, and typechecking.
 
 `window.ZF` exposes debug handles including app, world, field, farmer, zombies, state, HUD,
@@ -147,7 +150,7 @@ Qualifiers: *implemented*, *partially implemented*, *placeholder*, *disabled*, *
 - **Quests (partially implemented):** the farm loop, raids/invasions, Zombie Pot, and every Epic Boss emit live events. Recovered Epic quest chains are selected for the active boss; some late bosses have incomplete or missing shipped quest data. Social, photo/camera, and seasonal quest classes remain dormant.
 - **Epic Bosses (eight recovered bosses):** Market → Epic Boss offers Dr. Groundhog, Loco Locust, Bully Frog, Foul Owl, Skunkarella, Rocky Rhino, General Larvaelus, and Mystical Mamba as repeatable 14-day runs. Dr. Groundhog costs 5 brains and unlocks at **player level 24**; the other seven cost 10 brains and unlock at **level 32** (server-enforced). All use 30-second manual-focus fights, permanent casualties, retained damage, crop-harvested fight tokens (or 1 brain per attempt), scaling brain/gold victory rewards, namespaced loot, pets, and deterministic online replay. The first five use exact authored combat strips; EPB 8-10 use static recovered art until their missing atlas metadata can be reconstructed. See `docs/EPIC_BOSS_MECHANICS.md`.
 - **Settings toggles — Sprites & Edition (placeholder):** the **ZF2 Sprites** and **Reforged/Traditional** switches persist a preference (`src/prefs.ts`) but do nothing yet. Sprites needs a ZF1 art pack and a runtime swap keyed off `getSpriteSet()`; Traditional needs feature gates so the online/friends surfaces read `isReforged()` and hide when it is off.
-- **QoL/UI (missing):** Received item cards/reveal/use flow, save reset/export/import, and fuller settings/help menus are missing.
+- **QoL/UI (missing):** Received item cards/reveal/use flow and fuller settings/help menus are missing.
 - **Assets (partially wired):** raid particle FX and raid/combat audio (per-stage BGM + attack-keyed strike SFX) are wired, but most other particles/VFX, title/loading/news/social promo art, most localization/fonts, many terrain tiles, and many stage assets are extracted but not wired. Specific unwired audio: `enrageBGM`, `locolocustbanjo`, `rockyrhinogong`, `taiko`, `resurrect`, `parrot`, `rain`.
 - **Tests/CI (partially implemented):** Vitest suites exist for client and server; pull requests are gated by `.github/workflows/ci.yml` (client tests + build, server tests + integration + typecheck + migration check), and both deployment workflows are test-gated. Coverage remains incomplete — notably the HUD/DOM layer, which is largely untested.
 

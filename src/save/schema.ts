@@ -17,9 +17,8 @@
 //      small and forward-compatible (a v1 loader ignores unknown fields).
 //
 // NOT persisted, by design:
-//   - The JobSystem queue (in-flight farmer actions). On load the queue is empty
-//     and the farmer is idle; queued work is cheap to redo and messy to restore
-//     mid-hoe.
+//   - Pixi animation state for farmer jobs. Local Farm persists semantic job intent
+//     and restarts/replays it; sprites, bars, and partial walk paths are rebuilt.
 //   - The wandering Dr. Zombie actor (pure cosmetic until Phase 3 ownership).
 //   - Camera pan/zoom (a view preference, not game state).
 // ---------------------------------------------------------------------------
@@ -31,8 +30,14 @@ import type { EpicBossRun } from "../epicBoss/types";
 /** Bump when the shape changes in a way that needs a migration. */
 export const SAVE_VERSION = 1;
 
-/** localStorage key for the single active save slot. */
+/** Legacy mixed-purpose key. Retained only for safe migration. */
 export const SAVE_KEY = "zf2r.v3.presentation-cache";
+/** Local Farm profiles. These are never read by Online Farm. */
+export const LOCAL_SAVE_PREFIX = "zf2r.local.save.v1";
+/** Last server-confirmed account snapshot, used for disconnected viewing only. */
+export const ONLINE_SNAPSHOT_PREFIX = "zf2r.online.snapshot.v1";
+/** Account presentation cache. This never contains Local Farm progression. */
+export const ONLINE_PRESENTATION_PREFIX = "zf2r.online.presentation.v1";
 
 /** localStorage key for device settings (kept separate from game progress). */
 export const SETTINGS_KEY = "zf2r.v3.settings";
@@ -69,12 +74,30 @@ export interface SaveGame {
   raids?: RaidProgressSave;
   /** Active/completed limited Epic Boss run. Absent in saves created before the feature. */
   epicBoss?: EpicBossRun;
+  /** Local Farm only: unfinished farmer intents, replayed from elapsed wall time. */
+  farmJobs?: FarmJobQueueSave;
   /** Local offline-fallback friends list + gifting state. The online friend system
    *  is server-backed (net/api.ts + server/), not stored here. Absent = no local
    *  friends. */
   social?: SocialSave;
   /** First-run Tim Buckwheat guided tutorial progress. Absent = never started. */
   tutorial?: TutorialSave;
+}
+
+export interface FarmJobSave {
+  kind: "till" | "plant" | "harvest" | "walk" | "harvestTree";
+  oc: number;
+  or: number;
+  cx: number;
+  cy: number;
+  queuedAt?: number;
+  cropKey?: string;
+  objectId?: string;
+}
+
+export interface FarmJobQueueSave {
+  savedAt: number;
+  jobs: FarmJobSave[];
 }
 
 /** Offline social state: the local friends list. */

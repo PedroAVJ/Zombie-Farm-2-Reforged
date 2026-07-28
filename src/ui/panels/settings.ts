@@ -248,7 +248,64 @@ export function openSettings(hud: Hud): void {
       noteEl("Auto follows this device's local clock (night from 7pm to 7am).")
     );
   }
+  const farmMode = document.createElement("div");
+  farmMode.className = "set-row";
+  const farmModeLabel = document.createElement("span");
+  farmModeLabel.textContent = hud.playMode === "local" ? "Local Farm" : "Online Farm";
+  const switchFarm = document.createElement("button");
+  switchFarm.className = "set-action";
+  switchFarm.textContent = "Switch Farm";
+  switchFarm.onclick = () => hud.onSwitchFarm?.();
+  farmMode.append(farmModeLabel, switchFarm);
+  const farmModeNote = noteEl(hud.playMode === "local"
+    ? "Saved on this device only. Online Farm has separate progress."
+    : "Saved to your account. Local Farm has separate progress.");
+  const localStorageControls: HTMLElement[] = [];
+  if (hud.playMode === "local") {
+    const actions = document.createElement("div");
+    actions.className = "set-row";
+    const label = document.createElement("span");
+    label.textContent = "Local Save";
+    const controls = document.createElement("div");
+    controls.className = "set-username-controls";
+    const exportButton = document.createElement("button");
+    exportButton.className = "set-action";
+    exportButton.textContent = "Export";
+    exportButton.onclick = () => hud.onExportLocal?.();
+    const importButton = document.createElement("button");
+    importButton.className = "set-action";
+    importButton.textContent = "Import";
+    const picker = document.createElement("input");
+    picker.type = "file";
+    picker.accept = "application/json,.json";
+    picker.hidden = true;
+    importButton.onclick = () => picker.click();
+    picker.onchange = async () => {
+      const file = picker.files?.[0];
+      if (!file) return;
+      if (!hud.onImportLocal?.(await file.text())) {
+        hud.showToast("That file is not a valid Local Farm backup.");
+      }
+    };
+    const resetButton = document.createElement("button");
+    resetButton.className = "set-action";
+    resetButton.textContent = "Reset";
+    resetButton.onclick = () => {
+      if (window.confirm("Reset this Local Farm? Online Farm will not be affected.")) {
+        hud.onResetLocal?.();
+      }
+    };
+    controls.append(exportButton, importButton, resetButton, picker);
+    actions.append(label, controls);
+    localStorageControls.push(
+      actions,
+      noteEl("Clearing browser data can remove Local Farm. Export a backup to keep it safe."),
+    );
+  }
   panel.append(
+    farmMode,
+    farmModeNote,
+    ...localStorageControls,
     row("Music", hud.audio.musicOn, (v) => hud.audio.setMusic(v)),
     volumeRow("Music Volume", hud.audio.musicVolume, (v) => hud.audio.setMusicVolume(v)),
     row("Sound Effects", hud.audio.sfxOn, (v) => hud.audio.setSfx(v)),

@@ -1,5 +1,5 @@
-// Pre-game auth gate. The game is locked behind Google sign-in so every player's
-// data lives on their account (reachable from any device). requireAuth() renders a
+// Online Farm auth gate. Local Farm never calls this module. Online Farm is locked
+// behind Google sign-in so account data remains reachable across devices. requireAuth() renders a
 // full-screen wall and resolves only once the player is signed in AND has chosen a
 // username — main() awaits it before building the game.
 //

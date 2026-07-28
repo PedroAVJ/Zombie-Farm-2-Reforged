@@ -3,7 +3,7 @@
 // of profiles and which one is active; SaveManager reads/writes the ACTIVE
 // profile's key, so switching a profile is just "point the index elsewhere and
 // reload". Entirely local — no server.
-import { SAVE_KEY } from "./schema";
+import { LOCAL_SAVE_PREFIX, SAVE_KEY } from "./schema";
 
 const INDEX_KEY = "zf2r.profiles.v1";
 
@@ -20,7 +20,7 @@ export interface ProfileIndex {
 
 /** The localStorage save key holding a given profile's game. */
 export function profileSaveKey(id: string): string {
-  return `${SAVE_KEY}::${id}`;
+  return `${LOCAL_SAVE_PREFIX}::${id}`;
 }
 
 function read(): ProfileIndex | null {
@@ -53,7 +53,7 @@ export function ensureIndex(): ProfileIndex {
   const now = Date.now();
   const p1: ProfileMeta = { id: "p1", name: "Profile 1", createdAt: now, lastPlayedAt: now };
   try {
-    const legacy = localStorage.getItem(SAVE_KEY);
+    const legacy = localStorage.getItem(`${SAVE_KEY}::p1`) ?? localStorage.getItem(SAVE_KEY);
     const key = profileSaveKey("p1");
     // Copy the legacy save into p1 only if p1 has no save yet (don't clobber).
     if (legacy && localStorage.getItem(key) === null) localStorage.setItem(key, legacy);
@@ -63,6 +63,22 @@ export function ensureIndex(): ProfileIndex {
   const idx: ProfileIndex = { activeId: "p1", profiles: [p1] };
   write(idx);
   return idx;
+}
+
+/** Migrate profile blobs created before Local/Online became an explicit choice.
+ * The source keys are intentionally retained as recovery copies. */
+export function migrateLegacyProfileSaves(): void {
+  const idx = ensureIndex();
+  for (const profile of idx.profiles) {
+    try {
+      const target = profileSaveKey(profile.id);
+      if (localStorage.getItem(target) !== null) continue;
+      const legacy = localStorage.getItem(`${SAVE_KEY}::${profile.id}`);
+      if (legacy) localStorage.setItem(target, legacy);
+    } catch {
+      /* SaveManager surfaces a write failure once the farm is open. */
+    }
+  }
 }
 
 /** The full index (creating it if needed). */
