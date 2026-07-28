@@ -73,7 +73,7 @@ its un-modelled `speedMultiplier` partly cancelled the error).
 
 | hazard | ground truth | source |
 | --- | --- | --- |
-| boss `throw` | the bossAction's `damage` field, applied **verbatim** | `ZFFightPhysics throwProjectile:` copies @"damage" into `damageAmount`; `damageZombie:withProjectile:withContact:` passes it to `[zombie damage:]` |
+| boss `throw` | the bossAction's `damage` field, applied **verbatim** — re-verified: no arithmetic between `damageAmount` and `damage:` | `ZFFightPhysics throwProjectile:` copies @"damage" into `damageAmount`; `damageZombie:withProjectile:withContact:` passes it to `[zombie damage:]` |
 | `alienLaser` | flat **200** | `AlienStageBullet collidedWith:` passes the immediate `0x43480000` |
 | `pixelFire` | picks **one** random eligible zombie and calls `setOnFire` — an attack INTERRUPT, not a burn: see below | `ZFFightMan pixelFire`, `ZombieActor fightUpdate:` 0x4dedc |
 | `telekinesis` | **no damage** — `knockBackBy:force:` + `stunSelfFor:` only | `ZFFightMan telekinesis:` |
@@ -102,6 +102,33 @@ Scope check: `pixelFire` appears in exactly ONE unit's `bossActions` in the whol
 whose action carries an explicit `"damage": "0"`, corroborating the no-damage reading) and
 `turnZombie` (the same Video Games boss).
 
+## Throws and specials share ONE action budget
+
+`bossUpdate:` (0x67e8c) makes a single `rollAgainstFrequencyInArray:` pick over the boss's whole
+`bossActions` array each cycle, then dispatches on the chosen action's name — `alienLaser`,
+`throw`, `wall`, `telekinesis`, `summonBoss`. A `throw` arms
+`bossActionCooldownTimer = throwSpeed × 60` frames; the cast-based actions arm
+`bossActionCastTimer = castTime × 60`. So **throws compete with specials for the same slot**
+rather than running on a parallel timer, and each action's `allowedTo…` gate is checked after the
+roll but before any timer is armed — an action it cannot perform right now (a second wall while
+one stands, a summon past the cap) costs nothing and is simply re-rolled.
+
+`bossActionCooldownTimer` is written only by `bossUpdate:`, so it starts at ObjC's zero: the
+boss's first action resolves as soon as it becomes active.
+
+For most bosses every entry is a `throw`, so the budget degenerates to a plain interval and
+nothing changes. It bites for the three mixed lists — measured over full boss-stage fights:
+
+| boss | P(throw) | throws before | after |
+| --- | --- | --- | --- |
+| City / Pirate / Farm (all throws) | 100 % | 5 | 5 |
+| Ninja (throws + wall) | 47 % | 14 | 13 |
+| Robot BrainBot (throws + telekinesis) | 75 % | 46 | 12 |
+| Video Games (throws + turnZombie + pixelFire) | 27 % | — | 3 |
+
+The Robot drop is larger than its 75 % share alone implies because each telekinesis also spends
+its 3 s cast plus recovery: of 87 s perched, 40 s goes to casting.
+
 ## Not in the data at all
 
 `enrage` appears in no plist. `ZFFightMan enrageTimeInterval` reads ability tag 11's
@@ -118,7 +145,8 @@ farm ramp into `attackCooldownMs` and flags the Scallywag; `BattleSim.cycleMs` a
 band and the mirror at fight time. `src/raid/balance.ts` is deleted.
 
 **This changes the deterministic transcript**, so `RAID_RULESET_VERSION` went 7 → 8 (it has
-since been bumped again to **9** for the `pixelFire` and Mini Buddy corrections — see the
+since been bumped again — to **9** for the `pixelFire` and Mini Buddy corrections, and to **10**
+for the shared boss-action budget below — see the
 version history in `src/raid/replay.ts`) and
 `server/src/raidVerifier.ts` passes the same `{ raidId, playerLevel }` the client does. The epic
 boss builders (`src/epicBoss/combat.ts` and `server/src/v3/epicBoss.ts`) both dropped their ×2 —

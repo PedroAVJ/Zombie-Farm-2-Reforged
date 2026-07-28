@@ -15,6 +15,31 @@ without online configuration opens Local Farm directly.
 The project blends original-game fidelity work (recovered mechanics, art, and
 combat numbers) with new "Reforged" additions (the online/social layer).
 
+## Play it
+
+**Nothing to install — the game is live at <https://zombiefarmreforged.com>.**
+Choose **Local Farm** on the title screen to play without an account.
+
+## Quick start (run it yourself)
+
+You need [Node.js](https://nodejs.org) 18 or newer, and nothing else. Every game
+asset is committed, so a clone is self-contained — no extraction step, no Python,
+no database, no account, no server.
+
+```bash
+git clone https://github.com/actualdoctornerd-ai/Zombie-Farm-2-Reforged.git
+cd Zombie-Farm-2-Reforged
+npm install
+npm run dev
+```
+
+Open <http://localhost:5173>. You'll land straight in **Local Farm**, saving to
+`localStorage`. A first-run tutorial walks you through plow → plant → harvest → raid.
+
+The clone is ~90 MB of art and audio, so expect it to take a minute. Full details,
+including the online layer, are in [Run It Locally](#run-it-locally); if something
+goes wrong, see [Troubleshooting](#troubleshooting).
+
 ## License
 
 The original source code and documentation in this repository are available
@@ -166,19 +191,19 @@ Qualifiers: *implemented*, *partially implemented*, *placeholder*, *disabled*, *
 
 ## Run It Locally
 
-Requires [Node.js](https://nodejs.org) 18+.
+The four commands are in [Quick start](#quick-start-run-it-yourself) above; this section
+is the detail behind them. Requires [Node.js](https://nodejs.org) 18+ (CI runs 20). Python
+is only needed to regenerate assets, and the server only if you're changing the online layer.
 
-### Offline / local build (no account)
+### Local Farm (no account, no server)
 
-Leave the online config blank (the default) and the game runs fully client-side,
-saving to `localStorage` — no server or account needed.
+`npm run dev` serves on <http://localhost:5173> and saves to `localStorage`, never
+contacting a server.
 
-```bash
-npm install
-npm run dev
-```
-
-Open `http://localhost:5173`.
+Vite loads `.env.local` in development but **not** `.env.production`, and `.env.local` is
+gitignored — so a fresh clone has no online config at all. `isConfigured()` is false, the
+Local/Online chooser never appears, and you go straight to Local Farm. Add a `.env.local`
+(next section) only when you actually want the online layer.
 
 ### Online development build
 
@@ -208,6 +233,50 @@ config; both online values are public (safe to commit).
 npm run build      # tsc + vite build → dist/
 npm run preview    # serve the built dist/ locally
 ```
+
+⚠️ **`npm run build` is not offline.** Unlike `npm run dev`, a production build reads the
+committed `.env.production`, so the bundle points at the **live** Worker and the real Google
+client id. Local Farm still works in that bundle, but choosing Online Farm will talk to
+production, and sign-in will fail anyway because `localhost` isn't an authorized origin on
+that OAuth client.
+
+To build a bundle with the online layer compiled out entirely, create a file named
+`.env.production.local` in the repo root (it's gitignored) containing exactly:
+
+```
+VITE_API_URL=
+VITE_GOOGLE_CLIENT_ID=
+```
+
+Then `npm run build` as usual. With no API URL, `isConfigured()` is false: the chooser
+never appears and the build opens Local Farm directly. `npm run preview` then serves it
+on <http://localhost:4173>.
+
+### Troubleshooting
+
+**Cryptic errors during `npm install` or `npm run dev`.** Check your Node version with
+`node -v` — it must be 18 or newer. There is no `engines` field in `package.json`, so npm
+will *not* warn you on an old version; you'll just get confusing failures from Vite.
+
+**Port already in use.** Both servers take a `PORT` override: `PORT=3000 npm run dev`
+(dev defaults to 5173, `npm run preview` to 4173). On Windows PowerShell that's
+`$env:PORT=3000; npm run dev`.
+
+**The title screen asks me to sign in.** That means the build has online config. `npm run dev`
+in a fresh clone should not — check whether a `.env.local` exists in the repo root and remove
+it, or pick **Local Farm** at the chooser. If you built with `npm run build`, see the warning
+above.
+
+**Blank screen or missing art.** Assets load from `public/assets` relative to the page, so
+open the URL the dev server prints rather than a `file://` path. If art is missing after a
+`git clone`, confirm the clone finished — it pulls ~90 MB and a partial checkout is the usual
+cause.
+
+**Starting over.** Local Farm lives entirely in `localStorage`. Settings → Local Save → Reset
+clears it in-game; the same panel has Export/Import if you'd rather keep a JSON backup first.
+
+**Commands assume a POSIX shell.** `npm` commands work anywhere, but shell syntax in this file
+(`printf`, `VAR=x cmd`) is bash. On Windows, use Git Bash or WSL, or translate to PowerShell.
 
 ## Tests
 

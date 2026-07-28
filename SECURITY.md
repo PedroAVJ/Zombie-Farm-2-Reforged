@@ -26,7 +26,7 @@ Please give a reasonable window before disclosing publicly.
 ## Scope and status
 
 This document describes the current source tree at gameplay protocol v3 (client integrity
-version 5, raid ruleset version 9). It covers authentication, sessions, the exclusive writer
+version 5, raid ruleset version 10). It covers authentication, sessions, the exclusive writer
 lease, social features, gameplay commands, persistence, economy, farms, quests, raids, Epic
 Boss runs, the Black Market, rate limiting, and operational controls.
 
@@ -147,7 +147,7 @@ property is only that it stays isolated from the account.
   (migrations `0016`, `0017`, `0027`). The config still carries a `grabber` field, but since
   ruleset 6 (current version 9) `raidVerifier.grabberOf` returns `null` unconditionally — hazards are client-only
   and are not simulated server-side at all.
-- `/raid/finish` requires a matching `rulesetVersion` (`RAID_RULESET_VERSION = 9`; a mismatch
+- `/raid/finish` requires a matching `rulesetVersion` (`RAID_RULESET_VERSION = 10`; a mismatch
   returns `409 stale_ruleset` and closes the session), rejects a `finalTick` beyond the paced
   elapsed real time (`future_finish`), then **replays** the pinned sim with the submitted input
   transcript and derives `win`/`survivors`/`losses`/`retreated`, subject to the one-way

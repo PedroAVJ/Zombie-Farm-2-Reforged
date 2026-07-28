@@ -17,7 +17,12 @@ import type { RaidOutcome } from "./types";
 // interrupt and made Mini Buddy use authored Small/Large groups for special zombies.
 // In particular, a v8 client could attach a mini to Dapper while an older v8 Worker
 // attached it to a different Large zombie, causing a late truncated_transcript.
-export const RAID_RULESET_VERSION = 9;
+// 10: boss throws and specials now share ONE weighted action budget (ground truth: the
+// source makes a single roll over `bossActions` per cycle), instead of running on two
+// independent timers. Bosses whose lists mix throws with specials — the Robot BrainBot
+// and the Video Games boss — now throw proportionally less, which changes the
+// deterministic transcript from the first boss action onward.
+export const RAID_RULESET_VERSION = 10;
 export const RAID_TICK_MS = 50;
 export const RAID_MAX_TICKS = 4 * 60 * 1000 / RAID_TICK_MS;
 export const RAID_MAX_INPUTS = 512;

@@ -239,14 +239,17 @@ describe("Garden healing and formation depth", () => {
     expect(p.alive).toBe(true);
   });
 
-  it("advances specials independently when a boss has no throw actions", () => {
+  it("cycles a throw-less boss through its specials on the shared action budget", () => {
     const player = unit({ id: "player", sourceKey: "ZombieActorRegularTier1", team: "player" });
     const wall = unit({ id: "wall", sourceKey: "AlienStageActorMinion", team: "enemy", con: 300 });
     const boss = unit({ id: "boss", sourceKey: "AlienStageActorBoss", team: "enemy", isBoss: true, con: 300 });
+    // A summon template is required for `summonBoss` to be performable at all — the
+    // source gates it on `allowedToSummonMinion`, and an ungated roll is re-rolled.
+    const minion = unit({ id: "spawn", sourceKey: "AlienStageActorMinion", team: "enemy", con: 30 });
     const sim = new BattleSim([player], [wall, boss], null, true, [
       { name: "summonBoss", weight: 50, castMs: 50, cooldownMs: 300, damage: 0 },
       { name: "alienLaser", weight: 30, castMs: 50, cooldownMs: 300, damage: 0 },
-    ]);
+    ], undefined, minion);
     sim.units.find((u) => u.id === "player")!.state = "advance";
     const seen = new Set<string>();
     for (let i = 0; i < 200 && seen.size < 2; i++) {
@@ -503,5 +506,48 @@ describe("enemy cadence and boss hazard damage (ground truth)", () => {
     onTheLine(sim);
     for (let i = 0; i < 5 && !sim.projectiles.length; i++) sim.step(50);
     expect(sim.projectiles[0]?.damage).toBe(200);
+  });
+});
+
+describe("boss action budget (throws and specials share one roll)", () => {
+  const boss = () => unit({ id: "boss", sourceKey: "RobotStageActorBrainBot", team: "enemy", isBoss: true, str: 0, hp: 1e7, maxHp: 1e7 });
+  const player = () => unit({ id: "p", sourceKey: "ZombieActorRegularTier1", team: "player", hp: 1e7, maxHp: 1e7 });
+  const throwCfg = { intervalMs: 2000, options: [{ damage: 20, weight: 150, sprite: "junk.png", spriteSize: 32 }] };
+
+  /** Count throws launched over `ms`, with and without a competing special. */
+  const throwsOver = (specials: { name: string; weight: number; castMs: number; cooldownMs: number; damage: number }[], ms: number) => {
+    // A live minion keeps the boss on its perch — that is the only state it throws from.
+    const minion = unit({ id: "m", sourceKey: "RobotStageActorJunkBot", team: "enemy", str: 0, hp: 1e7, maxHp: 1e7 });
+    const sim = new BattleSim([player()], [minion, boss()], throwCfg, true, specials);
+    sim.units.find((u) => u.id === "p")!.state = "advance";
+    let launched = 0;
+    let seen = 0;
+    for (let t = 0; t < ms; t += 50) {
+      sim.step(50);
+      const seq = sim.snapshot().projSeq;
+      if (seq > seen) { launched += seq - seen; seen = seq; }
+    }
+    return launched;
+  };
+
+  it("a special steals throw slots instead of running on its own clock", () => {
+    // BrainBot's real list is telekinesis (f=50) + 5 throws (f=30 each = 150), so the
+    // source throws on ~75 % of its action cycles. With two independent timers the
+    // throws were unaffected by the special — now they compete.
+    const alone = throwsOver([], 30_000);
+    const shared = throwsOver(
+      [{ name: "telekinesis", weight: 50, castMs: 3000, cooldownMs: 3000, damage: 0 }],
+      30_000
+    );
+    expect(alone).toBeGreaterThan(0);
+    expect(shared).toBeLessThan(alone);
+  });
+
+  it("a boss whose actions are all throws is unaffected by the merge", () => {
+    // Every City/Pirate/Farm boss action is a `throw`, so the budget degenerates to a
+    // plain interval — those raids must not change.
+    const launched = throwsOver([], 20_000);
+    expect(launched).toBeGreaterThanOrEqual(9); // ~20 s / 2 s, allowing for the first tick
+    expect(launched).toBeLessThanOrEqual(11);
   });
 });

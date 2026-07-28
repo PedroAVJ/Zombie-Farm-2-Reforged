@@ -210,6 +210,15 @@ export interface BossSpecial {
   damage: number; // effect damage (data value, or a sensible default)
 }
 
+/** One entry in a boss's merged action budget. GROUND TRUTH: the source keeps throws and
+ *  specials in a SINGLE `bossActions` array and makes one weighted roll over all of them
+ *  per action cycle, so a debris toss and a special compete for the same slot. Each
+ *  throwable option is its own entry, carrying the authored `frequency` as `weight`.
+ *  See BattleSim.stepBossActions. */
+export type BossActionChoice =
+  | { kind: "throw"; weight: number; option: BossThrowOption; special: never }
+  | { kind: "special"; weight: number; special: BossSpecial; option: never };
+
 // NOTE: there is deliberately no "crossing obstacle" hazard config here. An earlier
 // ground-crossing obstacle/grab mechanic (a sprite or dot sliding along the lane, damaging
 // or seizing zombies) was NOT part of the base game — it was fabricated during development

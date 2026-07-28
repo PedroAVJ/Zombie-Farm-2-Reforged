@@ -182,7 +182,10 @@ describe("boss wall (carrotWall / junkWall)", () => {
       [player], [minion, boss],
       { intervalMs: 100, options: [{ damage: 1, weight: 1, sprite: "carrot.png", spriteSize: 20 }] },
       true,
-      [{ name: "wall", weight: 100, castMs: 3000, cooldownMs: 999999, damage: 0 }],
+      // cooldownMs mirrors what the real `wall` action derives (it carries castTime 3
+      // and no cooldownTime). Throws share this action budget, so the wall's cast AND
+      // its recovery both hold the toss — see BattleSim.stepBossActions.
+      [{ name: "wall", weight: 100, castMs: 3000, cooldownMs: 3000, damage: 0 }],
       10 * 60 * 1000, null, wallTemplate
     );
     sim.units.find((u) => u.id === "p")!.state = "advance";
@@ -195,7 +198,9 @@ describe("boss wall (carrotWall / junkWall)", () => {
     stepUntil(sim, () => sim.units.some((u) => u.isWall && u.alive));
     const wall = sim.units.find((u) => u.isWall)!;
     const spawnX = wall.x;
-    for (let t = 0; t < 1000; t += 16) sim.step(16);
+    // A second wall is refused while this one stands, so the budget falls through to
+    // throws once the cast's recovery elapses.
+    stepUntil(sim, () => sim.projectiles.length > 0);
     expect(wall.x).toBe(spawnX);
     expect(sim.projectiles.length).toBeGreaterThan(0);
   });

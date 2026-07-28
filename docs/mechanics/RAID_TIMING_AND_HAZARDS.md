@@ -14,7 +14,11 @@ Implemented in `zombiefarm/src/raid/` (BattleSim is the authority; RaidScene ren
 - **Boss throws** are gated by `allowedToThrowProjectile` at a cadence of `throwSpeed`
   (binary base **0.75 s**, overridden per-raid/per-wave by the data).
 - **Obstacles** spawn every `obstacleSpawnTimer` s, up to `obstacleLimit` on screen.
-- **Boss specials** run on `bossActionCastTimer` (wind-up) + `bossActionCooldownTimer`.
+- **Boss actions are ONE budget.** `bossUpdate:` makes a single weighted roll over the whole
+  `bossActions` array each cycle and dispatches on the chosen name, so throws COMPETE with
+  specials for the same slot rather than running on a parallel timer. A `throw` arms
+  `bossActionCooldownTimer = throwSpeed × 60` frames; cast-based actions arm
+  `bossActionCastTimer = castTime × 60`. See `ENEMY_DAMAGE_RECOVERED.md`.
 - Difficulty ladder: `stageSettings[playerLevel − recommendedLevel]` overrides
   `throwSpeed` / `throwingDisabled` / `population` / `enemyKeys` / `bossKey`.
 
@@ -61,8 +65,10 @@ Lawyers cars grab a zombie and drop it).
 
 ## Boss special actions (UnitStats.bossActions)
 
-Every boss throws 3–5 **weighted debris** (frequency ≈ sums to 100, escalating damage), at
-the `throwSpeed` cadence. Specials add extra hazards with their own cast/cooldown:
+Every boss has 3–5 **weighted debris** throws (frequency ≈ sums to 100, escalating damage).
+Throws and specials are rolled from the SAME weighted table, so a boss whose list mixes them
+throws proportionally less often — for most bosses every entry is a `throw`, and the budget
+degenerates to a plain `throwSpeed` interval. The specials:
 
 - **Aliens** — `alienLaser` (cooldown **2 s**) + `summonBoss` (cast **2 s**), rapid throws (0.2 s).
 - **Video Games (Zedzox)** — `turnZombie` (cast **3 s**, *converts your zombie to an enemy*),
@@ -164,8 +170,11 @@ configs and threads them to the scene.
   **Caveat:** `ENEMY_DAMAGE_RECOVERED.md` establishes that no `enrage` field exists in any
   plist — this mechanic is an invention that was kept deliberately. Treat the 2×/1.5× figures
   as tuning, not ground truth.
-- **Throw cadence + `throwingDisabled`** — from stage `throwSpeed` (already wired).
-- **Boss specials** — data-driven cast/cooldown scheduler:
+- **Throw cadence + `throwingDisabled`** — from stage `throwSpeed`.
+- **Shared action budget** — REWORKED at ruleset v10: throws and specials are one pre-rolled
+  weighted choice per cycle (`BattleSim` `actionCd` / `nextAction` / `actionCount`), matching the
+  source's single `rollAgainstFrequencyInArray:` over `bossActions`. An action the boss cannot
+  currently perform (a second wall, a summon past the cap) is re-rolled at no cost. The specials:
   - `alienLaser` → a fast straight bolt at a forward zombie (`ALIEN_LASER_DAMAGE = 200`).
   - `pixelFire` → a **one-frame interrupt on a single random zombie** (~0.083% of max HP), NOT
     an AoE burn. Corrected at ruleset v9 — see `ENEMY_DAMAGE_RECOVERED.md`.

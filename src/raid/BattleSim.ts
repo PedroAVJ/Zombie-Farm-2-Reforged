@@ -30,7 +30,7 @@
 // the binary): maxHp = con*100 and cadence = attackCooldownMs (2s zombie / 1s enemy ÷ dex)
 // arrive on the CombatUnit; per-swing damage = finalPower(str*10) * mult, then the player
 // lineup-depth band (1.0/0.85/0.7/0.55; enemies ×1.0). See combatStats.lineupDamageBand.
-import type { BossSpecial, BossThrowConfig, CombatUnit, CrabConfig, GrabberConfig, RaidOutcome } from "./types";
+import type { BossActionChoice, BossSpecial, BossThrowConfig, CombatUnit, CrabConfig, GrabberConfig, RaidOutcome } from "./types";
 import { ACTIVATED_ABILITY, activatedKeyFor, teamAbilitiesIn } from "../zombie/abilities";
 import {
   ALIEN_LASER_DAMAGE,
@@ -421,7 +421,10 @@ export interface BattleSimSnapshot {
   units: SimUnit[];
   projectiles: SimProjectile[];
   bossId: string | null;
-  throwTimer: number;
+  /** Ms until the pre-rolled `nextAction` resolves (throws and specials share it). */
+  actionCd: number;
+  nextAction: BossActionChoice | null;
+  actionCount: number;
   throwCount: number;
   releaseSeq: number;
   projSeq: number;
@@ -431,9 +434,7 @@ export interface BattleSimSnapshot {
   playerDamage: number;
   roundLeft: number;
   enraged: boolean;
-  specialCd: number;
   specialCast: number;
-  specialCount: number;
   pendingSpecial: BossSpecial | null;
   summonsLeft: number;
   spawnSeq: number;
@@ -563,7 +564,6 @@ export class BattleSim {
   private enemies: SimUnit[];
   private boss: SimUnit | null;
   private bossThrow: BossThrowConfig | null;
-  private throwTimer: number;
   private throwCount = 0;
   private releaseSeq = 0;
   private projSeq = 0;
@@ -576,11 +576,13 @@ export class BattleSim {
   private roundLeft: number;
   private _enraged = false;
   escaped = false;
-  // ---- boss special actions ----
+  // ---- boss actions (throws AND specials share ONE budget — see stepBossActions) ----
   private specials: BossSpecial[];
-  private specialCd = 0; // recovery until the next special can start
+  private actions: BossActionChoice[] = []; // the merged weighted roll table
+  private nextAction: BossActionChoice | null = null; // pre-rolled, so the renderer can telegraph
+  private actionCd = 0; // ms until `nextAction` resolves
+  private actionCount = 0; // deterministic roll counter
   private specialCast = 0; // wind-up left on the pending special
-  private specialCount = 0;
   private pendingSpecial: BossSpecial | null = null;
   // ---- carried-grab hazard (Trapeze Artist) ----
   readonly grabbers: SimGrabber[] = [];
@@ -663,8 +665,12 @@ export class BattleSim {
       }
     }
     this.bossThrow = bossThrow;
-    this.throwTimer = bossThrow?.intervalMs ?? 0;
     this.specials = this.boss ? bossSpecials : [];
+    this.actions = this.buildActionBudget();
+    this.rollNextAction();
+    // `bossActionCooldownTimer` is only ever written by bossUpdate:, so it starts at
+    // ObjC's zero — the boss's first action resolves as soon as it becomes active.
+    this.actionCd = 0;
     this.roundLeft = roundMs;
     this.summonTemplate = this.boss ? summonTemplate : null;
     this.wallTemplate = this.boss ? wallTemplate : null;
@@ -682,7 +688,9 @@ export class BattleSim {
       units: this.units.map((u) => ({ ...u, abilities: [...u.abilities] })),
       projectiles: this.projectiles.map((p) => ({ ...p })),
       bossId: this.boss?.id ?? null,
-      throwTimer: this.throwTimer,
+      actionCd: this.actionCd,
+      nextAction: this.nextAction ? { ...this.nextAction } : null,
+      actionCount: this.actionCount,
       throwCount: this.throwCount,
       releaseSeq: this.releaseSeq,
       projSeq: this.projSeq,
@@ -692,9 +700,7 @@ export class BattleSim {
       playerDamage: this.playerDamage,
       roundLeft: this.roundLeft,
       enraged: this._enraged,
-      specialCd: this.specialCd,
       specialCast: this.specialCast,
-      specialCount: this.specialCount,
       pendingSpecial: this.pendingSpecial ? { ...this.pendingSpecial } : null,
       summonsLeft: this.summonsLeft,
       spawnSeq: this.spawnSeq,
@@ -732,7 +738,9 @@ export class BattleSim {
     this.enemies = this.units.filter((u) => u.team === "enemy");
     this.boss = snapshot.bossId ? this.units.find((u) => u.id === snapshot.bossId) ?? null : null;
     this.projectiles.splice(0, this.projectiles.length, ...snapshot.projectiles.map((p) => ({ ...p })));
-    this.throwTimer = snapshot.throwTimer;
+    this.actionCd = snapshot.actionCd ?? 0;
+    this.nextAction = snapshot.nextAction ? { ...snapshot.nextAction } : null;
+    this.actionCount = snapshot.actionCount ?? 0;
     this.throwCount = snapshot.throwCount;
     this.releaseSeq = snapshot.releaseSeq;
     this.projSeq = snapshot.projSeq;
@@ -742,9 +750,7 @@ export class BattleSim {
     this.playerDamage = snapshot.playerDamage;
     this.roundLeft = snapshot.roundLeft;
     this._enraged = snapshot.enraged;
-    this.specialCd = snapshot.specialCd;
     this.specialCast = snapshot.specialCast;
-    this.specialCount = snapshot.specialCount ?? 0;
     this.pendingSpecial = snapshot.pendingSpecial ? { ...snapshot.pendingSpecial } : null;
     this.summonsLeft = snapshot.summonsLeft;
     this.spawnSeq = snapshot.spawnSeq;
@@ -1361,22 +1367,9 @@ export class BattleSim {
     this.promote(dtMs);
     this.stepEnrage(dtMs);
 
-    // Let a wall cast claim the boss before processing throws. Its authored cast
-    // pauses the throw clock; tossing resumes from the same point after summoning.
-    this.stepBossSpecials(dtMs);
-    if (this.bossThrow && this.boss && this.boss.alive && this.boss.state === "structure" &&
-        !this.isCastingWall()) {
-      this.throwTimer -= dtMs;
-      if (this.throwTimer <= 0) {
-        const target = this.throwTarget();
-        if (target) {
-          this.launchThrow(target);
-          this.throwTimer += this.bossThrow.intervalMs;
-        } else {
-          this.throwTimer = 0;
-        }
-      }
-    }
+    // Throws and specials draw from ONE action budget (ground truth: the boss rolls a
+    // single weighted pick over `bossActions` per cycle — see stepBossActions).
+    this.stepBossActions(dtMs);
     this.stepGrabbers(dtMs);
     this.stepCrabs(dtMs);
     this.stepProjectiles(dtMs);
@@ -1609,8 +1602,9 @@ export class BattleSim {
       return null;
     }
     if (this.isCastingWall()) return null;
+    if (this.nextAction?.kind !== "throw") return null; // a special is up next — arm rests
     if (!this.throwTarget()) return null; // empty lane → arm rests
-    const visualTimer = Math.max(0, this.throwTimer - visualLeadMs);
+    const visualTimer = Math.max(0, this.actionCd - visualLeadMs);
     if (visualTimer > windowMs) return 0;
     return clamp(1 - visualTimer / windowMs, 0, 1);
   }
@@ -1651,34 +1645,100 @@ export class BattleSim {
     this.boss.damage = Math.max(1, Math.round(this.boss.damage * ENRAGE_DMG_MULT));
   }
 
-  /** Boss special-action scheduler. Picks a weighted special, winds up for its
-   *  castMs, then lands the effect and recovers for cooldownMs. Enrage shortens the
-   *  recovery. Only runs while the boss is active and zombies are present. */
-  private stepBossSpecials(dtMs: number) {
-    if (!this.specials.length || !this.bossActive() || !this.anyAlive(this.players)) return;
+  /** Boss action scheduler — GROUND TRUTH (`CivilianActorFight bossUpdate:` 0x67e8c).
+   *  When the boss's action cooldown expires it makes ONE weighted roll over its whole
+   *  `bossActions` list (`rollAgainstFrequencyInArray:`) and dispatches on the chosen
+   *  action's name: `throw` launches a projectile and recovers for the raid's
+   *  `throwSpeed`; every other action winds up for its `castTime` and then recovers for
+   *  its `cooldownTime`. Throws therefore COMPETE with specials for the same slot —
+   *  a boss whose list is all throws (most of them) tosses on a plain interval, while
+   *  the Robot BrainBot (75 % throws) and the Video Games boss (27 %) throw
+   *  proportionally less because their specials consume the budget.
+   *
+   *  The next action is rolled as soon as the previous one resolves so the renderer can
+   *  telegraph it (`bossThrowSwing` only winds the arm when a throw is actually next). */
+  private stepBossActions(dtMs: number) {
+    if (!this.actions.length || !this.bossActive() || !this.anyAlive(this.players)) return;
+    // A special that is already winding up owns the boss until it lands.
     if (this.pendingSpecial) {
       this.specialCast -= dtMs;
       if (this.specialCast <= 0) {
-        this.runSpecial(this.pendingSpecial);
-        const cd = this.pendingSpecial.cooldownMs * (this._enraged ? ENRAGE_SPECIAL_MULT : 1);
-        this.specialCd = Math.max(300, cd);
+        const sp = this.pendingSpecial;
+        this.runSpecial(sp);
         this.pendingSpecial = null;
+        this.actionCd = Math.max(300, sp.cooldownMs * (this._enraged ? ENRAGE_SPECIAL_MULT : 1));
+        this.rollNextAction();
       }
       return;
     }
-    this.specialCd -= dtMs;
-    if (this.specialCd > 0) return;
-    const pick = this.pickSpecial();
-    if (!pick) return;
-    this.pendingSpecial = pick;
-    this.specialCast = Math.max(0, pick.castMs);
+    const next = this.nextAction;
+    if (!next) return;
+    this.actionCd -= dtMs;
+    if (this.actionCd > 0) return;
+    // The source checks each action's `allowedTo…` gate AFTER the roll but BEFORE arming
+    // any timer, so an action it cannot perform right now (a second wall, an exhausted
+    // summon) costs nothing — it simply re-rolls on the next tick instead of burning the
+    // slot on a no-op cast.
+    if (!this.canPerform(next)) {
+      this.rollNextAction();
+      return;
+    }
+    if (next.kind === "throw") {
+      const target = this.throwTarget();
+      if (!target) {
+        this.actionCd = 0; // hold the slot until someone is in the lane
+        return;
+      }
+      this.launchProjectile(target, next.option.damage, next.option.sprite, next.option.spriteSize);
+      this.throwCount++;
+      this.actionCd = this.bossThrow!.intervalMs;
+      this.rollNextAction();
+      return;
+    }
+    // A special: wind up now, resolve when the cast completes (above).
+    this.pendingSpecial = next.special;
+    this.specialCast = Math.max(0, next.special.castMs);
   }
 
-  /** Frequency-weighted deterministic pick among the boss's specials. */
-  private pickSpecial(): BossSpecial | null {
-    const pick = weightedPick(this.specials, this.specialCount, 0x51ec1a1);
-    if (pick) this.specialCount++;
-    return pick;
+  /** The source's per-action `allowedTo…` gates: a wall while one already stands and a
+   *  summon past the cap are refused, and the boss picks again rather than casting a
+   *  no-op. Everything else is always performable. */
+  private canPerform(action: BossActionChoice): boolean {
+    // Only a perched boss throws. Treating a grounded boss's throw as un-performable
+    // (rather than simply waiting) matters: otherwise a pre-rolled throw would sit in
+    // the slot forever once the boss descends and silently strangle its specials too.
+    if (action.kind === "throw") return !!this.bossThrow && this.boss?.state === "structure";
+    if (action.kind !== "special") return true;
+    if (action.special.name === "wall") {
+      const wt = this.wallTemplate;
+      return !!wt && !this.enemies.some((e) => e.alive && e.sourceKey === wt.sourceKey);
+    }
+    if (action.special.name === "summonBoss") {
+      return !!this.summonTemplate && this.summonsLeft > 0;
+    }
+    return true;
+  }
+
+  /** Roll the next action from the merged budget (deterministic — no RNG). */
+  private rollNextAction() {
+    this.nextAction = weightedPick(this.actions, this.actionCount, 0x51ec1a1);
+    if (this.nextAction) this.actionCount++;
+  }
+
+  /** Merge the boss's throw options and specials into one weighted table, exactly the
+   *  `bossActions` array the source rolls against: each throwable debris keeps its own
+   *  authored frequency alongside each special's. */
+  private buildActionBudget(): BossActionChoice[] {
+    const out: BossActionChoice[] = [];
+    if (this.boss && this.bossThrow) {
+      for (const option of this.bossThrow.options) {
+        out.push({ kind: "throw", weight: option.weight, option, special: null as never });
+      }
+    }
+    for (const special of this.specials) {
+      out.push({ kind: "special", weight: special.weight, special, option: null as never });
+    }
+    return out;
   }
 
   /** Land a boss special. Effects that need spawned entities (summonBoss, wall) go
@@ -1706,7 +1766,7 @@ export class BattleSim {
           (p) => p.alive && !p.taken && (p.state === "advance" || p.state === "fight")
         );
         const victim = eligible.length
-          ? eligible[Math.floor(hash(this.specialCount * 7 + 5) * eligible.length) % eligible.length]
+          ? eligible[Math.floor(hash(this.actionCount * 7 + 5) * eligible.length) % eligible.length]
           : null;
         if (victim) {
           victim.windupKey = null; // the cancelled swing
@@ -2078,15 +2138,6 @@ export class BattleSim {
     this.dealDamage(w, WALL_TAP_DAMAGE, true);
     w.struckThisTick = true;
     return true;
-  }
-
-  /** Launch a ballistic throw at the target zombie, leading its (capped) motion. */
-  private launchThrow(target: SimUnit) {
-    const opts = this.bossThrow!.options;
-    const opt = weightedPick(opts, this.throwCount, 0x7a20b055);
-    if (!opt) return;
-    this.throwCount++;
-    this.launchProjectile(target, opt.damage, opt.sprite, opt.spriteSize);
   }
 
   /** Launch a projectile at a target, LEADING its (capped) motion so it connects with
