@@ -103,11 +103,15 @@ describe("writer lease idle expiry", () => {
   });
 
   it("refreshes the lease from the holder's ownership poll", async () => {
-    const { db, sql } = fakeDb(await heldByMe(5 * 60_000));
+    const { db, calls, sql } = fakeDb(await heldByMe(5 * 60_000));
     const result = await projection(db, "account", MINE.sessionId, credential, NOW);
     expect(sql()).toEqual(expect.arrayContaining([
       expect.stringContaining("UPDATE account_runtime_v3 SET writer_last_activity_at"),
+      expect.stringContaining("UPDATE accounts SET last_online_at"),
     ]));
+    const accountHeartbeat = calls.find((call) =>
+      call.sql.includes("UPDATE accounts SET last_online_at"));
+    expect(accountHeartbeat?.args).toEqual([NOW, "account"]);
     expect(result.lastActivityAt).toBe(NOW);
   });
 

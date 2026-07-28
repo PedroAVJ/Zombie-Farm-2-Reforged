@@ -22,6 +22,7 @@ import {
   type PresentationProjection,
   type PresentationRequest,
 } from "./protocol";
+import { purgeRetiredOnlineStorage } from "./storageCleanup";
 export type { RaidReplayInput } from "../raid/replay";
 
 const API = import.meta.env.VITE_API_URL?.replace(/\/$/, "");
@@ -30,22 +31,10 @@ const DEVICE_KEY = "zf2r.v3.device";
 const CLIENT_KEY = "zf2r.v4.writer-client";
 const WRITER_KEY = "zf2r.v4.writer";
 
-// v3 is an intentional clean break. Never replay a v1/v2 save or outbox into a
-// newly-created authoritative account. The allowlist is every LIVE schema prefix,
-// not just v3: this purge runs on each load, so a namespace missing from here is
-// erased on the very next boot rather than persisting as intended.
-const LIVE_KEY_PREFIXES = ["zf2r.v3.", "zf2r.v4."];
-try {
-  for (let i = localStorage.length - 1; i >= 0; i--) {
-    const key = localStorage.key(i);
-    if (key && (key.startsWith("zf2r.") || key.startsWith("zombiefarm.")) &&
-        !LIVE_KEY_PREFIXES.some((prefix) => key.startsWith(prefix))) {
-      localStorage.removeItem(key);
-    }
-  }
-} catch {
-  /* storage may be unavailable in privacy mode */
-}
+// v3 is an intentional clean break for old ONLINE credentials and mutation
+// queues. The cleanup is explicit so importing the optional API client can never
+// erase Local Farm saves, profile metadata, preferences, or current online queues.
+purgeRetiredOnlineStorage();
 
 export function deviceId(): string {
   try {

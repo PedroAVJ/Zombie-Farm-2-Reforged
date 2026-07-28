@@ -44,9 +44,11 @@ const isHeld = (row: RuntimeWriterRow): boolean =>
 const isIdle = (row: RuntimeWriterRow, now: number): boolean =>
   now - (row.writer_last_activity_at ?? 0) > WRITER_IDLE_MS;
 
-/** Refresh the holder's lease from its ownership poll. The WHERE clause repeats the
- *  full ownership fence so a takeover landing between the read and this write can
- *  never be papered over by a heartbeat. Returns the effective activity timestamp. */
+/** Refresh the holder's lease from its ownership poll and keep the account-level
+ *  last-online tracker on the same one-minute cadence. The runtime WHERE clause
+ *  repeats the full ownership fence so a takeover landing between the read and this
+ *  write can never be papered over by a heartbeat. Returns the effective activity
+ *  timestamp. */
 const heartbeat = async (
   db: D1Database,
   accountId: string,
@@ -57,9 +59,13 @@ const heartbeat = async (
 ): Promise<number> => {
   const last = row.writer_last_activity_at ?? 0;
   if (now - last < HEARTBEAT_MIN_INTERVAL_MS) return last;
-  const result = await db.prepare(`UPDATE account_runtime_v3 SET writer_last_activity_at=?,updated_at=?
-    WHERE account_id=? AND writer_device_id=? AND writer_session_id=? AND writer_generation=?`)
-    .bind(now, now, accountId, credential.clientId, sessionId, credential.generation).run();
+  const [result] = await db.batch([
+    db.prepare(`UPDATE account_runtime_v3 SET writer_last_activity_at=?,updated_at=?
+      WHERE account_id=? AND writer_device_id=? AND writer_session_id=? AND writer_generation=?`)
+      .bind(now, now, accountId, credential.clientId, sessionId, credential.generation),
+    db.prepare("UPDATE accounts SET last_online_at = MAX(last_online_at, ?) WHERE id = ?")
+      .bind(now, accountId),
+  ]);
   return (result.meta.changes ?? 0) === 1 ? now : last;
 };
 

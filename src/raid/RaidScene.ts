@@ -78,6 +78,9 @@ export interface RaidSceneParams {
 const SMASH_KEYS = new Set(["bash", "bashV2"]);
 const SMASH_GROW = 0.4;
 const SMASH_SLAM_S = 0.18;
+// Keep the T3/T4 Regular-zombie laser combat active while its beam presentation
+// is temporarily hidden. Flip this back on when the visual is ready to ship.
+const SHOW_REGULAR_ZOMBIE_LASERS = false;
 const INTRO_MS = 700; // zombies slide in
 const END_PAUSE_MS = 650; // beat after the last blow before we move on
 // On a win, survivors stroll off to the right at a normal walking pace (not the old
@@ -264,6 +267,7 @@ interface Token {
   healFxSeq: number; // last heal event rendered for this unit
   healCastSeq: number; // last heal cast rendered for this Garden zombie
   healPose: number; // seconds remaining in the arms-overhead healing pose
+  laserFxSeq: number; // last automatic laser event rendered for this unit
 }
 
 async function loadTex(url: string): Promise<Texture | null> {
@@ -357,6 +361,7 @@ export class RaidScene {
   private dotTex: Texture | null = null; // round placeholder for sprite-less hazards
   private fxLayer = new Container(); // transient effects (death poofs) above the field
   private fx: { g: Graphics; t: number; life: number; color: number }[] = [];
+  private laserFx: { g: Graphics; t: number; life: number }[] = [];
   private brainLayer = new Container();
   private brainTex: Texture | null = null;
   private brainDrop = 0;
@@ -896,7 +901,7 @@ export class RaidScene {
       hp, charge, base, hpCenterX, topY, pulse: 0, atkCount: 0,
       deathAnim: -1, emerged: false,
       smashSlam: -1, wasSmashWindup: 0, actorBaseScale, actorBaseY,
-      healFxSeq: 0, healCastSeq: 0, healPose: 0,
+      healFxSeq: 0, healCastSeq: 0, healPose: 0, laserFxSeq: 0,
     };
   }
 
@@ -1306,6 +1311,13 @@ export class RaidScene {
       if (u.healCastSeq > tok.healCastSeq) {
         tok.healCastSeq = u.healCastSeq;
         tok.healPose = HEAL_POSE_S;
+      }
+      if (u.laserFxSeq > tok.laserFxSeq) {
+        tok.laserFxSeq = u.laserFxSeq;
+        const target = u.laserTargetId ? this.tokens.get(u.laserTargetId) : null;
+        if (SHOW_REGULAR_ZOMBIE_LASERS && target) {
+          this.spawnLaserBeam(tok, target, u.abilities.includes("zomBeam"));
+        }
       }
       if (tok.healPose > 0) tok.healPose = Math.max(0, tok.healPose - dtSec);
 
@@ -1744,6 +1756,37 @@ export class RaidScene {
       for (const e of this.fx) if (e.t >= e.life) e.g.destroy();
       this.fx = this.fx.filter((e) => e.t < e.life);
     }
+    for (const beam of this.laserFx) {
+      beam.t += dtSec;
+      const k = Math.min(1, beam.t / beam.life);
+      beam.g.alpha = (1 - k) ** 2;
+    }
+    if (this.laserFx.some((beam) => beam.t >= beam.life)) {
+      for (const beam of this.laserFx) if (beam.t >= beam.life) beam.g.destroy();
+      this.laserFx = this.laserFx.filter((beam) => beam.t < beam.life);
+    }
+  }
+
+  /** Flash the Regular zombie's automatic T3/T4 beam from its eye line to the
+   *  enemy that received the sim's instant laser damage. This is presentation-only:
+   *  the replay-safe damage and cadence remain owned by BattleSim.stepLaser. */
+  private spawnLaserBeam(source: Token, target: Token, upgraded: boolean) {
+    const x0 = source.root.x + source.hpCenterX + source.base * 0.16;
+    const y0 = source.root.y + source.topY * 0.72;
+    const x1 = target.root.x + target.hpCenterX - target.base * 0.2;
+    const y1 = target.root.y + target.topY * 0.55;
+    const color = upgraded ? 0x6ffcff : 0x8dff45;
+    const g = new Graphics()
+      .moveTo(x0, y0).lineTo(x1, y1)
+      .stroke({ width: upgraded ? 9 : 7, color, alpha: 0.22 })
+      .moveTo(x0, y0).lineTo(x1, y1)
+      .stroke({ width: upgraded ? 4 : 3, color, alpha: 0.95 })
+      .moveTo(x0, y0).lineTo(x1, y1)
+      .stroke({ width: 1.25, color: 0xffffff, alpha: 1 })
+      .circle(x0, y0, upgraded ? 5 : 4).fill({ color: 0xffffff, alpha: 0.9 })
+      .circle(x1, y1, upgraded ? 8 : 6).fill({ color, alpha: 0.75 });
+    this.fxLayer.addChild(g);
+    this.laserFx.push({ g, t: 0, life: upgraded ? 0.18 : 0.14 });
   }
 
   /** Yeet one visible brain per five awarded brains from the defeated boss into

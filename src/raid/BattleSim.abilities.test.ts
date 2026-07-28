@@ -332,6 +332,32 @@ describe("lasers, resurrection, and activated attacks", () => {
     e.x = 915;
     sim.step(200); // finalAttackSpeed / 3
     expect(e.hp).toBe(9995);
+    expect(p.laserFxSeq).toBe(1);
+    expect(p.laserTargetId).toBe("enemy");
+  });
+
+  it("emits the upgraded T4 laser presentation at its faster cadence", () => {
+    const laser = unit({
+      id: "laser-v2", sourceKey: "ZombieActorRegularTier4", team: "player",
+      abilities: ["laserBeam", "zomBeam"], attackCooldownMs: 600,
+    });
+    const enemy = unit({
+      id: "enemy", sourceKey: "FarmStageActorFarmhand", team: "enemy",
+      hp: 10_000, maxHp: 10_000,
+    });
+    const sim = new BattleSim([laser], [enemy], null, true);
+    const p = sim.units.find((u) => u.id === "laser-v2")!;
+    p.state = "advance";
+    p.x = 300;
+    const e = sim.units.find((u) => u.id === "enemy")!;
+    e.state = "hold";
+    e.x = 915;
+
+    sim.step(100); // finalAttackSpeed / 6
+
+    expect(p.laserFxSeq).toBe(1);
+    expect(p.laserTargetId).toBe("enemy");
+    expect(e.hp).toBe(9995);
   });
 
   it("resurrects one non-Small zombie once at full Life", () => {

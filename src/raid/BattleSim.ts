@@ -328,6 +328,8 @@ export interface SimUnit {
   healFxSeq: number; // increments when this unit receives a heal (renderer trigger)
   healCastSeq: number; // increments when this Garden zombie performs a heal
   laserTimerMs: number; // automatic walking-laser cadence
+  laserFxSeq: number; // increments when a walking laser fires (renderer trigger)
+  laserTargetId: string | null; // target of the most recent walking laser
   abilityRollSeq: number; // replay-safe proc sequence (Block/Stun/Double Strike)
   usedAbilities: string[]; // one-use activated abilities already consumed
   resurrectUsed: boolean; // one-use automatic Resurrect latch
@@ -524,6 +526,8 @@ function toSim(u: CombatUnit, i: number): SimUnit {
     healFxSeq: 0,
     healCastSeq: 0,
     laserTimerMs: laserInterval(abilities, u.attackCooldownMs),
+    laserFxSeq: 0,
+    laserTargetId: null,
     abilityRollSeq: 0,
     usedAbilities: [],
     resurrectUsed: false,
@@ -699,6 +703,8 @@ export class BattleSim {
       healAoeTimerMs: u.healAoeTimerMs ??
         (u.abilities.includes("healAOE") ? HEAL_AOE_MS : 0),
       laserTimerMs: u.laserTimerMs ?? laserInterval(u.abilities, u.cooldownMs),
+      laserFxSeq: u.laserFxSeq ?? 0,
+      laserTargetId: u.laserTargetId ?? null,
       abilityRollSeq: u.abilityRollSeq ?? 0,
       usedAbilities: [...(u.usedAbilities ?? [])],
       resurrectUsed: u.resurrectUsed ?? false,
@@ -1031,6 +1037,8 @@ export class BattleSim {
     if (foe) {
       const dmg = Math.max(1, Math.round(u.power * 0.10));
       this.dealDamage(foe, dmg, true);
+      u.laserTargetId = foe.id;
+      u.laserFxSeq++;
       u.struckThisTick = true;
       this.attacksLanded++;
       this.playerDamage += dmg;

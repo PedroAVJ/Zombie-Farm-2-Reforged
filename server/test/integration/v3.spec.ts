@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  befriend, call, currentIntegrityHeaders, grantBalance, signIn, uniqueSub,
+  befriend, call, currentIntegrityHeaders, grantBalance, grantRoster, signIn, uniqueSub,
 } from "./helpers";
 
 const deviceA = "device-aaaaaaaa";
@@ -461,6 +461,53 @@ describe("protocol v3 API", () => {
     });
     expect(next.status).toBe(429);
     expect(next.body.error).toBe("cooldown");
+  });
+
+  it("uses a purchased invasion voucher to start again during cooldown", async () => {
+    const session = await signIn();
+    await grantBalance(session, { gold: 3_000 });
+    await grantRoster(session, [{
+      id: "voucher-raid-zombie",
+      key: "ZombieActorRegularTier1",
+      stored: false,
+    }]);
+    const boot = (await call<any>("POST", "/bootstrap", session.token, {
+      protocolVersion: 3,
+      deviceId: deviceA,
+    })).body;
+    const bought = await call<any>("POST", "/commands", session.token,
+      commandBody(boot, "batch-buy-invasion-voucher", 1, [
+        { type: "power.buy", key: "invasion_voucher" },
+      ]));
+    expect(bought.status, JSON.stringify(bought.body)).toBe(200);
+    expect(bought.body.results[0]).toMatchObject({ status: "applied" });
+    expect(bought.body.gameplay.inventory.invasion_voucher).toBe(1);
+
+    const raid = {
+      raidId: 1,
+      orderedUnitIds: ["voucher-raid-zombie"],
+      rulesetVersion: 7,
+    };
+    const first = await call<any>("POST", "/raid/start", session.token, raid);
+    expect(first.status, JSON.stringify(first.body)).toBe(200);
+    const finished = await call<any>("POST", "/raid/finish", session.token, {
+      sessionId: first.body.sessionId,
+      finalTick: 0,
+      inputs: [{ seq: 1, tick: 0, type: "retreat" }],
+      clientWin: false,
+    });
+    expect(finished.status, JSON.stringify(finished.body)).toBe(200);
+
+    const bypass = await call<any>("POST", "/raid/start", session.token, {
+      ...raid,
+      useVoucher: true,
+    });
+    expect(bypass.status, JSON.stringify(bypass.body)).toBe(200);
+    expect(bypass.body).toMatchObject({
+      ok: true,
+      bypassed: true,
+      inventory: { invasion_voucher: 0 },
+    });
   });
 
   it("versions presentation independently and retires v2 mutations", async () => {

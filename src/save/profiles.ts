@@ -18,6 +18,13 @@ export interface ProfileIndex {
   profiles: ProfileMeta[];
 }
 
+const LEGACY_SINGLE_SAVE_KEYS = [
+  `${SAVE_KEY}::p1`,
+  SAVE_KEY,
+  "zf2r.save.v1::p1",
+  "zf2r.save.v1",
+] as const;
+
 /** The localStorage save key holding a given profile's game. */
 export function profileSaveKey(id: string): string {
   return `${LOCAL_SAVE_PREFIX}::${id}`;
@@ -53,7 +60,9 @@ export function ensureIndex(): ProfileIndex {
   const now = Date.now();
   const p1: ProfileMeta = { id: "p1", name: "Profile 1", createdAt: now, lastPlayedAt: now };
   try {
-    const legacy = localStorage.getItem(`${SAVE_KEY}::p1`) ?? localStorage.getItem(SAVE_KEY);
+    const legacy = LEGACY_SINGLE_SAVE_KEYS
+      .map((key) => localStorage.getItem(key))
+      .find((value) => value !== null);
     const key = profileSaveKey("p1");
     // Copy the legacy save into p1 only if p1 has no save yet (don't clobber).
     if (legacy && localStorage.getItem(key) === null) localStorage.setItem(key, legacy);
