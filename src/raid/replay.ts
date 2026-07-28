@@ -13,7 +13,11 @@ import type { RaidOutcome } from "./types";
 // `speedMultiplier`, the Scallywag's opponent mirror, the farm raid's level speed-up, the
 // player lineup-depth slowdown band, and ground-truth boss throw / laser / burn /
 // telekinesis values. Every one of those changes the deterministic transcript.
-export const RAID_RULESET_VERSION = 8;
+// 9: post-v8 simulator corrections changed pixelFire from a long burn to a one-frame
+// interrupt and made Mini Buddy use authored Small/Large groups for special zombies.
+// In particular, a v8 client could attach a mini to Dapper while an older v8 Worker
+// attached it to a different Large zombie, causing a late truncated_transcript.
+export const RAID_RULESET_VERSION = 9;
 export const RAID_TICK_MS = 50;
 export const RAID_MAX_TICKS = 4 * 60 * 1000 / RAID_TICK_MS;
 export const RAID_MAX_INPUTS = 512;
