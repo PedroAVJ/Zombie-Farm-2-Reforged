@@ -55,7 +55,10 @@ jobs:
             echo "::notice::No VITE_API_URL configured — offline-only build, skipping check."
             exit 0
           fi
-          BODY=$(curl -fsS --max-time 10 "$API_URL/" || true)
+          # Cache-buster: immediately after a Worker deploy the plain "/" response can
+          # briefly still be the previous body (observed in practice), which would fail
+          # this gate spuriously right when you have just done the correct thing.
+          BODY=$(curl -fsS --max-time 10 "$API_URL/?ci=$GITHUB_RUN_ID" || true)
           if [ -z "$BODY" ]; then
             # Genuinely unreachable (outage, DNS, timeout). Don't block an art/docs deploy
             # on a health blip — the client's own reload prompt still covers the player.
