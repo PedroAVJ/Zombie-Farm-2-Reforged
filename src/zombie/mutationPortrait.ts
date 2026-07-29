@@ -1,12 +1,17 @@
 import { Container, Rectangle, Sprite, type Renderer } from "pixi.js";
 import type { GameAssets, ZombieModel } from "../assets";
 import { bitsOf, slotOf } from "./mutations";
-import { matchesMutationReplacement, type MutationReplacement } from "./mutationVisual";
+import {
+  isMutationForegroundPart,
+  matchesMutationReplacement,
+  type MutationReplacement,
+} from "./mutationVisual";
 import { zombiePartTint } from "./appearance";
 import { classify } from "./taxonomy";
 
 const MUT_HEAD_REPLACE_Z = 4.5;
 const MUT_FACE_OVERLAY_Z = 20;
+const MUT_BASE_FOREGROUND_Z = 30;
 
 /** Assemble the same static rig used by an owned farm zombie, including every
  * mutation overlay/replacement carried in its individual bitmask. */
@@ -24,6 +29,7 @@ export function buildZombiePortraitRig(
   const tint = (r << 16) | (g << 8) | b;
   const group = classify(key).group;
   const replaceable: Record<MutationReplacement, Sprite[]> = { body: [], armF: [], head: [] };
+  const headForeground: Sprite[] = [];
 
   for (const part of model.parts) {
     const texture = assets.zombiePartTex[part.file];
@@ -38,7 +44,12 @@ export function buildZombiePortraitRig(
     root.addChild(sprite);
     if (matchesMutationReplacement(part.file, "body")) replaceable.body.push(sprite);
     if (matchesMutationReplacement(part.file, "armF")) replaceable.armF.push(sprite);
-    if (part.group === "head") replaceable.head.push(sprite);
+    if (part.group === "head" && matchesMutationReplacement(part.file, "head")) {
+      replaceable.head.push(sprite);
+    }
+    if (part.group === "head" && isMutationForegroundPart(part.file)) {
+      headForeground.push(sprite);
+    }
   }
 
   for (const bit of bitsOf(mutation)) {
@@ -57,6 +68,11 @@ export function buildZombiePortraitRig(
       part.replaces ?? (slotOf(bit) === "head" ? "head" : undefined);
     if (replacement) {
       for (const basePart of replaceable[replacement]) basePart.visible = false;
+      if (replacement === "head") {
+        for (const basePart of headForeground) {
+          basePart.zIndex = MUT_BASE_FOREGROUND_Z + basePart.zIndex;
+        }
+      }
     }
     sprite.zIndex = part.group === "head"
       ? (slotOf(bit) === "hair_eye" ? MUT_FACE_OVERLAY_Z : MUT_HEAD_REPLACE_Z)

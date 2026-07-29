@@ -1116,6 +1116,15 @@ export class Field {
     return this.zombiePotIds().length;
   }
 
+  /** How many objects of this catalog key are on the farm. Loot eligibility needs it:
+   * a `unique` drop stops being ownership-visible once it has been placed, so without
+   * this the offline roll would keep re-awarding a decoration already standing outside. */
+  placedCount(key: string): number {
+    let n = 0;
+    for (const o of this.objects.values()) if (o.def.key === key) n++;
+    return n;
+  }
+
   // Does the player own a colored grave of this class? Colored graves gate
   // planting the matching zombie class (Blue/Red/Silver); Green needs none.
   hasGrave(color: "Blue" | "Red" | "Silver"): boolean {

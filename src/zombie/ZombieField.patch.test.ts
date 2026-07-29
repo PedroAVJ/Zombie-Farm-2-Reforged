@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { ZombieField } from "./ZombieField";
+import { joiningPatchTile, ZombieField } from "./ZombieField";
 
 type UnitStub = {
   sleepAt: ReturnType<typeof vi.fn>;
@@ -13,6 +13,13 @@ const subject = (units: UnitStub[]) => {
 };
 
 describe("Zombie Patch persistence", () => {
+  it("assigns zombies arriving during a gathering to the next patch tile", () => {
+    const tiles = [{ col: 4, row: 5 }, { col: 6, row: 7 }];
+    expect(joiningPatchTile(true, tiles, 2)).toEqual({ col: 4, row: 5 });
+    expect(joiningPatchTile(false, tiles, 2)).toBeNull();
+    expect(joiningPatchTile(true, null, 2)).toBeNull();
+  });
+
   it("restores gathered zombies to sleep across the patch tiles", () => {
     const units = [
       { sleepAt: vi.fn(), wake: vi.fn() },

@@ -106,6 +106,13 @@ items at their cap (only `Rusty Fragment`, limit 3), skip the special-cased
 `Rusty Fragment`. `Drops.json` carries these flags (`unique` / `limit`) but **no
 probability field** — the probability is entirely the tier table above.
 
+*Owned* means all three places an item can sit: the unclaimed **Received** bucket, the
+**shed**, and the **object it becomes once placed** (its `drops.json` `tile`) — the
+binary's `doesOwnItem:` / `numberOfItemInStorageWithKey:` pair. Getting this wrong
+silently disables `unique` for the whole game, because claiming a drop is how a player
+uses it and claiming empties Received. Both sides share one rule: `ownedLootCounter`
+(server `loot.ts`) and `RaidManager.rollLoot` via its `placedCount` hook.
+
 **3. If the tier is empty, walk DOWN** to commoner tiers until one has eligible items.
 **4. Pick uniformly** among that tier's eligible alternatives.
 

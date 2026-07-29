@@ -945,6 +945,16 @@ describe("protocol v3 command engine", () => {
     expect(result.questChanges).toContainEqual(expect.objectContaining({ questId: "56", completed: true }));
   });
 
+  it("counts decorating quest object families authoritatively", () => {
+    const state = freshGameplayState();
+    state.quests.completed = ["9"];
+    applyQuestEvents(state.balance, state.quests, [
+      { type: "kItemBoughtNotification", subject: "Pirate Barrel" },
+      { type: "kItemBoughtNotification", subject: "Fire Barrel" },
+    ]);
+    expect(state.quests.progress.find((entry) => entry.questId === "10")?.counts).toEqual([2, 0]);
+  });
+
   it("grants the tutorial completion bonus exactly once", () => {
     const state = freshGameplayState();
     const first = applyCommandBatch(state, commands({ type: "tutorial.complete" }), { now: 1 });
@@ -972,6 +982,18 @@ describe("protocol v3 command engine", () => {
     expect(result.state.objects.objects).toContainEqual(expect.objectContaining({
       instanceId: "reward-windmill", catalogKey: "windmill", status: "placed",
     }));
+  });
+
+  it("can sell a Received decoration without leaving it on the farm", () => {
+    const state = freshGameplayState();
+    state.storage.received = { Windmill: 1 };
+    const result = applyCommandBatch(state, commands(
+      { type: "storage.claim", itemName: "Windmill", clientInstanceId: "reward-sale-windmill" },
+      { type: "object.refund", instanceId: "reward-sale-windmill" },
+    ), { now: 10 });
+    expect(result.results.map((entry) => entry.status)).toEqual(["applied", "applied"]);
+    expect(result.state.storage.received.Windmill).toBe(0);
+    expect(result.state.objects.objects).toEqual([]);
   });
 
   it("cannot claim a Received reward twice", () => {

@@ -70,10 +70,16 @@ export function gestureMoved(
   return Math.hypot(x - startX, y - startY) > slop;
 }
 
-/** Zombies use a distinct hold gesture on touch screens so an overlapping unit
- * can never steal a quick tap intended for the plot beneath it. */
+/** Overlaid zombies and objects use a distinct hold gesture on touch screens so
+ * they can never steal a quick tap intended for the plot beneath them. */
 export function isZombieHold(pointerType: string, heldMs: number, moved: boolean): boolean {
   return isTouchPointer(pointerType) && !moved && heldMs >= TOUCH_ZOMBIE_HOLD_MS;
+}
+
+/** Normal touch taps target a plot beneath an overlapping world object. Desktop
+ * keeps its precise object-first hit testing. */
+export function plotOwnsObjectTap(pointerType: string, hasPlot: boolean): boolean {
+  return isTouchPointer(pointerType) && hasPlot;
 }
 
 /** Select-tool taps get a little more forgiveness than camera/tool gestures.

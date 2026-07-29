@@ -1,10 +1,11 @@
 import type { GameAssets } from "../assets";
-import { deriveAttackIntervalMs } from "../raid/combatStats";
+import { deriveAttackIntervalMs, pickByFrequency } from "../raid/combatStats";
 import { buildPlayerUnits } from "../raid/CombatEngine";
 import type { CombatUnit, RaidDef } from "../raid/types";
 import type { GameState } from "../GameState";
 import type { OwnedZombie } from "../zombie/types";
 import type { EpicBossDef, EpicBossLoot, EpicBossRun } from "./types";
+import { epicLootWeight } from "./rewards";
 
 export interface EpicBossSetup {
   raid: RaidDef;
@@ -81,7 +82,11 @@ export function buildEpicBossSetup(
   return { raid, party, playerUnits, enemyUnits: [boss] };
 }
 
-/** Documented fallback when the exact binary loot selector is unavailable. */
+/** Documented fallback when the exact binary loot selector is unavailable.
+ *
+ *  One 35% roll per cleared level, preferring prizes not yet collected, then weighted by
+ *  the rung that unlocks each one (`epicLootWeight`) so the top-of-ladder signature item
+ *  stays rare instead of being as likely as the level-5 starter. */
 export function rollEpicBossLoot(
   def: EpicBossDef,
   defeatedLevel: number,
@@ -94,5 +99,8 @@ export function rollEpicBossLoot(
   const fresh = eligible.filter((loot) => !collected.has(loot.name));
   const pool = fresh.length ? fresh : eligible.filter((loot) => !loot.stageActor);
   if (!pool.length) return null;
-  return pool[Math.min(pool.length - 1, Math.floor(random() * pool.length))];
+  const picked = pickByFrequency(
+    pool.map((loot) => ({ loot, frequency: epicLootWeight(loot.level) })), random
+  );
+  return picked?.loot ?? null;
 }

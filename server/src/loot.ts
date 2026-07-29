@@ -38,6 +38,40 @@ export type LootGrant =
 /** How many of `name` the account already owns, for the unique/limit filters. */
 export type OwnedCount = (name: string) => number;
 
+/** The two item buckets a save keeps: unclaimed loot and the shed. */
+export interface LootStorage {
+  received?: Record<string, number>;
+  stored?: Record<string, number>;
+}
+
+/** Build the `OwnedCount` the unique/limit filters need out of a save's item storage and
+ *  its objects.
+ *
+ *  Counting Received ALONE silently disables `unique` altogether, which is what this
+ *  exists to prevent: claiming a drop is how a player uses it, and claiming moves the
+ *  item OUT of Received (into the shed, or onto the farm as an object), so a unique would
+ *  go straight back on the table the moment it was actually taken. Ownership therefore
+ *  spans all three places it can sit — Received, the shed, and the placed object it
+ *  becomes via its `tile` link. Mirrors the binary's `doesOwnItem:` /
+ *  `numberOfItemInStorageWithKey:` pair.
+ *
+ *  Pass every object the account holds, whatever its status: an object stored off-farm is
+ *  owned just as much as a placed one. `tile` may be given explicitly for loot that isn't
+ *  in drops.json (epic-boss prizes carry their own); it defaults to the drops.json link. */
+export function ownedLootCounter(
+  storage: LootStorage,
+  objects: readonly { catalogKey: string }[]
+): (name: string, tile?: string) => number {
+  const owned = new Map<string, number>();
+  for (const object of objects) {
+    owned.set(object.catalogKey, (owned.get(object.catalogKey) ?? 0) + 1);
+  }
+  return (name, tile = dropEcon(name)?.tile) =>
+    (storage.received?.[name] ?? 0) +
+    (storage.stored?.[name] ?? 0) +
+    (tile ? owned.get(tile) ?? 0 : 0);
+}
+
 /** Is this loot entry still allowed to drop? Mirrors the client's eligibleIn(): a
  *  `unique` entry is filtered out once owned at all, and a `limit`ed one once the cap is
  *  reached. An entry with no drops.json metadata is allowed (fail-open matches the

@@ -7,6 +7,7 @@ import {
   isSelectTapGesture,
   isTouchPointer,
   isZombieHold,
+  plotOwnsObjectTap,
   shouldRecoverTouchPointerUp,
   MOUSE_TAP_SLOP,
   TOUCH_TAP_SLOP,
@@ -74,6 +75,12 @@ describe("farm touch gesture classification", () => {
     expect(isZombieHold("touch", TOUCH_ZOMBIE_HOLD_MS, false)).toBe(true);
     expect(isZombieHold("touch", TOUCH_ZOMBIE_HOLD_MS + 100, true)).toBe(false);
     expect(isZombieHold("mouse", TOUCH_ZOMBIE_HOLD_MS, false)).toBe(false);
+  });
+
+  it("gives a covered plot the normal tap only on touch", () => {
+    expect(plotOwnsObjectTap("touch", true)).toBe(true);
+    expect(plotOwnsObjectTap("touch", false)).toBe(false);
+    expect(plotOwnsObjectTap("mouse", true)).toBe(false);
   });
 
   it("keeps a quick select-tool wobble eligible as a mobile tap", () => {

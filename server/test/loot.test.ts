@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { rollLoot, resolveLoot, lootEligible, bonusGoldFor, BONUS_GOLD } from "../src/loot";
+import { rollLoot, resolveLoot, lootEligible, ownedLootCounter, bonusGoldFor, BONUS_GOLD } from "../src/loot";
 import { RAID_LOOT, dropEcon, raidLoot } from "../src/raidLootCatalog";
 import { rollLootTier } from "../../src/raid/LootTable";
 
@@ -41,6 +41,53 @@ describe("lootEligible — unique / limit filters", () => {
   });
   it("keeps unlimited entries eligible however many you own", () => {
     expect(lootEligible(BONUS_GOLD, () => 999)).toBe(true);
+  });
+});
+
+describe("ownedLootCounter — where a dropped item counts as owned", () => {
+  const noObjects: { catalogKey: string }[] = [];
+
+  it("counts Received, the shed, and the placed object together", () => {
+    expect(ownedLootCounter({ received: { Windmill: 1 } }, noObjects)("Windmill")).toBe(1);
+    expect(ownedLootCounter({ stored: { Windmill: 2 } }, noObjects)("Windmill")).toBe(2);
+    // "windmill" is what a Windmill BECOMES once placed (drops.json `tile`).
+    expect(ownedLootCounter({}, [{ catalogKey: "windmill" }])("Windmill")).toBe(1);
+    expect(
+      ownedLootCounter({ received: { Windmill: 1 }, stored: { Windmill: 1 } }, [{ catalogKey: "windmill" }])("Windmill")
+    ).toBe(3);
+  });
+
+  it("still owns a unique after it has been CLAIMED out of Received", () => {
+    // The regression this exists for: claiming is how a drop gets used, and it empties the
+    // Received bucket. Counting Received alone therefore made every unique droppable again
+    // the moment the player took it — `unique` was effectively off for the whole game.
+    const claimedToShed = ownedLootCounter({ received: { Windmill: 0 }, stored: { Windmill: 1 } }, noObjects);
+    const claimedToFarm = ownedLootCounter({ received: { Windmill: 0 }, stored: {} }, [{ catalogKey: "windmill" }]);
+    for (const owned of [claimedToShed, claimedToFarm]) {
+      expect(lootEligible("Windmill", owned)).toBe(false);
+      // ... so the rarest tier walks down to the repeatable Scarecrow instead of re-minting it.
+      expect(rollLoot(1, 5, owned, 0.99, 0)).toBe("Scarecrow");
+    }
+  });
+
+  it("ignores an unrelated object and leaves non-uniques alone", () => {
+    const owned = ownedLootCounter({ stored: { Scarecrow: 4 } }, [{ catalogKey: "haystack" }]);
+    expect(owned("Windmill")).toBe(0);
+    expect(lootEligible("Windmill", owned)).toBe(true);
+    expect(lootEligible("Scarecrow", owned)).toBe(true); // not unique — 4 owned is fine
+  });
+
+  it("counts an object whatever its status, and unknown names as unowned", () => {
+    // An object sitting in storage off-farm is owned just as much as a placed one.
+    expect(ownedLootCounter({}, [{ catalogKey: "windmill" }])("Windmill")).toBe(1);
+    expect(ownedLootCounter({}, noObjects)("Not A Drop")).toBe(0);
+  });
+
+  it("accepts an explicit tile for loot that isn't in drops.json", () => {
+    // Epic-boss prizes carry their own tile rather than a drops.json entry.
+    const owned = ownedLootCounter({}, [{ catalogKey: "snowOwl" }]);
+    expect(owned("Foul Owl's Colossal Snowman", "snowOwl")).toBe(1);
+    expect(owned("Foul Owl's Colossal Snowman")).toBe(0); // no drops.json link to follow
   });
 });
 

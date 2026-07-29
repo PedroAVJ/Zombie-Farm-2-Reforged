@@ -62,9 +62,19 @@ the farm when an army slot is open, otherwise it is kept
 in the Mausoleum; protected reward overflow remains visible in the complete Zombies
 roster so a full storage building can never destroy an earned unit.
 Until exact binary loot selection is recovered, each victory makes one 35% roll,
-preferring unlocked uncollected drops. Decor duplicates become possible after eligible
-decor is collected, and a pet leaves its boss's pool once owned. Ambiguous source
-`reward: 5000` and `xp: 5500` fields are not granted.
+preferring unlocked uncollected drops. Within that pool the pick is **weighted by the
+rung that unlocks each prize** (`epicLootWeight` = `1/level`, fed to the binary's
+cumulative frequency pick), so the ladder is a rarity ladder: on a full 40-level boss the
+first prize lands ~35% of drops and the top-rung signature item ~5%. It was a uniform
+pick, which made the level-37 prize exactly as likely as the level-5 one — climbing bought
+no better odds on what climbing unlocks. Monotone-in-level is all this claims; the curve
+itself is a reimplementation choice, not recovered data.
+
+"Collected" spans every place a prize can sit — unclaimed, in the shed, or already placed
+on the farm. Reading only the unclaimed bucket made a claimed prize look never-won, so
+owned decor kept crowding out prizes the player had never seen. Decor duplicates become
+possible only after eligible decor is genuinely collected, and a pet leaves its boss's
+pool once owned. Ambiguous source `reward: 5000` and `xp: 5500` fields are not granted.
 
 Epic quest progress is lifetime progress: only the active boss's recovered quest family
 is surfaced, and it is hidden between events without being discarded. Earned rewards

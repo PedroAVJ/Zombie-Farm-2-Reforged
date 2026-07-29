@@ -5,7 +5,11 @@
 import { Container, Sprite } from "pixi.js";
 import { GameAssets, ZombieModel } from "../assets";
 import { bitsOf, slotOf } from "../zombie/mutations";
-import type { MutationReplacement } from "../zombie/mutationVisual";
+import {
+  isMutationForegroundPart,
+  matchesMutationReplacement,
+  type MutationReplacement,
+} from "../zombie/mutationVisual";
 import {
   BRUTE_EYEBALL_SCALE,
   DEFAULT_ZOMBIE_EYE_TINT,
@@ -68,6 +72,7 @@ const DEATH_HEAD_G = 820; // gravity pulling the head back down
 const DEATH_HEAD_SPIN = 13; // rad/s tumble
 const MUT_HEAD_REPLACE_Z = 4.5;
 const MUT_FACE_OVERLAY_Z = 20;
+const MUT_BASE_FOREGROUND_Z = 30;
 
 export class RaidActor {
   readonly container = new Container();
@@ -150,14 +155,20 @@ export class RaidActor {
     for (const p of m.parts) {
       if (replacements.has("armF") && /ArmF$/i.test(p.file)) continue;
       if (replacements.has("body") && /Body$/i.test(p.file)) continue;
-      if (replacements.has("head") && p.group === "head") continue;
+      if (
+        replacements.has("head")
+        && p.group === "head"
+        && matchesMutationReplacement(p.file, "head")
+      ) continue;
       const tex = assets.zombiePartTex[p.file];
       if (!tex) continue;
       const sp = new Sprite(tex);
       sp.anchor.set(p.ax, p.ay);
       sp.position.set(p.px, p.py);
       sp.scale.set(p.scale ?? 1);
-      sp.zIndex = p.z;
+      sp.zIndex = replacements.has("head") && isMutationForegroundPart(p.file)
+        ? MUT_BASE_FOREGROUND_Z + p.z
+        : p.z;
       if (p.tint) sp.tint = zombiePartTint(p.file, tint, group);
       this.root.addChild(sp);
       if (p.group === "head") {

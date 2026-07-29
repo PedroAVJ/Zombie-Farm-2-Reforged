@@ -14,7 +14,11 @@ import { setFootprint } from "../depthSort";
 import { findPath } from "../pathfind";
 import { OwnedZombie } from "./types";
 import { bitsOf, slotOf } from "./mutations";
-import { matchesMutationReplacement, type MutationReplacement } from "./mutationVisual";
+import {
+  isMutationForegroundPart,
+  matchesMutationReplacement,
+  type MutationReplacement,
+} from "./mutationVisual";
 import {
   BRUTE_EYEBALL_SCALE,
   DEFAULT_ZOMBIE_EYE_TINT,
@@ -28,6 +32,7 @@ import { zombieFarmScale } from "./displayScale";
 // visible on Onion/Tomato/etc. Hair/eye mutations draw above the face.
 const MUT_HEAD_REPLACE_Z = 4.5;
 const MUT_FACE_OVERLAY_Z = 20;
+const MUT_BASE_FOREGROUND_Z = 30;
 
 const SPEED_PX = 34; // slow amble
 const WANDER_RADIUS = 5; // tiles from current spot to pick a new target
@@ -192,6 +197,7 @@ export class ZombieUnit {
     this.root.sortableChildren = true;
     this.neck = { x: m.neck.x, y: m.neck.y };
     const replaceable: Record<MutationReplacement, Sprite[]> = { body: [], armF: [], head: [] };
+    const headForeground: Sprite[] = [];
 
     for (const p of m.parts) {
       const tex = assets.zombiePartTex[p.file];
@@ -206,7 +212,12 @@ export class ZombieUnit {
       this.root.addChild(sp);
       if (matchesMutationReplacement(p.file, "body")) replaceable.body.push(sp);
       if (matchesMutationReplacement(p.file, "armF")) replaceable.armF.push(sp);
-      if (p.group === "head") replaceable.head.push(sp);
+      if (p.group === "head" && matchesMutationReplacement(p.file, "head")) {
+        replaceable.head.push(sp);
+      }
+      if (p.group === "head" && isMutationForegroundPart(p.file)) {
+        headForeground.push(sp);
+      }
       if (p.group === "head") {
         this.headParts.push({ sp, bx: p.px, by: p.py }); // tilts with the head-nod
       } else if (p.group === "footF") { this.footF = sp; this.footFBaseY = p.py; }
@@ -223,13 +234,13 @@ export class ZombieUnit {
         this.parts.push(eyeball);
         this.root.addChild(eyeball);
         this.headParts.push({ sp: eyeball, bx: p.px, by: p.py });
-        replaceable.head.push(eyeball);
+        headForeground.push(eyeball);
       }
     }
     // Attach crop-mutation parts from the unit's mask (onion head, celery arm, …).
     // Independent of species: a combined zombie shows exactly the mutations it
     // carries. Head parts join headParts (tilt with the head-nod); the rest sit flat.
-    this.addMutations(assets, m, replaceable);
+    this.addMutations(assets, m, replaceable, headForeground);
     this.applyArmPose();
     this.buildFarmEffects();
     const headFxKind = specialHeadFxKind(this.data.key);
@@ -267,6 +278,7 @@ export class ZombieUnit {
     assets: GameAssets,
     model: ZombieModel,
     replaceable: Record<MutationReplacement, Sprite[]>,
+    headForeground: Sprite[],
   ) {
     const neck = model.neck;
     for (const bit of bitsOf(this.data.mutation)) {
@@ -284,6 +296,11 @@ export class ZombieUnit {
         mp.replaces ?? (slotOf(bit) === "head" ? "head" : undefined);
       if (replacement) {
         for (const basePart of replaceable[replacement]) basePart.visible = false;
+        if (replacement === "head") {
+          for (const basePart of headForeground) {
+            basePart.zIndex = MUT_BASE_FOREGROUND_Z + basePart.zIndex;
+          }
+        }
       }
       this.root.addChild(sp);
       if (mp.group === "head") {

@@ -86,7 +86,7 @@
     "notificationID": "kItemBoughtNotification",
     "notificationObject": "Barrel",
     "countTotal": 2,
-    "text": "Buy 2 Brown Barrels",
+    "text": "Buy 2 Barrels",
     "type": 2,
     "sprite": "stex0040.png"
    },
@@ -94,7 +94,7 @@
     "notificationID": "kItemBoughtNotification",
     "notificationObject": "Hedge",
     "countTotal": 2,
-    "text": "Buy 2 Green Hedges",
+    "text": "Buy 2 Hedges",
     "type": 2,
     "sprite": "stex0039.png"
    }

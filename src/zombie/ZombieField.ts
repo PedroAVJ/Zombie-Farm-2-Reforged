@@ -15,6 +15,14 @@ import { ZombiePot } from "./ZombiePot";
 /** Mausoleum storage-slot capacity (default; upgradeable later). */
 export const MAUSOLEUM_CAP = 15;
 
+export function joiningPatchTile(
+  gathered: boolean,
+  tiles: { col: number; row: number }[] | null,
+  unitIndex: number,
+): { col: number; row: number } | null {
+  return gathered && tiles?.length ? tiles[unitIndex % tiles.length] : null;
+}
+
 /** Per-combat-tier fertilize chance for Garden zombies. GROUND TRUTH: the exact
  *  `fertilizeChance` values in UnitStats.json map 1:1 to a Garden unit's tier
  *  (t1 .04, t2 .06, t3/t4 .08, t5 .12), so we key off the tier the catalog already
@@ -152,6 +160,10 @@ export class ZombieField {
     const unit = new ZombieUnit(this.assets, this.field, data);
     this.field.entityLayer.addChild(unit.container);
     this.units.push(unit);
+    // Gathering at the Zombie Patch is farm-wide state. A zombie that arrives
+    // after the patch was tapped should join the existing nap immediately.
+    const tile = joiningPatchTile(this.gathered, this.field.patchRestTiles(), this.units.length - 1);
+    if (tile) unit.sleepAt(tile.col, tile.row);
     if (this.rosterLive && !this.combining && !this.harvesting) {
       this.onGrant?.({ id: data.id, key: data.key, mutation: data.mutation, invasions: data.invasions });
     }

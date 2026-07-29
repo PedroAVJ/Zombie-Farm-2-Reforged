@@ -25,6 +25,7 @@ import { BASE_FARM_SIZE, sizeTier, nextSize, climateCost } from "./shopCatalog";
 import { levelForXp } from "./levels";
 import { QUEST_DEFINITIONS, questReward, QUEST_REWARD } from "./questCatalog";
 import { objectEcon } from "./objectCatalog";
+import { questSubjectMatches } from "../../src/quest/matching";
 import { planObjectBuy, planObjectRefund, planObjectUpgrade, type ObjectAction } from "./objects";
 import plantCatalogData from "../../public/assets/plants.json";
 import zombieCatalogData from "../../public/assets/zombies.json";
@@ -1115,7 +1116,7 @@ export async function processQuestEvents(
       for (let i = 0; i < q.requirements.length; i++) {
         const req = q.requirements[i];
         if (!TRUSTED_QUEST_EVENTS.has(req.notificationID) || req.notificationID !== event.event_type) continue;
-        if (req.notificationObject && req.notificationObject.toLowerCase() !== event.subject.toLowerCase()) continue;
+        if (!questSubjectMatches(req.notificationObject, event.subject)) continue;
         const token = crypto.randomUUID();
         await db.batch([
           db

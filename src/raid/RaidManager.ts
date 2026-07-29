@@ -183,7 +183,13 @@ export class RaidManager {
     private assets: GameAssets,
     private state: GameState,
     private zombies: ZombieField,
-    private hooks: { save: () => void; grantZombie?: (key: string) => void },
+    private hooks: {
+      save: () => void;
+      grantZombie?: (key: string) => void;
+      /** How many objects of a placeable key stand on the farm, for loot ownership
+       *  (a placed decoration is owned even though it is no longer in any bucket). */
+      placedCount?: (key: string) => number;
+    },
     /** Between-invasions cooldown in ms (playtest-scaled by main.ts). */
     private cooldownMs: number = RAID_COOLDOWN_MS,
     /** Wall clock, injectable for tests. */
@@ -671,12 +677,16 @@ export class RaidManager {
    *  DOWN to commoner tiers (as the binary does). Returns null if nothing is
    *  eligible (e.g. every tier already collected). */
   private rollLoot(raid: RaidDef, bonus: number): string | null {
-    // Owned = unclaimed raid loot + items stashed in the shed. (Decorations already
-    // placed on the farm aren't tracked as inventory, so a placed unique can still
-    // re-drop — a minor divergence from the source's full ownership check.)
+    // Owned = unclaimed raid loot + the shed + the object it becomes once PLACED
+    // (`drops.json` tile → hooks.placedCount). All three matter: claiming a drop is how
+    // it gets used and that empties Received, so counting anything less puts a `unique`
+    // straight back on the table the moment the player takes it. Matches the source's
+    // `doesOwnItem:` and the server's ownedLootCounter.
     const ownedCount = (name: string): number => {
       let n = this.state.received.filter((r) => r === name).length;
       n += this.state.storedItems.find((s) => s.key === name)?.count ?? 0;
+      const tile = this.assets.drops[name]?.tile;
+      if (tile) n += this.hooks.placedCount?.(tile) ?? 0;
       return n;
     };
     const eligibleIn = (tierIdx: number): string[] =>

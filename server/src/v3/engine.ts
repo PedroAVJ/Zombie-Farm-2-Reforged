@@ -27,6 +27,7 @@ import { combineMasks } from "../../../src/zombie/mutations";
 import { resolveCropMutations } from "../../../src/zombie/cropMutations";
 import { createCombineRandom, selectCombineSpecies } from "../../../src/zombie/combineSpecies";
 import { harvestXp, plowXp } from "../../../src/farmRewards";
+import { questSubjectMatches } from "../../../src/quest/matching";
 
 export const MAX_FARM_PLOTS = 225;
 export const MAX_FUNCTIONAL_OBJECTS = 512;
@@ -259,8 +260,7 @@ export function applyQuestEvents(
         if (req.notificationID !== event.type) return;
         // An empty object is the quest format's wildcard (for example, "plant any
         // crop"). Match named subjects case-insensitively, like the client engine.
-        if (req.notificationObject &&
-            req.notificationObject.toLowerCase() !== event.subject.toLowerCase()) return;
+        if (!questSubjectMatches(req.notificationObject, event.subject)) return;
         const next = Math.min(req.countTotal, (counts[index] ?? 0) + 1);
         if (next !== counts[index]) {
           counts[index] = next;

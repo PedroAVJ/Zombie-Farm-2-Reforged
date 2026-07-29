@@ -28,6 +28,19 @@ export const epicQuestZombieReward = (questId: string): string | null =>
 export const shouldStoreEpicReward = (activeCount: number, activeCapacity: number): boolean =>
   activeCount >= Math.max(0, activeCapacity);
 
+/** Pick weight for one epic-boss prize, so the ladder's top prizes are RARE.
+ *
+ * A uniform pick over everything unlocked made the level-37 signature item exactly as
+ * likely as the level-5 starter — climbing the ladder bought no better odds on the prize
+ * that climbing unlocks. The rung is the game's own rarity signal, so weight is its
+ * inverse: on Foul Owl's full ladder that runs from ~37% for the first snowman down to
+ * ~5% for the Gift Vault. Fed to `pickByFrequency` (the binary's cumulative
+ * frequency-weighted pick) by both the offline roll and the Worker.
+ *
+ * Binary loot selection for epic bosses is still unrecovered (docs/EPIC_BOSS_MECHANICS.md);
+ * this is a reimplementation choice, and monotone in level is all it claims to be. */
+export const epicLootWeight = (level: number): number => 1 / Math.max(1, level);
+
 export interface EpicBossCurrencyReward {
   brains: number;
   gold: number;

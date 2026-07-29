@@ -2,6 +2,8 @@ import type { EpicBossProjection, QuestProjection } from "../../../src/net/proto
 import { epicBossById, epicBossHp, epicBossUnlockLevel } from "../../../src/epicBoss/catalog";
 import type { EpicBossDef } from "../../../src/epicBoss/types";
 import { DICE_KEY, VOUCHER_KEY } from "../boostCatalog";
+import { ownedLootCounter } from "../loot";
+import { pickByFrequency } from "../../../src/raid/combatStats";
 import { QUEST_REWARD, questDefinition } from "../questCatalog";
 import { applyQuestEvents } from "./engine";
 import zombieRows from "../../../public/assets/zombies.json";
@@ -14,7 +16,7 @@ import { makeOwned } from "../../../src/zombie/types";
 import { ABILITY_TIER, abilityTierOf } from "../../../src/zombie/traits";
 import { farmerMultiplier } from "../../../src/farmer";
 import { levelForXp } from "../levels";
-import { epicBossCurrencyReward, epicQuestZombieReward, shouldStoreEpicReward } from "../../../src/epicBoss/rewards";
+import { epicBossCurrencyReward, epicLootWeight, epicQuestZombieReward, shouldStoreEpicReward } from "../../../src/epicBoss/rewards";
 import objectRows from "../../../public/assets/placeables.json";
 import { EPIC_BOSS_FIGHT_BRAIN_COST } from "../../../src/epicBoss/tokens";
 import { ARMY_CAP } from "../../../src/raid/RaidCatalog";
@@ -321,12 +323,25 @@ export async function finish(
   const questData = parse<{completed:string[];progress:QuestProjection["progress"]}>(questRow.current_json, { completed: [], progress: [] });
   const quests: QuestProjection = { version: questRow.version, ...questData };
   const beforeCompleted = new Set(quests.completed);
+  const objects = parse<Array<{catalogKey:string;status:string}>>(objectRow.current_json, []);
   let loot: { name: string; tile?: string; stageActor?: string; sprite: string } | null = null;
   if (defeatedLevel !== null && random() < 0.35) {
-    let eligible = def.loot.filter((x) => x.level <= defeatedLevel && (!x.stageActor || !core.ownedPets.includes(x.stageActor)));
-    const uncollected = eligible.filter((x) => x.stageActor ? !core.ownedPets.includes(x.stageActor) : !(core.storage.received[x.name] > 0));
-    if (uncollected.length) eligible = uncollected;
-    if (eligible.length) loot = eligible[Math.floor(random() * eligible.length)] ?? null;
+    // Collected spans Received + the shed + the placed object (ownedLootCounter): reading
+    // Received alone reset the uncollected preference the moment a prize was claimed, so
+    // already-owned decor kept crowding out prizes the player had never seen.
+    const owned = ownedLootCounter(core.storage, objects);
+    const unlocked = def.loot.filter((entry) =>
+      entry.level <= defeatedLevel && !(entry.stageActor && core.ownedPets.includes(entry.stageActor)));
+    const uncollected = unlocked.filter((entry) => entry.stageActor || owned(entry.name, entry.tile) === 0);
+    const pool = uncollected.length ? uncollected : unlocked;
+    // RARITY ORDERING via the shared epicLootWeight curve (one definition, so the offline
+    // roll in epicBoss/combat.ts and this one can't drift): weight each prize by the
+    // inverse of the rung that unlocks it. A uniform pick made the top-rung signature
+    // item exactly as likely as the level-5 starter.
+    const picked = pickByFrequency(
+      pool.map((entry) => ({ entry, frequency: epicLootWeight(entry.level) })), random
+    );
+    loot = picked?.entry ?? null;
     if (loot?.stageActor) core.ownedPets = [...new Set([...core.ownedPets, loot.stageActor])];
     else if (loot) core.storage.received[loot.name] = (core.storage.received[loot.name] ?? 0) + 1;
   }
@@ -336,7 +351,6 @@ export async function finish(
   ];
   const questChanges = applyQuestEvents(balance, quests, events, { includeEpic: true, epicQuestIds: new Set(def.questIds) });
   const newlyCompleted = quests.completed.filter((id) => !beforeCompleted.has(id));
-  const objects = parse<Array<{catalogKey:string;status:string}>>(objectRow.current_json, []);
   const armyCapacity = core.zombieMax + objects.reduce((total, object) =>
     total + (object.status === "placed" ? objectArmyCapacity.get(object.catalogKey) ?? 0 : 0), 0);
   // Casualties are still present in roster_v3 until this transaction commits, so

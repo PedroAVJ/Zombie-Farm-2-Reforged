@@ -124,6 +124,7 @@ export interface ReceivedView {
   icon: string; // image URL ("" = no art)
   kind: "placeable" | "boost" | "brains" | "trophy";
   actionLabel: string; // "Place" | "Claim" | "" (trophy: display only)
+  sellable?: boolean;
 }
 
 /** Colored grave a zombie class needs before it can be planted (null = none). */

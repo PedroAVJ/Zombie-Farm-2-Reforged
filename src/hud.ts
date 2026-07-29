@@ -1121,6 +1121,8 @@ export class Hud {
   getSpeedGrowBoost: (() => { name: string; icon: string; count: () => number } | null) | null = null;
   /** Take a stored item back out of the shed to place it (free). */
   onRetrieveItem: ((key: string) => void) | null = null;
+  /** Permanently sell one stored placeable without placing it first. */
+  onSellStoredItem: ((key: string) => Promise<boolean> | boolean) | null = null;
 
   // ---- Received rewards (raid loot / quest items) hooks (set by main) ----
   /** Resolve the current Received bucket into displayable reward cards. */
@@ -1129,6 +1131,8 @@ export class Hud {
   onClaimReceived: ((index: number) => void) | null = null;
   /** Place a decoration reward at `index` on the farm (enters placement mode). */
   onPlaceReceived: ((index: number) => void) | null = null;
+  /** Permanently sell a sellable decoration directly from Received. */
+  onSellReceived: ((index: number) => Promise<boolean> | boolean) | null = null;
 
   // ---- Zombie Pot (combiner) hooks (set by main) ----
   /** Current combine status for the combiner panel. */

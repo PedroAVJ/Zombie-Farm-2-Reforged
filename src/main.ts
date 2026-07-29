@@ -49,7 +49,7 @@ import { initPwa, promptReload } from "./pwa";
 import { initDiagnostics } from "./diagnostics";
 import {
   captureTouchPointer, gestureMoved, isDeferredTouchMode, isOutsideFarmPanGesture, isTouchPointer,
-  isSelectTapGesture, isZombieHold, shouldRecoverTouchPointerUp, TOUCH_ZOMBIE_HOLD_MS,
+  isSelectTapGesture, isZombieHold, plotOwnsObjectTap, shouldRecoverTouchPointerUp, TOUCH_ZOMBIE_HOLD_MS,
 } from "./touchInput";
 import { mutationDescription } from "./zombie/mutations";
 import { resolveCropMutations } from "./zombie/cropMutations";
@@ -1851,6 +1851,7 @@ async function main() {
         zombies.grantReward(key, walk.tile.col, walk.tile.row);
         hud.showToast(`${zombieDefs.get(key)?.name ?? "Rare zombie"} joined your farm!`);
       },
+      placedCount: (key) => field.placedCount(key),
     },
     raidCooldownMs
   );
@@ -2430,8 +2431,16 @@ async function main() {
           state.addBrains(currency.brains, "epic_boss_victory");
           state.addGold(currency.gold, "epic_boss_victory");
           questBus.post(QuestEvent.EpicStageEnemyDefeated, String(result.defeatedLevel), 1);
-          const collected = new Set([...state.received, ...state.ownedPets.map((key) =>
-            def.loot.find((loot) => loot.stageActor === key)?.name ?? key)]);
+          // Collected spans every place a prize can end up — unclaimed, in the shed, or
+          // already standing on the farm — plus tamed pets. Received alone would treat a
+          // claimed prize as never-won and keep re-offering it ahead of unseen ones.
+          const collected = new Set([
+            ...state.received,
+            ...state.storedItems.filter((item) => item.count > 0).map((item) => item.key),
+            ...def.loot.filter((loot) => loot.tile && field.placedCount(loot.tile) > 0).map((loot) => loot.name),
+            ...state.ownedPets.map((key) =>
+              def.loot.find((loot) => loot.stageActor === key)?.name ?? key),
+          ]);
           const loot = rollEpicBossLoot(def, result.defeatedLevel, collected);
           if (loot) {
             if (loot.stageActor) state.unlockPet(loot.stageActor);
@@ -2779,7 +2788,10 @@ async function main() {
       const pdef = receivedDef(entry);
       const dropArt = drop?.icon ? lootImage(drop.icon) : "";
       if (pdef)
-        return { index, name: entry, icon: dropArt || `${BASE}assets/objects/${pdef.sprite}`, kind: "placeable", actionLabel: "Place" };
+        return {
+          index, name: entry, icon: dropArt || `${BASE}assets/objects/${pdef.sprite}`,
+          kind: "placeable", actionLabel: "Place", sellable: pdef.category !== "functional",
+        };
       return { index, name: entry, icon: dropArt, kind: "trophy", actionLabel: "" };
     });
   hud.getReceived = receivedViews;
@@ -2989,6 +3001,54 @@ async function main() {
     floatText(c.x, c.y, `+${refund}g`);
   };
 
+  hud.onSellStoredItem = async (key) => {
+    if (onlineGameplayBlocked()) return false;
+    const def = placeCatalog.get(key);
+    const instanceId = storedObjectIds.get(key)?.[0];
+    if (!def || !instanceId || def.category === "functional") return false;
+    const purchase = objectPurchases.get(instanceId);
+    const boughtWithBrains = purchase ? purchase.currency === "brains" : !!def.brainsNeeded;
+    const refund = purchase ? sellBack(purchase.cost, boughtWithBrains) : sellRefund(def);
+    if (!await hud.confirmInGame(
+      `Sell ${def.name}?`,
+      `Sell this stored item for ${refund} gold? This cannot be undone.`,
+      `Sell +${refund}g`,
+    )) return false;
+    if (!state.retrieveItem(key)) return false;
+    const ids = storedObjectIds.get(key) ?? [];
+    storedObjectIds.set(key, ids.filter((id) => id !== instanceId));
+    objectPurchases.delete(instanceId);
+    if (economy) {
+      economy.submitObject({ type: "refund", key, instanceId }, { gold: refund });
+    } else state.addGold(refund);
+    audio.play("sell");
+    return true;
+  };
+
+  hud.onSellReceived = async (index) => {
+    if (onlineGameplayBlocked()) return false;
+    const entry = state.received[index];
+    const def = entry ? receivedDef(entry) : undefined;
+    if (!entry || !def || def.category === "functional") return false;
+    const refund = sellRefund(def);
+    if (!await hud.confirmInGame(
+      `Sell ${def.name}?`,
+      `Sell this reward directly from Received for ${refund} gold? This cannot be undone.`,
+      `Sell +${refund}g`,
+    )) return false;
+    if (economy) {
+      // Claim into a short-lived authoritative object, then refund it in the same
+      // ordered command batch. The requested id links the two operations without
+      // ever placing a client-side object on the farm.
+      const instanceId = `reward-sale-${crypto.randomUUID()}`;
+      if (!economy.submitStorageClaim(entry, { localObjectId: instanceId })) return false;
+      economy.submitObject({ type: "refund", key: def.key, instanceId }, { gold: refund });
+    } else state.addGold(refund);
+    state.takeReceivedAt(index);
+    audio.play("sell");
+    return true;
+  };
+
   // Store a placed object in the shed (returns it to inventory for free re-placing
   // later). Reverses any functional effect; the shed must have a free slot.
   const storeObject = (id: string) => {
@@ -3061,6 +3121,46 @@ async function main() {
     }
   };
 
+  const interactWithObject = (objId: string, objDef: PlaceableDef): boolean => {
+    if (objDef.tapSound) audio.tap(objDef.tapSound);
+    if (objDef.storageSlots) hud.openStorage();
+    else if (objDef.petPen) hud.openStorage("Pets", true);
+    else if (objDef.zombieStorage) hud.openMausoleum();
+    else if (objDef.zombiePatch) {
+      const napping = zombies.toggleGather(field.patchRestTiles());
+      const wp = field.objectWorkPoint(objId);
+      saveManager.flushCritical();
+      if (wp) floatText(wp.x, wp.y - 24, napping ? "Zzzâ€¦" : "Awake!");
+    } else if (objDef.zombiePot) {
+      activePotId = objId;
+      hud.openCombiner();
+    } else if (field.isObjectReady(objId)) {
+      const wp = field.objectWorkPoint(objId);
+      if (wp) jobs.enqueueTreeHarvest(objId, wp.x, wp.y);
+    } else {
+      const oid = objId, def = objDef;
+      hud.openObjectActions({
+        name: def.name,
+        portrait: `${BASE}assets/objects/${def.sprite}`,
+        canStore: canStore(def),
+        canSell: def.category !== "functional",
+        sellRefund: sellRefund(def),
+        sellBrains: false,
+        onMove: () => {
+          hud.setMode("move");
+          carrying = { id: oid, def, flipped: field.objectFlipOf(oid) };
+          const o = field.objectOriginOf(oid);
+          if (o) field.setObjectCursor(def, o.oc + Math.floor((def.tileW - 1) / 2),
+            o.or + Math.floor((def.tileH - 1) / 2), oid, carrying.flipped);
+        },
+        onRotate: () => { field.flipObject(oid); saveManager.save(); },
+        onStore: () => storeObject(oid),
+        onSell: () => sellObject(oid),
+      });
+    }
+    return true;
+  };
+
   const inspectZombie = (zu: NonNullable<ReturnType<typeof zombies.pick>>) => {
     zombies.select(zu);
     const d = zu.getData();
@@ -3079,11 +3179,13 @@ async function main() {
     });
   };
 
-  const beginZombieLongPress = (wx: number, wy: number, pointerId: number) => {
+  const beginWorldLongPress = (wx: number, wy: number, pointerId: number) => {
     cancelZombieLongPress();
     zombieLongPressActivated = false;
-    const candidate = zombies.pick(wx, wy);
-    if (!candidate) return;
+    const zombieCandidate = zombies.pick(wx, wy);
+    const objectId = zombieCandidate || visiting ? null : field.objectAtPoint(wx, wy);
+    const objectCandidate = objectId ? field.objectDefOf(objectId) : null;
+    if (!zombieCandidate && (!objectId || !objectCandidate)) return;
     zombieLongPressTimer = setTimeout(() => {
       zombieLongPressTimer = null;
       if (pointerId !== pressPointerId || touchPinch || !dragging ||
@@ -3091,7 +3193,9 @@ async function main() {
       zombieLongPressActivated = true;
       dragging = false;
       lastPlot = "";
-      inspectZombie(candidate);
+      if (zombieCandidate) inspectZombie(zombieCandidate);
+      else if (objectId && objectCandidate && field.objectDefOf(objectId) === objectCandidate)
+        interactWithObject(objectId, objectCandidate);
     }, TOUCH_ZOMBIE_HOLD_MS);
   };
 
@@ -3123,7 +3227,7 @@ async function main() {
       last.copyFrom(e.global);
       if (touch) {
         const w = toWorld(e);
-        beginZombieLongPress(w.x, w.y, e.pointerId);
+        beginWorldLongPress(w.x, w.y, e.pointerId);
       }
       return;
     }
@@ -3157,7 +3261,7 @@ async function main() {
     // opens the same left-side Plants/Zombies picker as a desktop click.
     if (touch && hud.mode === "till" && field.canPlant(col, row)) hud.setMode("walk");
     if (touch && hud.mode === "walk") touchSelectStartTile = { col, row };
-    if (touch && hud.mode === "walk") beginZombieLongPress(wx, wy, e.pointerId);
+    if (touch && hud.mode === "walk") beginWorldLongPress(wx, wy, e.pointerId);
     if (touch && hud.mode === "till") {
       dragging = true;
       moved = false;
@@ -3338,12 +3442,9 @@ async function main() {
       const row = startPlot ? touchSelectStartTile!.row : released.row;
       const { wx, wy } = released;
       if (isTouchPointer(pressPointerType)) {
-        // Select-mode taps belong to farm content, never the plot-wide queued-job
-        // cancel shortcut. Other tools retain tap-to-cancel behavior.
-        const selectingFarmContent = hud.mode === "walk";
         // Match desktop's queued-action toggle, but only after this is known to be
         // a tap so the first finger of a pinch cannot cancel unrelated work.
-        if (!selectingFarmContent && jobs.cancelAtTile(col, row)) {
+        if (jobs.cancelAtTile(col, row)) {
           dragging = false;
           lastPlot = "";
           return;
@@ -3405,7 +3506,10 @@ async function main() {
           lastPlot = "";
           return;
         }
-        const objId = field.objectAtPoint(wx, wy);
+        // A plot owns a normal touch tap even when an item's sprite covers it.
+        // Holding still targets that item through beginWorldLongPress().
+        const touchPlot = plotOwnsObjectTap(pressPointerType, !!field.plotOriginAt(col, row));
+        const objId = touchPlot ? null : field.objectAtPoint(wx, wy);
         const objDef = objId ? field.objectDefOf(objId) : null;
         // Signature decor (Liberty Bell, Gnome King, …) plays its own tap sound.
         if (objDef?.tapSound) audio.tap(objDef.tapSound);

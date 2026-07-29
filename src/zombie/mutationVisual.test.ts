@@ -16,10 +16,15 @@ describe("mutation visual replacements", () => {
     expect(matchesMutationReplacement("dragonArm", "armF")).toBe(false);
   });
 
-  it("recognizes the complete base face as a head replacement target", () => {
+  it("replaces the skull while preserving foreground face and accessory layers", () => {
     expect(matchesMutationReplacement("defaultHead", "head")).toBe(true);
-    expect(matchesMutationReplacement("defaultEyeL", "head")).toBe(true);
     expect(matchesMutationReplacement("defaultUpperTeeth", "head")).toBe(true);
+    expect(matchesMutationReplacement("defaultScar", "head")).toBe(true);
+    expect(matchesMutationReplacement("defaultEyeL", "head")).toBe(false);
+    expect(matchesMutationReplacement("defaultJaw", "head")).toBe(false);
+    expect(matchesMutationReplacement("defaultLowerTeeth", "head")).toBe(false);
+    expect(matchesMutationReplacement("gnomeFeature", "head")).toBe(false);
+    expect(matchesMutationReplacement("barbarianHair", "head")).toBe(false);
     expect(matchesMutationReplacement("defaultBody", "head")).toBe(false);
   });
 });

@@ -1,6 +1,6 @@
 import { DICE_KEY, CONCENTRATION_KEY, VOUCHER_KEY } from "../boostCatalog";
 import { levelForXp, levelUpBrains } from "../levels";
-import { resolveLoot, rollLoot } from "../loot";
+import { ownedLootCounter, resolveLoot, rollLoot } from "../loot";
 import { raidEcon, raidUnlocked, winGold } from "../raidCatalog";
 import { applyQuestEvents } from "./engine";
 import type { QuestProjection } from "../../../src/net/protocol";
@@ -65,19 +65,31 @@ const objectArmyCapacity = new Map(
   (objectRows as Array<{ key: string; armyMax?: number }>).map((o) => [o.key, o.armyMax ?? 0])
 );
 
-function seededUnit(seed: string, salt: number): number {
-  let h = 2166136261 ^ salt;
-  for (let i = 0; i < seed.length; i++) {
-    h ^= seed.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return (h >>> 0) / 0x1_0000_0000;
+/** The win's brain drop. Rolled once at /raid/start — the client shows the pickup during
+ *  the fight — and PINNED in the session's `boosts_json` so /raid/finish pays exactly what
+ *  was shown, then credited only after the replay verifies the boss died.
+ *
+ *  It used to be DERIVED from the session id instead of stored, which made the amount a
+ *  pure function of a value handed to the client at /raid/start: a player could compute
+ *  the pending roll before choosing to fight. The pin costs a field and closes that. */
+function rollPinnedBrainDrop(recommendedLevel: number, hasBoss: boolean): number {
+  return hasBoss ? rollBrainDrop(recommendedLevel) : 0;
 }
 
-function pinnedBrainDrop(sessionId: string, recommendedLevel: number, hasBoss: boolean): number {
+/** Brain drop for a session opened BEFORE the amount was pinned (legacy derivation, kept
+ *  only so in-flight sessions still pay what their /raid/start response promised). Those
+ *  expire within RAID_TTL_MS of the deploy, after which this is dead. */
+function legacyBrainDrop(sessionId: string, recommendedLevel: number, hasBoss: boolean): number {
   if (!hasBoss) return 0;
   let salt = 17;
-  return rollBrainDrop(recommendedLevel, () => seededUnit(sessionId, salt++));
+  return rollBrainDrop(recommendedLevel, () => {
+    let h = 2166136261 ^ salt++;
+    for (let i = 0; i < sessionId.length; i++) {
+      h ^= sessionId.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    return (h >>> 0) / 0x1_0000_0000;
+  });
 }
 
 export async function expireLiveRaid(db: D1Database, accountId: string, now: number): Promise<void> {
@@ -142,14 +154,14 @@ export async function startRaid(
   if (dice) core.inventory[DICE_KEY] -= dice;
   if (concentration) core.inventory[CONCENTRATION_KEY]--;
   const sessionId = crypto.randomUUID();
-  const brainDrop = pinnedBrainDrop(sessionId, econ.recLevel, pinned.config.enemyUnits.some((unit) => unit.isBoss));
+  const brainDrop = rollPinnedBrainDrop(econ.recLevel, pinned.config.enemyUnits.some((unit) => unit.isBoss));
   const expiresAt = now + RAID_TTL_MS;
   const earliestFinishAt = now + EARLIEST_FINISH_MS;
   const statements: D1PreparedStatement[] = [
     db.prepare(`INSERT INTO raid_sessions_v3
       (id, account_id, raid_id, roster_json, boosts_json, config_json, ruleset_version, started_at, earliest_finish_at, expires_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-      .bind(sessionId, accountId, String(raidId), JSON.stringify(requested), JSON.stringify({ dice, concentration }),
+      .bind(sessionId, accountId, String(raidId), JSON.stringify(requested), JSON.stringify({ dice, concentration, brainDrop }),
         JSON.stringify(pinned.config), RAID_RULESET_VERSION, now, earliestFinishAt, expiresAt),
     db.prepare("UPDATE raid_state_v3 SET last_started_at = ? WHERE account_id = ?").bind(now, accountId),
     db.prepare("UPDATE gameplay_documents_v3 SET current_json = ?, updated_at = ? WHERE account_id = ?")
@@ -346,26 +358,32 @@ export async function finishRaid(
     return { status: 409, body: { error: "state_conflict" } };
   }
   const core = parse<CoreState>(coreRow.current_json, { inventory: {}, storage: { received: {}, stored: {} } });
+  const objects = parse<Array<{ catalogKey: string; status: string }>>(objectRow.current_json, []);
   const progress = parse<Record<string, number>>(raidState.progress_json, {});
   const firstClear = win && !(progress[String(raidId)] > 0);
   const baseGold = win ? winGold(econ, survivors.length / locked.length) : 0;
   const xp = firstClear ? econ.xp : 0;
-  const brains = win
-    ? pinnedBrainDrop(session.id, econ.recLevel, config.enemyUnits.some((unit) => unit.isBoss))
-    : 0;
+  const boosts = parse<{ dice?: number; brainDrop?: number }>(session.boosts_json, {});
+  const pinnedBrains = Number.isFinite(boosts.brainDrop)
+    ? Math.max(0, Math.trunc(boosts.brainDrop as number))
+    : null;
+  const brains = !win ? 0
+    : pinnedBrains ?? legacyBrainDrop(session.id, econ.recLevel, config.enemyUnits.some((unit) => unit.isBoss));
   let loot: { name: string; kind: "gold" | "boost" | "item" } | null = null;
   let newZombie: { id: string; key: string; stored: boolean } | null = null;
   let lootGold = 0;
   if (win) {
     progress[String(raidId)] = (progress[String(raidId)] ?? 0) + 1;
-    const boosts = parse<{ dice?: number }>(session.boosts_json, {});
-    const name = rollLoot(raidId, boosts.dice ?? 0, (item) => core.storage.received[item] ?? 0, Math.random(), Math.random());
+    // Ownership spans Received + the shed + placed objects, so a `unique` really does drop
+    // once (see ownedLootCounter) and the rarest tier walks down to a repeatable one
+    // afterwards. Reading Received alone made every unique re-droppable the moment it was
+    // claimed, which is exactly when it leaves Received.
+    const name = rollLoot(raidId, boosts.dice ?? 0, ownedLootCounter(core.storage, objects), Math.random(), Math.random());
     const grant = resolveLoot(name, econ.recLevel);
     if (grant.kind === "gold") { lootGold = grant.gold; loot = { name: grant.name, kind: "gold" }; }
     else if (grant.kind === "boost") { core.inventory[grant.key] = (core.inventory[grant.key] ?? 0) + 1; loot = { name: grant.name, kind: "boost" }; }
     else if (grant.kind === "item") { core.storage.received[grant.name] = (core.storage.received[grant.name] ?? 0) + 1; loot = { name: grant.name, kind: "item" }; }
-    if (dropsOldMcZombie(raidId, true, seededUnit(session.id, 0x4d43))) {
-      const objects = parse<Array<{ catalogKey: string; status: string }>>(objectRow.current_json, []);
+    if (dropsOldMcZombie(raidId, true, Math.random())) {
       const activeCapacity = (core.zombieMax ?? 16) + objects.reduce(
         (total, object) => total +
           (object.status === "placed" ? objectArmyCapacity.get(object.catalogKey) ?? 0 : 0),

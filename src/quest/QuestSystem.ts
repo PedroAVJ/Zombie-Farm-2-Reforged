@@ -11,6 +11,7 @@ import { GameState } from "../GameState";
 import { QuestBus, QuestEvent } from "./events";
 import { QuestDef, QuestView, RewardType, questRewardInfo } from "./types";
 import { QuestSave } from "../save/schema";
+import { questSubjectMatches } from "./matching";
 
 // Notification IDs that have live emitters. A quest only auto-activates once one of
 // its requirements listens to a live event, so quests whose trigger events aren't
@@ -133,7 +134,7 @@ export class QuestSystem {
         if (counts[i] >= r.countTotal) return;
         if (r.notificationID !== nid) return;
         // "" object = match any subject; otherwise require an exact (case-insensitive) name.
-        if (r.notificationObject && r.notificationObject.toLowerCase() !== object.toLowerCase()) return;
+        if (!questSubjectMatches(r.notificationObject, object)) return;
         counts[i] = Math.min(r.countTotal, counts[i] + n);
         advanced = true;
       });
@@ -239,8 +240,7 @@ export class QuestSystem {
       let advanced = false;
       def.requirements.forEach((requirement, index) => {
         if (counts[index] >= requirement.countTotal || requirement.notificationID !== nid) return;
-        if (requirement.notificationObject &&
-            requirement.notificationObject.toLowerCase() !== object.toLowerCase()) return;
+        if (!questSubjectMatches(requirement.notificationObject, object)) return;
         counts[index] = Math.min(requirement.countTotal, counts[index] + n);
         advanced = true;
       });

@@ -78,6 +78,15 @@ export function openStorage(hud: Hud, initialTab: string = "Items", managePen = 
             bg.remove();
             hud.onRetrieveItem?.(key);
           };
+          const sell = document.createElement("button");
+          sell.className = "st-slot-sell";
+          sell.textContent = "Sell";
+          sell.title = "Sell from storage";
+          sell.onclick = async (event) => {
+            event.stopPropagation();
+            if (await hud.onSellStoredItem?.(key)) render();
+          };
+          slot.appendChild(sell);
         }
         grid.appendChild(slot);
       }
@@ -187,7 +196,7 @@ export function openStorage(hud: Hud, initialTab: string = "Items", managePen = 
       } else {
         const hint = document.createElement("div");
         hint.className = "st-hint";
-        hint.textContent = "Claim rewards, or place decorations on your farm.";
+        hint.textContent = "Claim rewards, place decorations, or sell sellable decorations.";
         body.appendChild(hint);
         const grid = document.createElement("div");
         grid.className = "rcv-grid";
@@ -238,6 +247,8 @@ function receivedCard(hud: Hud, v: ReceivedView, bg: HTMLElement, rerender: () =
   nm.textContent = v.name;
   card.append(por, nm);
   if (v.actionLabel) {
+    const actions = document.createElement("div");
+    actions.className = "rcv-actions";
     const btn = document.createElement("button");
     btn.className = "st-use rcv-act";
     btn.textContent = v.actionLabel;
@@ -246,7 +257,17 @@ function receivedCard(hud: Hud, v: ReceivedView, bg: HTMLElement, rerender: () =
     } else {
       btn.onclick = () => { hud.onClaimReceived?.(v.index); rerender(); };
     }
-    card.appendChild(btn);
+    actions.appendChild(btn);
+    if (v.sellable) {
+      const sell = document.createElement("button");
+      sell.className = "st-use st-sell rcv-act";
+      sell.textContent = "Sell";
+      sell.onclick = async () => {
+        if (await hud.onSellReceived?.(v.index)) rerender();
+      };
+      actions.appendChild(sell);
+    }
+    card.appendChild(actions);
   } else {
     const tag = document.createElement("div");
     tag.className = "rcv-trophy";
