@@ -12,6 +12,7 @@ import * as legacyDb from "../db";
 import { applyCommandBatch, freshGameplayState, zombieDefaultMutation } from "./engine";
 import { levelForXp } from "../levels";
 import { projectRun } from "./epicBoss";
+import { RAID_RULESET_VERSION } from "../raidVerifier";
 
 interface RuntimeRow {
   account_version: number;
@@ -215,6 +216,7 @@ export async function bootstrap(
     protocolVersion: GAMEPLAY_PROTOCOL,
     serverTime: now,
     minimumProtocolVersion,
+    raidRulesetVersion: RAID_RULESET_VERSION,
     mutationsEnabled,
     accountVersion: rows.runtime.account_version,
     writerGeneration: rows.runtime.writer_generation,

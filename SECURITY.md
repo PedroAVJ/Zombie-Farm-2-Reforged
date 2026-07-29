@@ -64,9 +64,12 @@ replay produced. Most residual risks below are integrity limitations rather than
 (client-only hazards and their concession fallback, bot-optimal input, deployment-gated
 enforcement, non-deterministic loot rolls, session compromise, offline mutability). The one
 current exception is **client-asserted fertilization**, a bounded but genuinely upward assertion
-documented below; it should be closed rather than accepted. This
-build is a non-commercial fan reimplementation with no real payment rail, so "paid currency" is
-notional. `MUTATIONS_DISABLED=1` remains the incident stop for all gameplay writes.
+documented below. It is an accepted design tradeoff for this non-commercial fan reimplementation:
+keeping the fertilization animation immediate and inside the existing command batch is more
+valuable than preventing a bounded increase to ordinary vegetable gold. It cannot directly award
+brains, XP, zombies, premium inventory, or combat rewards, and there is no real payment rail, so
+"paid currency" is notional. `MUTATIONS_DISABLED=1` remains the incident stop for all gameplay
+writes.
 
 ## Controls currently implemented
 
@@ -91,6 +94,12 @@ player picks **Local Farm** or **Online Farm** at first launch (`src/playMode.ts
 Local Farm is client-authoritative by design and remains out of scope for vulnerability reports
 (see above) — it has no server and no other player to defend against. The security-relevant
 property is only that it stays isolated from the account.
+
+**Crash diagnostics are local-only, on purpose.** `src/diagnostics.ts` keeps captured errors in
+`localStorage` and exposes them through a Settings button that copies to the clipboard. Nothing
+is transmitted. If a server-side reporting route is ever added it must be Online-Farm-only or
+explicitly opt-in, or it silently breaks the no-network guarantee above — update this section and
+the README in the same change.
 
 ### Authentication and account isolation
 
@@ -123,7 +132,10 @@ property is only that it stays isolated from the account.
 ### Protocol-v3 authoritative state
 
 - `/bootstrap` returns the server gameplay projection, presentation projection, writer state,
-  social summary, and resumable raid metadata.
+  social summary, resumable raid metadata, and the Worker's `raidRulesetVersion` (advisory: the
+  client uses it to prompt a reload when its bundle and the Worker disagree, which would
+  otherwise surface as a `426 stale_ruleset` on every `/raid/start`). The unauthenticated
+  `GET /` health probe publishes the same version so the client deploy can gate on it.
 - `/commands` accepts an allowlisted semantic command union. It rejects arbitrary balance/state
   setters and validates catalog keys, ownership, affordability, level gates, capacity, crop
   timing, and coordinates on the server.
@@ -232,7 +244,7 @@ fight that is strictly easier than the one the player saw. The player concedes t
 Closing this properly means simulating the hazards server-side (restoring `grabberOf`) so no
 concession is needed.
 
-### Client-asserted fertilization (open regression)
+### Client-asserted fertilization (accepted design tradeoff)
 
 The Garden-zombie fertilize roll moved from the server to the client so the actor animation and
 leaf effect appear immediately. `farm.plant` now carries an optional `fertilized` boolean, and
@@ -245,11 +257,16 @@ A modified client can therefore set `fertilized: true` on every vegetable plant 
 (2x on vegetable harvests only, still time-gated by grow timers, and it cannot touch zombie
 crops), so this is yield inflation rather than arbitrary value creation — but unlike the raid
 concession it is a strict *upward* client assertion, which is the property the rest of this
-document says protocol v3 does not permit.
+document otherwise excludes. This is the explicit exception to that general guarantee.
 
-Closing it means either restoring the server roll and letting the client animate optimistically
-against a server correction, or having the server re-derive eligibility from the account's own
-Garden-zombie placement at plant time.
+Fertilization does not multiply XP and cannot directly create brains, zombies, premium inventory,
+raid/Epic Boss rewards, or Black Market escrow. This exception is intentionally accepted so
+fertilization can appear at planting time without an extra server request.
+
+Revisit server-owned rolling only if gold becomes scarce or competitive, can be converted into
+brains or real value, or the project receives enough operating support to justify the additional
+server work. Until then, security claims should describe protocol v3 as server-authoritative
+**except for this documented, bounded vegetable-gold outcome**.
 
 ### Bot-optimal input, not forged outcomes
 

@@ -164,6 +164,7 @@ must also update [SECURITY.md](SECURITY.md) and [server/README.md](server/README
 - **Drag-select plowing** (`src/plowSelection.ts`): tapping soil drops a 4x4 anchor preview; dragging repositions it and the corner/edge handles grow it into a rectangle; a second tap inside the preview commits every valid plot at once. Commit is deferred to pointer-up so one tap can never plow twice.
 - **Installable PWA**: a web app manifest (`public/manifest.webmanifest`), maskable/Apple icons, and a `vite-plugin-pwa` service worker. The app shell, boot script, and title art are precached; `/assets` art and audio are cached `CacheFirst` on first fetch, while release-sensitive JSON catalogs use `NetworkFirst` with an offline fallback. Local Farm warms up progressively rather than downloading ~88 MB at install. Readiness copy distinguishes Local Farm's progressively cached assets from Online Farm's connectivity requirement. The service worker is build-only; there is none in `npm run dev`.
 - A one-time **"Play Fullscreen?"** offer on mobile after the boot overlay is dismissed (`src/ui/panels/fullscreenPrompt.ts`), skipped when already fullscreen or running installed/standalone. Settings also has a Fullscreen row and an `F` hotkey.
+- **Diagnostics** (`src/diagnostics.ts`): uncaught errors and unhandled rejections are captured into a 20-entry ring buffer in `localStorage`, and Settings → Diagnostics copies a pasteable report (build id, browser, farm mode, captured stacks) for bug reports. It is **local-only and sends nothing anywhere** — deliberately, so Local Farm's no-network guarantee holds. Builds carry their commit SHA (`BUILD_ID`) and ship sourcemaps so those stacks are readable.
 - Music, sound effects, and farm ambience are enabled by default and can be toggled independently in Settings. An optional **Mute When Unfocused** setting silences all channels while the game tab or window is in the background. The mandatory first-run tutorial uses real farm actions: plow, plant a zombie, buy and use Insta-Grow, harvest, then raid. Developer controls (a separate menu opened by an invisible hotspot beside the nameplate) support testing.
 - The right-side **Farmer's Guide** is a responsive, chapter-based in-game knowledge base covering Local and Online saves, core farming and combat mechanics, social/community help, the open-source repository, and contributor acknowledgements.
 - **Farm background** setting: foliage density choices (Deep Forest / Woodland / Light Meadow) persisted in `src/prefs.ts`. This changes the density of decorative surrounding foliage — distinct from ground/climate skins, which change the farm's tile terrain.
@@ -315,6 +316,15 @@ installs dependencies, runs the client Vitest suite, builds `dist/`, and then
 currently deployed site unchanged. The production online config (`VITE_API_URL`,
 `VITE_GOOGLE_CLIENT_ID`) is committed in `.env.production` — both values are public, so
 nothing is injected at build time.
+
+Before publishing, the workflow queries the **live Worker's** `GET /` and refuses to deploy
+a client whose `RAID_RULESET_VERSION` the deployed Worker doesn't serve yet. Because
+`/raid/start` rejects a version mismatch with `426 stale_ruleset`, shipping the client first
+would break every invasion until the Worker caught up — and the Worker deploy is manual. The
+gate is skipped (with a warning, not a failure) if the Worker is unreachable, so a health blip
+can't block an art or docs deploy. **When a ruleset bump is in the commit, deploy the Worker
+first** — apply any pending D1 migrations, run *Deploy server (Cloudflare Worker)*, then re-run
+this deploy.
 
 Production is served from the custom domain **`zombiefarmreforged.com`**, set by
 `public/CNAME` (Vite copies `public/` into `dist/`, so the CNAME rides each publish).

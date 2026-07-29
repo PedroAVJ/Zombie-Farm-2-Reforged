@@ -36,6 +36,47 @@ jobs:
           cache-dependency-path: package-lock.json
       - run: npm ci
       - run: npm test
+      # Refuse to publish a client whose raid ruleset the LIVE Worker doesn't serve yet.
+      #
+      # /raid/start rejects a version mismatch with 426 stale_ruleset, so shipping the
+      # client first makes every invasion fail until someone remembers to deploy the
+      # Worker (which is a manual workflow_dispatch). This turns "remember the order"
+      # into an enforced gate. The client handles the mismatch gracefully with a reload
+      # prompt, so this is defence in depth, not the only protection.
+      #
+      # Deliberately non-fatal if the Worker is unreachable: a health-check blip should
+      # not block a docs or art deploy. Only a definite, parsed mismatch fails.
+      - name: Check live Worker raid ruleset
+        run: |
+          API_URL=$(grep -E '^VITE_API_URL=' .env.production | cut -d= -f2- | tr -d '"' | tr -d "'")
+          CLIENT=$(grep -oE 'RAID_RULESET_VERSION = [0-9]+' src/raid/replay.ts | grep -oE '[0-9]+')
+          echo "client raid ruleset: $CLIENT"
+          if [ -z "$API_URL" ]; then
+            echo "::notice::No VITE_API_URL configured — offline-only build, skipping check."
+            exit 0
+          fi
+          BODY=$(curl -fsS --max-time 10 "$API_URL/" || true)
+          if [ -z "$BODY" ]; then
+            # Genuinely unreachable (outage, DNS, timeout). Don't block an art/docs deploy
+            # on a health blip — the client's own reload prompt still covers the player.
+            echo "::warning::$API_URL unreachable — skipping the ruleset gate."
+            exit 0
+          fi
+          LIVE=$(echo "$BODY" | grep -oE '"raidRulesetVersion":[0-9]+' | grep -oE '[0-9]+' || true)
+          if [ -z "$LIVE" ]; then
+            # Reachable but the field is absent: that Worker predates this check, which is
+            # itself proof it is behind. Distinct from unreachable, and it must fail.
+            echo "::error::The live Worker does not report raidRulesetVersion, so it predates this build."
+            echo "Deploy the Worker first, then re-run this deploy."
+            exit 1
+          fi
+          echo "live Worker raid ruleset: $LIVE"
+          if [ "$CLIENT" != "$LIVE" ]; then
+            echo "::error::Client ships raid ruleset $CLIENT but the live Worker serves $LIVE."
+            echo "Deploy the Worker first (Actions -> 'Deploy server (Cloudflare Worker)'),"
+            echo "applying any pending D1 migrations, then re-run this deploy."
+            exit 1
+          fi
       # Online-layer config (VITE_API_URL / VITE_GOOGLE_CLIENT_ID) comes from the
       # committed .env.production — both values are public. Nothing to inject here.
       - run: npm run build

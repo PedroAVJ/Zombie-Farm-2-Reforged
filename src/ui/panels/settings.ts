@@ -4,7 +4,8 @@
 // Hud.openProfiles (which stays in the class and calls them here).
 import type { Hud } from "../../hud";
 import { openModal } from "../Modal";
-import { APP_VERSION } from "../../version";
+import { BUILD_ID } from "../../version";
+import { diagnosticsReport, diagnosticsCount, clearDiagnostics } from "../../diagnostics";
 import { getSpriteSet, setSpriteSet, FARM_BACKGROUNDS } from "../../prefs";
 import { ABILITY_POOL, ABILITY_TIER, TIER_BOSS } from "../../zombie/traits";
 import { otherPlayMode, playModeDestinationLabel } from "../../playMode";
@@ -303,6 +304,48 @@ export function openSettings(hud: Hud): void {
       noteEl("Clearing browser data can remove Local Farm. Export a backup to keep it safe."),
     );
   }
+  // Diagnostics: available in BOTH farm modes, because crashes happen in both. Copying
+  // is entirely local (clipboard) — nothing is transmitted. Testers paste it into the
+  // Discord bug channel named in the Farmer's Guide.
+  const diagnostics = document.createElement("div");
+  diagnostics.className = "set-row";
+  const diagLabel = document.createElement("span");
+  diagLabel.textContent = "Diagnostics";
+  const diagControls = document.createElement("div");
+  diagControls.className = "set-username-controls";
+  const copyButton = document.createElement("button");
+  copyButton.className = "set-action";
+  const captured = diagnosticsCount();
+  copyButton.textContent = captured ? `Copy (${captured})` : "Copy";
+  copyButton.onclick = async () => {
+    const text = diagnosticsReport({ mode: hud.playMode });
+    try {
+      await navigator.clipboard.writeText(text);
+      hud.showToast("Diagnostics copied. Paste them into your bug report.");
+    } catch {
+      // Clipboard needs a secure context and permission; neither is guaranteed on a
+      // phone browser. Fall back to selectable text the player can copy by hand.
+      const box = document.createElement("textarea");
+      box.value = text;
+      box.className = "set-diagnostics-dump";
+      box.readOnly = true;
+      diagnostics.after(box);
+      box.focus();
+      box.select();
+      hud.showToast("Couldn't reach the clipboard — copy the text shown instead.", 6000);
+    }
+  };
+  const clearButton = document.createElement("button");
+  clearButton.className = "set-action";
+  clearButton.textContent = "Clear";
+  clearButton.onclick = () => {
+    clearDiagnostics();
+    copyButton.textContent = "Copy";
+    hud.showToast("Diagnostics cleared.");
+  };
+  diagControls.append(copyButton, clearButton);
+  diagnostics.append(diagLabel, diagControls);
+
   panel.append(
     farmMode,
     farmModeNote,
@@ -323,11 +366,13 @@ export function openSettings(hud: Hud): void {
     ...accountBlock,
     ...ambienceBlock,
     ...bgBlock,
-    spriteRow, spriteNote
+    spriteRow, spriteNote,
+    diagnostics,
+    noteEl("Copies this build's id, your browser, and any recorded errors. Nothing is sent anywhere — paste it into a bug report.")
   );
   const version = document.createElement("div");
   version.className = "set-version";
-  version.textContent = `Version ${APP_VERSION}`;
+  version.textContent = `Version ${BUILD_ID}`;
   panel.append(version);
 }
 

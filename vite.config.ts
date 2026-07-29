@@ -53,6 +53,17 @@ export default defineConfig(({ mode }) => {
     // disabled in dev) — honour the harness-assigned PORT like the dev server.
     preview: { port: Number(process.env.PORT) || 4173, host: true },
     clearScreen: false,
+    // Build identity for crash diagnostics: CI exports GITHUB_SHA, so a pasted report
+    // names the exact bundle. Falls back to "dev" for local builds.
+    define: {
+      __BUILD_SHA__: JSON.stringify((process.env.GITHUB_SHA ?? "dev").slice(0, 7)),
+    },
+    build: {
+      // Diagnostics are close to useless against minified frames ("t is not a function
+      // at a.qX"). The repo is public, so shipping maps costs nothing but bytes, and
+      // they are only fetched when devtools is open.
+      sourcemap: true,
+    },
     plugins: [
       cspPlugin(env.VITE_API_URL),
       // PWA service worker (build-only) for offline-tolerant caching + auto-update.

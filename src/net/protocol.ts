@@ -189,6 +189,12 @@ export interface BootstrapResponse {
   protocolVersion: typeof GAMEPLAY_PROTOCOL;
   serverTime: number;
   minimumProtocolVersion: number;
+  /** The Worker's `RAID_RULESET_VERSION`. The client compares this against its own
+   *  constant at boot: a mismatch means this tab's JS predates (or postdates) the
+   *  deployed Worker, so `/raid/start` would reject every launch with
+   *  `426 stale_ruleset`. Surfacing it here lets the client prompt a reload up front
+   *  instead of failing at the Invade button. */
+  raidRulesetVersion: number;
   mutationsEnabled: boolean;
   accountVersion: number;
   writerGeneration: number;

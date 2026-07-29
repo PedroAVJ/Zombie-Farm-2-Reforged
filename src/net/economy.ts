@@ -3,6 +3,7 @@ import * as api from "./api";
 import { CommandQueue } from "./commandQueue";
 import type { BootstrapResponse, CommandBatchResponse, GameplayCommand } from "./protocol";
 import type { RaidOutcome } from "../raid/types";
+import { RAID_RULESET_VERSION } from "../raid/replay";
 
 export interface InventoryInput {
   type: "buy" | "use" | "grant";
@@ -92,6 +93,11 @@ export class EconomyClient {
   onCommandRejected: ((command: GameplayCommand | undefined, error: string) => void) | null = null;
   onAuthoritativeSettled: ((serverTime: number) => void) | null = null;
   onPendingChange: ((pending: number) => void) | null = null;
+  /** Fired at boot when the Worker's raid ruleset differs from this bundle's. Every
+   *  `/raid/start` would be refused with `426 stale_ruleset` until the tab reloads, so
+   *  the UI surfaces a reload prompt rather than letting the player discover it by
+   *  pressing Invade. */
+  onRulesetSkew: ((serverVersion: number, clientVersion: number) => void) | null = null;
 
   constructor(
     private state: GameState,
@@ -140,6 +146,9 @@ export class EconomyClient {
       this.queue.adoptBootstrap(bootstrap);
       this.ready = true;
       this.adoptGameplay(bootstrap.gameplay);
+      if (bootstrap.raidRulesetVersion !== RAID_RULESET_VERSION) {
+        this.onRulesetSkew?.(bootstrap.raidRulesetVersion, RAID_RULESET_VERSION);
+      }
       if (this.queue.size === 0) this.onAuthoritativeSettled?.(bootstrap.serverTime);
       if (bootstrap.writer.status === "mine") this.onWriterAvailable?.();
       else this.onWriterReplaced?.();

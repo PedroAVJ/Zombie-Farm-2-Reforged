@@ -400,6 +400,12 @@
 #hud .set-action:hover { filter: brightness(1.1); }
 #hud .set-action:disabled { opacity: .5; cursor: default; filter: none; }
 #hud .set-note { margin: 2px 2px 4px; font-size: 12px; color: #cbe6a0; opacity: .85; }
+/* Manual-copy fallback for Diagnostics when the clipboard API is unavailable
+   (insecure context or a phone browser that refuses permission). */
+#hud .set-diagnostics-dump { width: 100%; height: 140px; margin: 4px 0 8px;
+  box-sizing: border-box; padding: 6px 8px; border: 2px solid #1e1207; border-radius: 7px;
+  background: #2a1c0c; color: #ffe9a8; font: 400 11px/1.35 ui-monospace, Menlo, Consolas, monospace;
+  white-space: pre; overflow: auto; resize: vertical; }
 #hud .set-username { margin: 4px 0 8px; }
 #hud .set-username-controls { display: flex; gap: 7px; }
 #hud .set-username-input { width: 150px; box-sizing: border-box; padding: 6px 8px;

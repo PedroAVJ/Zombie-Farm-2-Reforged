@@ -6,10 +6,13 @@
 > loop is gone. The Beach crab and Circus trapeze hazards have been client-only since raid
 > ruleset version 6 (current version **10**), so `/raid/finish` accepts one-way
 > `clientWin`/`clientLosses` concessions that can only worsen the submitting player's own
-> result; see the concession-fallback limitation in `../SECURITY.md`. Note one open regression
-> there: **fertilization is now client-asserted** and is not server-verified. Before enabling valuable/competitive features, complete the deployment-time
-> release gates there (notably `WRITER_LEASE_MODE=enforce`, `MIN_PROTOCOL_VERSION=3`,
-> `SESSION_SECRET` rotation, and confirming the live commit/D1 schema).
+> result; see the concession-fallback limitation in `../SECURITY.md`. Fertilization remains
+> client-asserted by design so its animation is immediate without another server request. This
+> accepted exception can only inflate time-gated vegetable gold; it cannot directly award brains,
+> XP, zombies, premium inventory, or combat rewards. Before enabling valuable/competitive
+> features, complete the deployment-time release gates in `../SECURITY.md` (notably
+> `WRITER_LEASE_MODE=enforce`, `MIN_PROTOCOL_VERSION=3`, `SESSION_SECRET` rotation, and confirming
+> the live commit/D1 schema).
 
 Protocol v3 deliberately has no data migration or backward compatibility. The reset
 migration deletes every account, session, friendship, gift, gameplay row, save, receipt,

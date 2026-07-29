@@ -13,21 +13,40 @@
 import { registerSW } from "virtual:pwa-register";
 import type { PlayMode } from "./playMode";
 
+/** Retained so a non-service-worker caller (the ruleset-skew check) can reuse the
+ *  SW's activate-and-reload path when an update is genuinely waiting. Null in dev,
+ *  in browsers without service workers, and before initPwa runs. */
+let updateSW: ((reloadPage?: boolean) => Promise<void>) | null = null;
+
 /** Wire up the service worker. Call once at startup. Safe to call in dev. */
 export function initPwa(mode: PlayMode): void {
   // Skip where service workers aren't available (older browsers, some embedded
   // webviews) — the game runs fine without offline caching.
   if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return;
 
-  const updateSW = registerSW({
+  updateSW = registerSW({
     onNeedRefresh() {
-      showUpdateToast(() => updateSW(true)); // updateSW(true) = skip waiting + reload
+      showUpdateToast("A new version is ready.", () => void updateSW?.(true)); // skip waiting + reload
     },
     onOfflineReady() {
       showBriefToast(mode === "local"
         ? "Local Farm app shell is cached. Viewed artwork is available offline."
         : "App installed. Online Farm still requires an internet connection.");
     },
+  });
+}
+
+/** Ask the player to reload, for a reason OTHER than a waiting service worker —
+ *  currently a raid-ruleset mismatch between this tab's JS and the live Worker.
+ *
+ *  Prefers the service worker's skip-waiting path when one is registered, because a
+ *  plain reload can be served straight back out of the precache. Falls back to
+ *  `location.reload()` in dev and wherever no SW exists. Never reloads on its own —
+ *  a silent reload mid-raid would cost the player the fight. */
+export function promptReload(message: string): void {
+  showUpdateToast(message, () => {
+    if (updateSW) void updateSW(true);
+    else location.reload();
   });
 }
 
@@ -59,11 +78,11 @@ function baseToast(): HTMLDivElement {
   return t;
 }
 
-function showUpdateToast(onReload: () => void): void {
+function showUpdateToast(message: string, onReload: () => void): void {
   const t = baseToast();
 
   const label = document.createElement("span");
-  label.textContent = "A new version is ready.";
+  label.textContent = message;
   label.style.flex = "1";
 
   const reload = document.createElement("button");

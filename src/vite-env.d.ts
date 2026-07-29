@@ -12,3 +12,7 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
+
+/** Short commit SHA of this build, injected by vite.config.ts `define`.
+ *  "dev" for local builds. Surfaced in diagnostics reports. */
+declare const __BUILD_SHA__: string;

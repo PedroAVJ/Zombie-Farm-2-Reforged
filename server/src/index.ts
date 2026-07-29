@@ -235,7 +235,15 @@ app.use("*", (c, next) =>
   })(c, next)
 );
 
-app.get("/", (c) => c.json({ ok: true, service: "zombiefarm" }));
+// Unauthenticated health probe. `raidRulesetVersion` is published here so the client
+// deploy can refuse to publish a bundle whose raid ruleset the live Worker doesn't serve
+// yet — see the preflight step in .github/workflows/deploy.yml.
+app.get("/", (c) => c.json({
+  ok: true,
+  service: "zombiefarm",
+  protocolVersion: GAMEPLAY_PROTOCOL,
+  raidRulesetVersion: RAID_RULESET_VERSION,
+}));
 
 // Hard body ceiling on EVERY route, applied before any handler parses. Just above
 // the 512 KiB save cap so saves pass (PUT /save then applies the precise limit);

@@ -45,7 +45,8 @@ import { BASE } from "./base";
 import { TutorialController } from "./tutorial/TutorialController";
 import { reconcileTutorialCompletion, TutStep, TUTORIAL_ZOMBIE_KEY } from "./tutorial/steps";
 import { initPlatform, isMobile } from "./platform";
-import { initPwa } from "./pwa";
+import { initPwa, promptReload } from "./pwa";
+import { initDiagnostics } from "./diagnostics";
 import {
   captureTouchPointer, gestureMoved, isDeferredTouchMode, isOutsideFarmPanGesture, isTouchPointer,
   isSelectTapGesture, isZombieHold, shouldRecoverTouchPointerUp, TOUCH_ZOMBIE_HOLD_MS,
@@ -82,6 +83,9 @@ const boot = (window as unknown as {
 }).__ZFBoot;
 
 async function main() {
+  // Capture crashes before anything else runs, so a failure during boot (asset load,
+  // save decode, mode chooser) still lands in the diagnostics buffer. Local-only.
+  initDiagnostics();
   // Detect device up front so <html data-platform> is set before the HUD's CSS
   // renders (drives the compact/desktop layout; re-evaluates on resize/rotate).
   initPlatform();
@@ -1152,6 +1156,13 @@ async function main() {
     };
     economy.onPendingChange = (pending) =>
       hud.setPlayStatus("online", pending > 0 ? "saving" : "synced", pending);
+    // This tab's JS and the deployed Worker disagree about the raid ruleset, so every
+    // invasion would be refused at /raid/start. Tell the player up front — the fix is a
+    // reload, and finding that out before committing an army is far better than after.
+    economy.onRulesetSkew = (serverVersion, clientVersion) => {
+      console.warn("[raid] ruleset skew", { serverVersion, clientVersion });
+      promptReload("The game has updated. Reload to keep raiding.");
+    };
     state.canMutateOnline = () => economy!.available;
     state.onMoney = (currency, delta, reason) => economy!.record(currency, delta, reason);
     // Veggie plant/harvest go through the server's EXACT economics engine instead of
@@ -2550,6 +2561,14 @@ async function main() {
           } else if (error.code === "locked") hud.showToast(`That invasion unlocks at level ${body.unlockLevel ?? "?"}.`);
           else if (error.code === "raid_in_progress") hud.showToast("Another invasion is already in progress.");
           else if (error.code === "no_voucher") hud.showToast("No Invasion Voucher to skip the cooldown.");
+          else if (error.code === "stale_ruleset") {
+            // This tab predates the deployed Worker, so the server refuses to pin a fight
+            // it and the client would simulate differently. Nothing is consumed and no
+            // cooldown starts — but without this branch the player just sees "could not
+            // start that invasion" and has no way to know a reload fixes it.
+            hud.showToast("The game has updated. Reload to keep raiding.", 6000);
+            promptReload("The game has updated. Reload to keep raiding.");
+          }
           else hud.showToast("The server could not start that invasion.");
         } else hud.showToast("Gameplay is paused until the server reconnects.");
         return false;
