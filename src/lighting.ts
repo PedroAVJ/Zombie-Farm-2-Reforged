@@ -136,6 +136,13 @@ export class NightLayer extends Container {
     if (sw !== this.sw || sh !== this.sh) {
       this.rt.resize(sw, sh, renderer.resolution);
       this.darkness.scale.set(sw, sh); // unit rect -> full screen
+      // A Sprite caches its quad from the texture size it was assigned with. The
+      // RenderTexture starts at 2x2, and resizing it does not rebuild that quad.
+      // Recreate the view after a resize so it covers the full viewport.
+      this.display.removeFromParent();
+      this.display.destroy();
+      this.display = new Sprite(this.rt);
+      this.addChild(this.display);
       this.sw = sw;
       this.sh = sh;
     }
@@ -154,7 +161,9 @@ export class NightLayer extends Container {
     renderer.render({ container: this.maskScene, target: this.rt, clear: true });
 
     // Lay the (screen-sized) map back over the screen. This layer is a child of
-    // `world`, so counter the camera transform to pin the map to the viewport.
-    this.display.setFromMatrix(m.clone().invert());
+    // `world`, so counter the camera transform on the containing layer. Keeping
+    // that transform off `display` preserves the scale which expands its original
+    // 2x2 quad to the resized render texture.
+    this.setFromMatrix(m.clone().invert());
   }
 }

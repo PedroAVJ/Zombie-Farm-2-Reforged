@@ -18,7 +18,12 @@ import { ParticleField, ParticleConfig } from "./Particles";
 import { ABILITY_POOL } from "../zombie/traits";
 import { BossSpecial, BossThrowConfig, CombatUnit, CrabConfig, GrabberConfig, RaidDef, RaidLevelAsset, RaidOutcome } from "./types";
 import { RAID_TICK_MS, type RaidReplayInput } from "./replay";
-import { extrapolatePosition, interpolatePosition, visualCountdown } from "./renderInterpolation";
+import {
+  extrapolatePosition,
+  interpolatePosition,
+  isOffstageBossReentryFrame,
+  visualCountdown,
+} from "./renderInterpolation";
 import { zombieRaidHeightScale } from "../zombie/displayScale";
 import { zombieBasicAttackName } from "./zombieAttackPresentation";
 
@@ -1178,13 +1183,22 @@ export class RaidScene {
       }
       tok.root.visible = true;
 
+      // The sim drops a generic boss from perch height to ground height on the same
+      // tick that its state becomes "emerging". ENEMY_SPAWN_X fully hides normal
+      // enemies, but not the much wider bosses, which used to flash down in front of
+      // the zombies for one render interval. Finish that wrap at the elevated,
+      // explicitly offstage exit point; the following tick begins the ground walk-in.
+      const bossWrappingOffstage = u.isBoss && u.sourceKey !== CIRCUS_BOSS_KEY &&
+        isOffstageBossReentryFrame(u.state, u.prevY, u.y, BOSS_STRUCT_Y);
+
       // Boss layering: perched or exiting right, it renders BEHIND the structure
       // (legs/exit occluded by the roof); once it re-enters as a ground unit it's a
       // normal front-layer token that walks in front of the building.
       if (u.isBoss && this.perchLayer) {
         const wantLayer =
           u.state === "structure" ||
-          (u.state === "descending" && u.sourceKey !== CIRCUS_BOSS_KEY)
+          (u.state === "descending" && u.sourceKey !== CIRCUS_BOSS_KEY) ||
+          bossWrappingOffstage
             ? this.bossBackLayer
             : this.tokenLayer;
         if (tok.root.parent !== wantLayer) wantLayer.addChild(tok.root);
@@ -1198,6 +1212,10 @@ export class RaidScene {
       const groundDrop = UNIT_GROUND_NUDGE * szs;
       const pos = renderPos(u);
       let [sx, sy] = u.isBoss ? bossPos(u, pos.x, pos.y) : [toX(pos.x) + slide, toY(pos.y) + groundDrop];
+      if (bossWrappingOffstage) {
+        sx = r.left + r.w + 140;
+        sy = perchY;
+      }
       // Mr. Whiskers' authored origin leaves his rig up/back from the intended perch.
       // Offset from the current position by proportions of the rendered actor itself.
       if (u.sourceKey === NINJA_BOSS_KEY &&

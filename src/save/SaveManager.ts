@@ -38,6 +38,7 @@ type PresentationData = {
   tutorial?: SaveGame["tutorial"];
   ui?: { attackOrder?: string[] };
 };
+type ObjectLayout = NonNullable<PresentationData["objectLayout"]>[number];
 
 /** Offline builds retain a local full save. Signed-in v3 builds persist only visual
  * presentation; authoritative gameplay is hydrated from the shared bootstrap call. */
@@ -56,6 +57,10 @@ export class SaveManager {
   private lastPresentationCallAt = 0;
   private suspended = false;
   private onlineWritable = false;
+  // Keep the last known position of server-owned objects until the authoritative
+  // command queue settles. A pagehide between an optimistic remove/store and its
+  // server command must not erase the only position the server can use on reload.
+  private objectLayouts = new Map<string, ObjectLayout>();
   private readonly localKey: string | null;
   onStorageError: ((message: string) => void) | null = null;
 
@@ -144,6 +149,15 @@ export class SaveManager {
   }
 
   private presentation(blob = this.serialize()): Record<string, unknown> {
+    for (const object of blob.objects ?? []) {
+      this.objectLayouts.set(object.id, {
+        id: object.id,
+        ...(object.key === "storage01" ? { key: object.key } : {}),
+        oc: object.oc,
+        or: object.or,
+        rotation: object.rotation,
+      });
+    }
     return {
       player: {
         name: blob.player.name,
@@ -160,14 +174,20 @@ export class SaveManager {
       },
       // The free starter shed is presentation-only, so its key must travel with
       // its layout or it cannot be reconstructed after a signed-in refresh.
-      objectLayout: (blob.objects ?? []).map((o) => ({ id: o.id,
-        ...(o.key === "storage01" ? { key: o.key } : {}),
-        oc: o.oc, or: o.or, rotation: o.rotation })),
+      objectLayout: [...this.objectLayouts.values()],
       rosterLayout: (blob.ownedZombies ?? []).map((u) => ({ id: u.id, name: u.name, pos: u.pos, stored: u.stored, color: u.color })),
       zombiePots: blob.zombiePots,
       tutorial: blob.tutorial,
       ui: { attackOrder: blob.raids?.attackOrder ?? [] },
     };
+  }
+
+  /** Prune layout tombstones only after the gameplay command queue is empty and
+   * its object projection is authoritative. The starter shed is presentation-only. */
+  reconcileObjectLayouts(activeServerIds: ReadonlySet<string>): void {
+    for (const [id, layout] of this.objectLayouts) {
+      if (layout.key !== "storage01" && !activeServerIds.has(id)) this.objectLayouts.delete(id);
+    }
   }
 
   flush(): void { this.autoFlush ? this.autoFlush() : this.save(); }
@@ -344,6 +364,7 @@ export class SaveManager {
 
   private fromBootstrap(boot: Awaited<ReturnType<typeof api.bootstrap>>): SaveGame {
     const p = boot.presentation.data as PresentationData;
+    this.objectLayouts = new Map((p.objectLayout ?? []).map((layout) => [layout.id, { ...layout }]));
     const objectLayout = new Map((p.objectLayout ?? []).map((o) => [o.id, o]));
     const rosterLayout = new Map((p.rosterLayout ?? []).map((u) => [u.id, u]));
     const plots = Object.entries(boot.gameplay.farm.plots).map(([key, plot]) => {

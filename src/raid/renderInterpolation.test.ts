@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { extrapolatePosition, interpolateFixedStep, interpolatePosition, visualCountdown } from "./renderInterpolation";
+import {
+  extrapolatePosition,
+  interpolateFixedStep,
+  interpolatePosition,
+  isOffstageBossReentryFrame,
+  visualCountdown,
+} from "./renderInterpolation";
 
 describe("raid render interpolation", () => {
   it("moves smoothly between 50 ms simulation samples", () => {
@@ -12,6 +18,12 @@ describe("raid render interpolation", () => {
 
   it("snaps teleports instead of sliding across the battlefield", () => {
     expect(interpolatePosition({ x: 0, y: 0 }, { x: 100, y: 20 }, 10, 50, 40)).toEqual({ x: 100, y: 20 });
+  });
+
+  it("keeps the boss's perch-to-ground wrap transition offstage", () => {
+    expect(isOffstageBossReentryFrame("emerging", -150, 365, -150)).toBe(true);
+    expect(isOffstageBossReentryFrame("emerging", 365, 365, -150)).toBe(false);
+    expect(isOffstageBossReentryFrame("descending", -150, -150, -150)).toBe(false);
   });
 
   it("advances visual countdowns between simulation ticks", () => {

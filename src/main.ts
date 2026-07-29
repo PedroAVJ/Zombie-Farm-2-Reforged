@@ -1147,12 +1147,17 @@ async function main() {
   const storedObjectIds = new Map<string, string[]>();
   const objectPurchases = new Map<string, { cost: number; currency: "gold" | "brains" }>();
   if (!visiting && onlineFarm) {
+    let authoritativeObjectIds = new Set<string>();
     const acct = api.getSession()?.accountId ?? "anon";
     economy = new EconomyClient(state, acct, { requireReady: true });
     economy.onAuthoritativeSettled = (serverTime) => {
       // Let synchronous projection listeners finish rebuilding Field/Zombie state
       // before serializing the read-only reconnect snapshot.
-      queueMicrotask(() => saveManager.cacheAuthoritativeSnapshot(serverTime));
+      queueMicrotask(() => {
+        saveManager.reconcileObjectLayouts(authoritativeObjectIds);
+        saveManager.save();
+        saveManager.cacheAuthoritativeSnapshot(serverTime);
+      });
     };
     economy.onPendingChange = (pending) =>
       hud.setPlayStatus("online", pending > 0 ? "saving" : "synced", pending);
@@ -1206,6 +1211,7 @@ async function main() {
     };
     let objectReconcileGeneration = 0;
     economy.onObjectState = async (objects, aliases, baseZombieMax, rejectedLocalIds) => {
+      authoritativeObjectIds = new Set(objects.map((object) => object.instanceId));
       const generation = ++objectReconcileGeneration;
       const current = new Map(field.serializeObjects().map((object) => [object.id, object]));
       for (const id of rejectedLocalIds) field.removeObject(id);

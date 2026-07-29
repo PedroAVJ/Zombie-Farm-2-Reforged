@@ -24,6 +24,21 @@ export function interpolatePosition(
   };
 }
 
+/**
+ * The ordinary raid boss changes from its elevated exit route to its ground-level
+ * re-entry route in one simulation step. Keep that transition offstage for the
+ * remainder of the render interval so a wide boss cannot flash at ground level
+ * before its walk back in begins.
+ */
+export function isOffstageBossReentryFrame(
+  state: string,
+  previousY: number,
+  currentY: number,
+  structureY: number
+): boolean {
+  return state === "emerging" && previousY === structureY && currentY !== structureY;
+}
+
 /** Advance a visual-only countdown through the unsimulated fraction of a tick. */
 export function visualCountdown(valueMs: number, accumulatorMs: number, tickMs: number): number {
   return Math.max(0, valueMs - Math.max(0, Math.min(tickMs, accumulatorMs)));

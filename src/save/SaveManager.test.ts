@@ -54,6 +54,37 @@ describe("SaveManager presentation conflicts", () => {
   });
 });
 
+describe("SaveManager object layout races", () => {
+  it("retains a removed object's position until authoritative settlement", () => {
+    const field = {
+      serializeObjects: vi.fn()
+        .mockReturnValueOnce([{ id: "candle-1", key: "candle", oc: 8, or: 9 }])
+        .mockReturnValueOnce([]),
+    };
+    const manager = new SaveManager(
+      {} as never, field as never, {} as never, {} as never, {} as never,
+      new Map(), new Map(), async () => undefined, "online",
+    );
+    vi.spyOn(manager, "serialize").mockImplementation(() => ({
+      version: 1,
+      savedAt: 1,
+      player: { name: "Tester", farmerAppearance: {} },
+      farm: { fieldId: "default", w: 30, h: 30, climate: "grass", plots: [] },
+      objects: field.serializeObjects(),
+    } as never));
+
+    expect((manager as any).presentation().objectLayout).toEqual([
+      { id: "candle-1", oc: 8, or: 9, rotation: undefined },
+    ]);
+    expect((manager as any).presentation().objectLayout).toEqual([
+      { id: "candle-1", oc: 8, or: 9, rotation: undefined },
+    ]);
+
+    manager.reconcileObjectLayouts(new Set());
+    expect((manager as any).presentation().objectLayout).toEqual([]);
+  });
+});
+
 describe("SaveManager mode isolation", () => {
   it("never falls back to a Local Farm write from Online Farm", () => {
     vi.stubGlobal("localStorage", memoryStorage());
