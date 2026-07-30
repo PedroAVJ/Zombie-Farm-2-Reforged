@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bindBackdropDismiss } from "./Modal";
+import { bindBackdropDismiss, shouldBlockFreshMenuActivation } from "./Modal";
 
 /** Minimal stand-in for a backdrop element: records the listeners so a test can
  * replay a gesture without a DOM (same duck-typing the touch-input tests use). */
@@ -55,5 +55,13 @@ describe("backdrop dismissal", () => {
     bg.fire("click", bg);
     bg.fire("click", bg);
     expect(closed).toBe(1);
+  });
+});
+
+describe("fresh menu activation guard", () => {
+  it("blocks interactive controls during the opening window", () => {
+    expect(shouldBlockFreshMenuActivation(1250, 1100, true)).toBe(true);
+    expect(shouldBlockFreshMenuActivation(1250, 1250, true)).toBe(false);
+    expect(shouldBlockFreshMenuActivation(1250, 1100, false)).toBe(false);
   });
 });

@@ -39,7 +39,9 @@ import {
 // HUD styles live in a real stylesheet (src/ui/hud.css) so they get CSS tooling
 // and hot-reload. Vite injects it at module load — no manual <style> element.
 import "./ui/hud.css";
-import { bindBackdropDismiss, openModal } from "./ui/Modal";
+import {
+  bindBackdropDismiss, MENU_ACTIVATION_DELAY_MS, openModal, shouldBlockFreshMenuActivation,
+} from "./ui/Modal";
 import { renderLevelUp, renderQuestComplete, renderObjectActions, renderInfoPanel } from "./ui/panels/dialogs";
 import {
   openSettings as openSettingsPanel, openDevMenu as openDevMenuPanel,
@@ -222,17 +224,31 @@ export class Hud {
   private wireMenuSounds() {
     const BACKDROP = new Set(["panelbg", "mkt-bg", "st-bg", "pm-bg"]);
     const CLOSE = ".panelclose, .mkt-close, .st-close, .pm-close";
+    let interactiveAt = 0;
+    const clock = () => typeof performance !== "undefined" ? performance.now() : Date.now();
     const mo = new MutationObserver((muts) => {
       for (const m of muts) {
         for (const n of m.addedNodes) {
-          if (n instanceof HTMLElement && [...n.classList].some((c) => BACKDROP.has(c))) {
-            this.audio.play("menuOpen");
-            return;
+          if (!(n instanceof HTMLElement)) continue;
+          // Arm every newly-added interactive HUD surface, including the shared
+          // modal scaffold and hand-built storage/market/raid panels. This runs
+          // before the browser dispatches the opening tap's compatibility click.
+          if (n.matches("button, a, input, select, textarea, [role='button']") ||
+              n.querySelector("button, a, input, select, textarea, [role='button']")) {
+            interactiveAt = clock() + MENU_ACTIVATION_DELAY_MS;
           }
+          if ([...n.classList].some((c) => BACKDROP.has(c))) this.audio.play("menuOpen");
         }
       }
     });
     mo.observe(this.el, { childList: true });
+    this.el.addEventListener("click", (e) => {
+      const target = e.target as HTMLElement | null;
+      const interactive = !!target?.closest("button, a, input, select, textarea, [role='button']");
+      if (!shouldBlockFreshMenuActivation(interactiveAt, clock(), interactive)) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+    }, { capture: true });
     this.el.addEventListener("click", (e) => {
       const t = e.target as HTMLElement;
       // X button (or its inner <img>), or a click on the backdrop itself.

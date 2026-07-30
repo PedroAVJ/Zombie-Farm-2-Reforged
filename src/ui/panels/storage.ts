@@ -6,6 +6,7 @@ import type { Hud } from "../../hud";
 import { UI } from "../uiAsset";
 import { BASE } from "../../base";
 import type { ReceivedView } from "../hudTypes";
+import { storageBoostRows } from "../storageBoosts";
 
 export function openStorage(hud: Hud, initialTab: string = "Items", managePen = false): void {
   document.querySelector("#hud .st-bg")?.remove();
@@ -144,29 +145,31 @@ export function openStorage(hud: Hud, initialTab: string = "Items", managePen = 
     } else if (tab === "Boosts") {
       const total = hud.state.boostInv.reduce((a, b) => a + b.count, 0);
       count.textContent = `${total} boosts`;
-      if (!total) {
+      const rows = storageBoostRows(hud.boosts, hud.state.boostInv);
+      if (!rows.length) {
         const e = document.createElement("div");
         e.className = "st-empty";
-        e.textContent = "Buy boosts from the Market's Boosts tab.";
+        e.textContent = "No boosts are available.";
         body.appendChild(e);
       } else {
         const list = document.createElement("div");
         list.className = "st-boostlist";
-        for (const inv of hud.state.boostInv) {
-          const def = hud.boosts.find((b) => b.key === inv.key);
-          if (!def) continue;
+        for (const { def, count: owned } of rows) {
           const row = document.createElement("div");
-          row.className = "st-boost";
+          row.className = "st-boost" + (owned ? "" : " unowned");
           const img = document.createElement("img");
           img.src = `${BASE}assets/boosts/${def.icon}`;
           const info = document.createElement("div");
           info.className = "st-boost-info";
           info.innerHTML =
-            `<div class="nm">${def.name} <span class="ct">x${inv.count}</span></div>` +
+            `<div class="nm">${def.name} <span class="ct">x${owned}</span></div>` +
             `<div class="ds">${def.info || def.flavorText}</div>`;
           const btn = document.createElement("button");
           btn.className = "st-use";
-          if (def.effect === "grow") {
+          if (!owned) {
+            btn.textContent = "Buy";
+            btn.onclick = () => { bg.remove(); hud.openMarket("Boosts"); };
+          } else if (def.effect === "grow") {
             // Insta-Grow is a manual tool, not an auto-apply: equip it so the
             // player taps each crop to ripen (rather than auto-growing nearby ones).
             btn.textContent = "Equip";

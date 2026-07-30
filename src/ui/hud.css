@@ -1110,6 +1110,8 @@
 #hud .st-boostlist { display: flex; flex-direction: column; gap: 6px; padding: 4px 2px; }
 #hud .st-boost { display: flex; align-items: center; gap: 10px; padding: 6px 8px;
   background: rgba(94,56,31,.14); border: 1px solid #b9945a; border-radius: 8px; }
+#hud .st-boost.unowned img { filter: grayscale(.7); opacity: .7; }
+#hud .st-boost.unowned .st-boost-info { opacity: .78; }
 #hud .st-boost img { width: 40px; height: 40px; image-rendering: pixelated; flex: 0 0 auto; }
 #hud .st-boost-info { flex: 1 1 auto; min-width: 0; }
 #hud .st-boost-info .nm { font-weight: 700; color: #4a2f14; font-size: 14px; }

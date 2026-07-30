@@ -7,6 +7,18 @@
 // and any programmatic dismissal.
 import { UI } from "./uiAsset";
 
+export const MENU_ACTIVATION_DELAY_MS = 250;
+
+/** A compatibility click synthesized from the farm tap must not activate a
+ * control that only came into existence when that tap opened a menu. */
+export function shouldBlockFreshMenuActivation(
+  interactiveAt: number,
+  now: number,
+  hasInteractiveTarget: boolean,
+): boolean {
+  return hasInteractiveTarget && now < interactiveAt;
+}
+
 /** The slice of a backdrop element `bindBackdropDismiss` needs, so the guard can
  * be exercised without a DOM. */
 export interface BackdropElement {

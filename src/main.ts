@@ -2410,6 +2410,7 @@ async function main() {
       noDistractions: true,
       imageBase: epicAsset(def, ""),
       bossTexture: epicAsset(def, def.bossTexture),
+      bossPortrait: epicAsset(def, def.portrait),
       bossAnimations: def.animations,
       bossFallsFromSky: true,
       bossEngageDistance: 150,

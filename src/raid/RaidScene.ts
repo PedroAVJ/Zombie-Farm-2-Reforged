@@ -10,7 +10,7 @@
 // are later phases (see IMPLEMENTATION_RAIDS_PLAN.md). Tokens are placeholder
 // portraits, not side-view stage actors.
 import { AnimatedSprite, Application, Assets, Container, Graphics, Rectangle, Sprite, Text, Texture } from "pixi.js";
-import { GameAssets, raidImage, zombiePortrait } from "../assets";
+import { GameAssets, raidImage } from "../assets";
 import { BattleSim, BOSS_STRUCT_X, BOSS_STRUCT_Y, ENEMY_HOLD_X, ENEMY_SPAWN_X, FIELD_H, FIELD_W, SimUnit, TELEPORT_PX } from "./BattleSim";
 import { RaidActor } from "./RaidActor";
 import { EnemyActor, type EnemyAttackPose } from "./EnemyActor";
@@ -58,6 +58,8 @@ export interface RaidSceneParams {
   noDistractions?: boolean;
   imageBase?: string;
   bossTexture?: string;
+  /** Face portrait for the enemy team badge; defaults to raid.bossPortrait. */
+  bossPortrait?: string;
   bossAnimations?: Record<string, { file: string; cellWidth: number; cellHeight: number; frameCount: number; frameSeconds: number }>;
   bossFallsFromSky?: boolean;
   bossEngageDistance?: number;
@@ -351,6 +353,7 @@ export class RaidScene {
   private crabSprites = new Map<string, { root: Container; body: Sprite; bar: Graphics }>();
   private imageBase: string | null;
   private bossTexture: string;
+  private bossPortrait: string;
   private bossAnimationDefs: RaidSceneParams["bossAnimations"];
   private bossGroundOffset: { x: number; y: number };
   private bossFallsFromSky = false;
@@ -392,8 +395,8 @@ export class RaidScene {
   private pLabel!: Text;
   private eLabel!: Text;
   private roundLabel!: Text; // top-center countdown → "ENRAGED" when it expires
-  private pFace = new Container(); // zombie face badge, left of the player bar
-  private eFace = new Container(); // basic-enemy face badge, right of the enemy bar
+  private pFace = new Container(); // generic zombie face badge, left of the player bar
+  private eFace = new Container(); // boss face badge, right of the enemy bar
   private maxPlayerHp = 1;
   private maxEnemyHp = 1;
   private retreatBtn = new Container();
@@ -440,6 +443,7 @@ export class RaidScene {
     this.crabSprite = params.crab?.sprite ?? "";
     this.imageBase = params.imageBase ?? null;
     this.bossTexture = params.bossTexture ?? "";
+    this.bossPortrait = params.bossPortrait ?? "";
     this.bossAnimationDefs = params.bossAnimations;
     this.bossGroundOffset = params.bossGroundOffset ?? { x: 0, y: 0 };
     this.bossFallsFromSky = !!params.bossFallsFromSky;
@@ -596,15 +600,13 @@ export class RaidScene {
       this.container.addChild(this.crabLayer);
     }
 
-    // Team-bar face badges: a representative party zombie on the left, the raid's
-    // basic enemy on the right.
-    const zKey =
-      this.sim.units.find((u) => u.team === "player" && !u.isBoss && !u.isHeadless)?.sourceKey ??
-      this.sim.units.find((u) => u.team === "player")?.sourceKey ??
-      "ZombieActorRegularTier1";
+    // Team-bar face badges are stable team identities rather than whichever unit
+    // happened to be selected: generic zombie on the left, active boss on the right.
+    const bossFaceUrl = this.bossPortrait ||
+      (this.raid.bossPortrait ? raidImage(this.raid.bossPortrait) : bossUrl);
     const [zFace, eFace] = await Promise.all([
-      loadTex(zombiePortrait(zKey)),
-      this.raid.enemyIcon ? loadTex(raidImage(this.raid.enemyIcon)) : Promise.resolve(null),
+      loadTex(`${BASE}assets/ui/topbar_zombie_icon.png`),
+      bossFaceUrl ? loadTex(bossFaceUrl) : Promise.resolve(null),
     ]);
 
     this.buildTeamBars();
