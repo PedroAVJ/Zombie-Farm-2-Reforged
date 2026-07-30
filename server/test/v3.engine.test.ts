@@ -1044,14 +1044,16 @@ describe("protocol v3 command engine", () => {
 
   it("can sell a Received decoration without leaving it on the farm", () => {
     const state = freshGameplayState();
-    state.storage.received = { Windmill: 1 };
+    state.storage.received = { "Circus Tent": 1 };
+    const initialGold = state.balance.gold;
     const result = applyCommandBatch(state, commands(
-      { type: "storage.claim", itemName: "Windmill", clientInstanceId: "reward-sale-windmill" },
-      { type: "object.refund", instanceId: "reward-sale-windmill" },
+      { type: "storage.claim", itemName: "Circus Tent", clientInstanceId: "reward-sale-circus-tent" },
+      { type: "object.refund", instanceId: "reward-sale-circus-tent" },
     ), { now: 10 });
     expect(result.results.map((entry) => entry.status)).toEqual(["applied", "applied"]);
-    expect(result.state.storage.received.Windmill).toBe(0);
+    expect(result.state.storage.received["Circus Tent"]).toBe(0);
     expect(result.state.objects.objects).toEqual([]);
+    expect(result.state.balance.gold).toBe(initialGold + 1);
   });
 
   it("cannot claim a Received reward twice", () => {

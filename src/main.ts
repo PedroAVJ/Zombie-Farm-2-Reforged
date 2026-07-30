@@ -3018,9 +3018,12 @@ async function main() {
     const purchase = objectPurchases.get(id);
     const boughtWithBrains = purchase ? purchase.currency === "brains" : !!def.brainsNeeded;
     const refund = purchase ? sellBack(purchase.cost, boughtWithBrains) : sellRefund(def);
-    // Server-owned object refunds use the recorded purchase cost. A legacy
-    // object the server doesn't know is rejected and the optimistic credit is dropped.
-    const serverObject = !!economy && def.cost > 0;
+    // Every online object sale must reach the ownership service, including free
+    // raid/quest rewards claimed from Received. Otherwise the client removes the
+    // object only from its layout and reconciliation restores the still-owned copy.
+    // A legacy object the server doesn't know is rejected and its optimistic credit
+    // is dropped, while its local layout removal remains saved.
+    const serverObject = !!economy;
     if (serverObject) {
       economy!.submitObject({ type: "refund", key: def.key, instanceId: id }, { gold: refund });
     } else {

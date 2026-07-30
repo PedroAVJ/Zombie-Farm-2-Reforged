@@ -51,7 +51,7 @@ export type ObjectRefundPlan =
   | { ok: false; error: string };
 
 /** A refund: must own at least one and always credits gold. Brain costs convert
- * at 1,000 gold each. A free object refunds 0 (see objectRefund). */
+ * at 1,000 gold each. Server-granted free rewards use the one-gold minimum. */
 export function planObjectRefund(econ: ObjectEcon | undefined, have: number): ObjectRefundPlan {
   if (!econ) return { ok: false, error: "bad_item" };
   if (econ.purchaseLimit !== undefined) return { ok: false, error: "not_sellable" };

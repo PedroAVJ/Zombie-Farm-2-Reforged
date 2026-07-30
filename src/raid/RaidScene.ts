@@ -89,7 +89,7 @@ const SMASH_SLAM_S = 0.18;
 // Keep the T3/T4 Regular-zombie laser combat active while its beam presentation
 // is temporarily hidden. Flip this back on when the visual is ready to ship.
 const SHOW_REGULAR_ZOMBIE_LASERS = false;
-const INTRO_MS = 700; // zombies slide in
+const INTRO_MS = 700; // brief establishing hold before combat starts
 const END_PAUSE_MS = 650; // beat after the last blow before we move on
 // On a win, survivors stroll off to the right at a normal walking pace (not the old
 // victory sprint), and the results/loot panel holds off for this long before sliding
@@ -111,6 +111,7 @@ const BOSS_COLOR = 0xffc107;
 // stage scale / SIZE_REF_SCALE) so they track the background instead of being a fixed
 // pixel size (which turned them into giants on a small window / specks on a big one).
 const ZOMBIE_H = 91;
+const ZOMBIE_HP_HALF_W = 32;
 const ENEMY_H = 130;
 const BOSS_H = 195;
 // The Beach crab hazard. It used to be mis-filed as a wave enemy and so rendered at the
@@ -382,9 +383,9 @@ export class RaidScene {
     root: Container; t: number; delay: number; startX: number; startY: number; endX: number; endY: number;
   }[] = [];
   private particles = new ParticleField(); // melee-impact dust + victory confetti
-  // Foreground letterbox matte: battlefield art stays inside the stage image even
-  // while units/projectiles are entering from beyond its left and right edges.
-  private sideBarMatte = new Graphics();
+  // Foreground aperture matte: battlefield art stays inside the stage image even
+  // while units, projectiles, and hazards travel beyond any of its four edges.
+  private stageMatte = new Graphics();
   private bashCfg: ParticleConfig | null = null;
   private confettiCfg: ParticleConfig | null = null;
   private smokeCfg: ParticleConfig | null = null; // enemy death poof (source: playDeathEffect → smoke.plist)
@@ -574,6 +575,9 @@ export class RaidScene {
       ]);
     }
 
+    // The Circus trapeze swings behind the zombies it targets. Add its layer first
+    // so every zombie, including the carried one, remains readable in front of it.
+    if (this.grabberSprite) this.container.addChild(this.grabLayer);
     this.container.addChild(this.tokenLayer);
     for (const u of this.sim.units) this.tokens.set(u.id, this.makeToken(u));
 
@@ -582,7 +586,6 @@ export class RaidScene {
     this.container.addChild(this.fxLayer); // death poofs draw above everything
     this.container.addChild(this.particles.container); // impact dust / confetti on top
     this.container.addChild(this.brainLayer); // boss loot arcs above combat particles
-    this.container.addChild(this.sideBarMatte); // side bars occlude all battlefield layers
     [this.bashCfg, this.confettiCfg, this.smokeCfg, this.healCfg] = await Promise.all([
       loadParticle("bash"),
       loadParticle("confetti"),
@@ -593,16 +596,18 @@ export class RaidScene {
       if (this.projTex.has(opt.sprite)) continue;
       this.projTex.set(opt.sprite, await loadTex(raidImage(opt.sprite)));
     }
-    // Trapeze Artist art + layer (above the field so it's tappable while carrying).
+    // Trapeze Artist art; its layer was inserted behind the zombies above.
     if (this.grabberSprite) {
       this.grabTex = await loadTex(raidImage(this.grabberSprite));
-      this.container.addChild(this.grabLayer);
     }
     // Beach crab art + layer (tappable while it wanders and while it hauls a zombie).
     if (this.crabSprite) {
       this.crabTex = await loadTex(raidImage(this.crabSprite));
       this.container.addChild(this.crabLayer);
     }
+    // Added after every battlefield layer so the complete stage rectangle behaves
+    // as an aperture. HUD and controls are added later and remain unobscured.
+    this.container.addChild(this.stageMatte);
 
     // Team-bar face badges are stable team identities rather than whichever unit
     // happened to be selected: generic zombie on the left, active boss on the right.
@@ -1110,21 +1115,24 @@ export class RaidScene {
       .clear()
       .rect(0, 0, W, r.groundY).fill(LETTERBOX_TOP)
       .rect(0, r.groundY, W, Math.max(0, H - r.groundY)).fill(LETTERBOX_BOT);
-    // Repeat the backdrop colors in front of the battlefield layers. This makes the
-    // left/right letterbox areas behave as an aperture: entering characters can
-    // move there, but no model parts leak outside the authored stage image.
+    // Repeat the backdrop colors in front of the battlefield layers. This makes all
+    // four letterbox areas behave as an aperture: moving characters, hazards, and
+    // projectiles cannot leak outside the authored stage image.
     const right = r.left + r.w;
-    this.sideBarMatte.clear();
+    const bottom = r.top + r.h;
+    this.stageMatte.clear();
     if (r.left > 0) {
-      this.sideBarMatte
+      this.stageMatte
         .rect(0, 0, r.left, r.groundY).fill(LETTERBOX_TOP)
         .rect(0, r.groundY, r.left, Math.max(0, H - r.groundY)).fill(LETTERBOX_BOT);
     }
     if (right < W) {
-      this.sideBarMatte
+      this.stageMatte
         .rect(right, 0, W - right, r.groundY).fill(LETTERBOX_TOP)
         .rect(right, r.groundY, W - right, Math.max(0, H - r.groundY)).fill(LETTERBOX_BOT);
     }
+    if (r.top > 0) this.stageMatte.rect(r.left, 0, r.w, r.top).fill(LETTERBOX_TOP);
+    if (bottom < H) this.stageMatte.rect(r.left, bottom, r.w, H - bottom).fill(LETTERBOX_BOT);
 
     const toX = (sx: number) => this.mapX(sx);
     const toY = (sy: number) => this.mapY(sy);
@@ -1164,8 +1172,6 @@ export class RaidScene {
       }
       return [toX(x), toY(y)];
     };
-
-    const introSlide = this.phase === "intro" ? (1 - this.phaseT / INTRO_MS) * (r.w * 0.28) : 0;
 
     let pHp = 0;
     let eHp = 0;
@@ -1222,10 +1228,9 @@ export class RaidScene {
       // so a smaller window shrinks them with the background instead of leaving them
       // fixed-pixel giants. szs also scales unit-space offsets (drop, poof, settle).
       const szs = this.sizeScale();
-      const slide = u.team === "player" ? -introSlide : 0;
       const groundDrop = UNIT_GROUND_NUDGE * szs;
       const pos = renderPos(u);
-      let [sx, sy] = u.isBoss ? bossPos(u, pos.x, pos.y) : [toX(pos.x) + slide, toY(pos.y) + groundDrop];
+      let [sx, sy] = u.isBoss ? bossPos(u, pos.x, pos.y) : [toX(pos.x), toY(pos.y) + groundDrop];
       if (u.team === "player") {
         const stagingOffsetPx = r.w * PLAYER_STAGING_NUDGE_FX;
         const stagingOffsetSim = stagingOffsetPx / this.scaleX();
@@ -1368,12 +1373,11 @@ export class RaidScene {
       // comparing positions each render frame: the latter alternated moving/stopped
       // between ticks and made walking rigs twitch rapidly.
       const simMoving = Math.hypot(u.vx, u.vy) > 6;
-      const introMarch = this.phase === "intro"; // zombies slide in during the intro
       const exitMarch = (this.phase === "retreat" || this.phase === "outro") && u.team === "player" && u.alive;
       if (tok.actor) {
         if (exitMarch) tok.actor.setFacingFromDelta(this.phase === "retreat" ? -1 : 1);
         else if (Math.abs(u.vx) > 6) tok.actor.setFacingFromDelta(u.vx);
-        const moving = u.alive && (simMoving || introMarch || exitMarch);
+        const moving = u.alive && (simMoving || exitMarch);
         // The source focus pose narrows the eyes while the gold bar is advancing.
         // A distracted zombie or one waiting on the full-bar brain bubble is no
         // longer actively focusing, so its eyes relax.
@@ -1503,11 +1507,12 @@ export class RaidScene {
       // Enemy bars remain visible for target readability. Owned-zombie bars stay
       // out of the way until that zombie has actually taken damage.
       if (u.alive && u.state !== "carried" && (u.team === "enemy" || frac < 1)) {
-        const w = tok.base * 2;
+        const halfW = u.team === "player" ? ZOMBIE_HP_HALF_W : tok.base;
+        const w = halfW * 2;
         const fill = u.team === "enemy" ? ENEMY_COLOR : PLAYER_COLOR; // enemies red
         tok.hp
-          .rect(-tok.base, 0, w, 5).fill({ color: 0x000000, alpha: 0.55 })
-          .rect(-tok.base, 0, w * frac, 5).fill(fill);
+          .rect(-halfW, 0, w, 5).fill({ color: 0x000000, alpha: 0.55 })
+          .rect(-halfW, 0, w * frac, 5).fill(fill);
       }
 
       // Focus bar while charging (golden), or the activated-move wind-up (orange).

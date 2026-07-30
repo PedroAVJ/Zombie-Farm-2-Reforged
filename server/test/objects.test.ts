@@ -28,7 +28,7 @@ describe("objectCatalog — mirror of placeables.json", () => {
     expect(objectRefund(10)).toBe(2);
     expect(objectRefund(50)).toBe(10);
     expect(objectRefund(3, true)).toBe(3_000);
-    expect(objectRefund(0)).toBe(0); // free object refunds nothing (no buy-free→refund mint)
+    expect(objectRefund(0)).toBe(1); // owned free rewards keep the game's minimum sell value
   });
   it("keeps source XP for gold and derives brain XP from cost + category", () => {
     expect(objectBuyXp(10, 0)).toBe(0);

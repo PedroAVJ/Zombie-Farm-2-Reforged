@@ -295,10 +295,11 @@ export function objectEcon(key: string): ObjectEcon | undefined {
 }
 
 /** Gold paid when selling a placeable. Brain costs convert at 1,000 gold each;
- * gold costs use the normal ratio. Free placeables refund nothing. */
+ * gold costs use the normal ratio. Server-owned free rewards retain the game's
+ * one-gold minimum; they cannot be bought, so this is not a buy/refund mint. */
 export function objectRefund(cost: number, brains = false): number {
   if (brains) return Math.max(0, Math.trunc(cost)) * BRAIN_SELL_GOLD_RATE;
-  return cost > 0 ? Math.max(1, Math.floor(cost * SELL_BACK_RATIO)) : 0;
+  return Math.max(1, Math.floor(cost * SELL_BACK_RATIO));
 }
 
 /** XP granted for buying a placeable. Binary ground truth
