@@ -22,7 +22,13 @@ import type { RaidOutcome } from "./types";
 // independent timers. Bosses whose lists mix throws with specials — the Robot BrainBot
 // and the Video Games boss — now throw proportionally less, which changes the
 // deterministic transcript from the first boss action onward.
-export const RAID_RULESET_VERSION = 10;
+// 11: two fidelity corrections that both change the transcript from tick 0. (a) Mutation
+// stat bonuses are now applied LAST, as the source's `modifyStatWithMutations:` does,
+// instead of being baked into the base stat before the player-level ramp — mutated
+// zombies below level 25 are substantially stronger than under v10. (b) The 10 raids
+// that are not McDonnell now field their AUTHORED single wave at every level instead of
+// an extrapolated per-level ladder, so both the enemy count and composition change.
+export const RAID_RULESET_VERSION = 11;
 export const RAID_TICK_MS = 50;
 export const RAID_MAX_TICKS = 4 * 60 * 1000 / RAID_TICK_MS;
 export const RAID_MAX_INPUTS = 512;

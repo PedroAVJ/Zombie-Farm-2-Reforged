@@ -169,6 +169,62 @@ describe("buildPlayerUnits — level-scaling is applied", () => {
   });
 });
 
+// Ground truth: `-[ZombieActor modifyStats:]` chains modifyStatWithLevelScale: →
+// modifyStatWithFarmerHeads: → modifyStatWithAbilities: → modifyStatWithRank: →
+// modifyStatWithMutations:, so a mutation's flat bonus lands LAST — never scaled by the
+// level ramp, never multiplied by veterancy. `OwnedZombie.str/con/dex` already include
+// the bonus (makeOwned bakes it in for the detail card), so buildPlayerUnits peels it
+// off, runs the chain, and adds it back. Baking it in before the ramp — the old
+// behaviour — left a full 5-slot set worth ~25 % of its face value at level 12.
+describe("buildPlayerUnits — mutations apply last, as a flat bonus", () => {
+  // Garlichead (+3 str, head) | Dragon-arm (+4 str, arm) | Carrot-eyed (+1 dex, hair_eye)
+  const MASK = 256 | 4096 | 4;
+  const MUT_STR = 7;
+  const MUT_DEX = 1;
+
+  /** A Blue Regular (base str 5 / dex 2 / con 5 — exactly the Regular endpoints, so the
+   *  level ramp is a no-op on the base and any level dependence must come from the
+   *  mutation). `str`/`dex` carry the bonus, as makeOwned produces them. */
+  const mutant = (over: Partial<OwnedZombie> = {}): OwnedZombie[] => [
+    {
+      id: "m1", key: "ZombieActorRegularTier2", name: "Zyborg", typeName: "Zyborg",
+      group: "Regular", className: "Blue", classColor: "#5aa8ff",
+      mutation: MASK,
+      str: 5 + MUT_STR, dex: 2 + MUT_DEX, con: 5,
+      focus: 100, invasions: 0, col: 0, row: 0,
+      ...over,
+    },
+  ];
+
+  it("pays the mutation at face value well below level 25", () => {
+    const lo = buildPlayerUnits(mutant(), { playerLevel: 12 })[0];
+    expect(lo.str).toBeCloseTo(5 + MUT_STR);
+    expect(lo.dex).toBeCloseTo(2 + MUT_DEX);
+  });
+
+  it("pays the same mutation at level 12 and level 25", () => {
+    const lo = buildPlayerUnits(mutant(), { playerLevel: 12 })[0];
+    const hi = buildPlayerUnits(mutant(), { playerLevel: 25 })[0];
+    expect(lo.str).toBeCloseTo(hi.str);
+  });
+
+  it("veterancy multiplies the base stat only, not the flat mutation", () => {
+    const master = buildPlayerUnits(mutant({ invasions: 5 }), { playerLevel: 25 })[0];
+    expect(master.str).toBeCloseTo(5 * 1.25 + MUT_STR); // 13.25, not 12 × 1.25 = 15
+  });
+
+  it("still ramps the UNMUTATED base while paying the mutation in full", () => {
+    // Headless con: endpoint 11, base 29.7, +3 con from Cauli-hair -> listed 32.7.
+    const mask = 512;
+    const head = (): OwnedZombie[] => [
+      { ...mutant()[0], group: "Headless", key: "ZombieActorHeadless", mutation: mask,
+        str: 11, dex: 1, con: 29.7 + 3 },
+    ];
+    expect(buildPlayerUnits(head(), { playerLevel: 8 })[0].maxHp).toBe(1400); // (11 + 3) × 100
+    expect(buildPlayerUnits(head(), { playerLevel: 25 })[0].maxHp).toBe(3270); // (29.7 + 3) × 100
+  });
+});
+
 describe("buildPlayerUnits — binary-authentic zombie abilities", () => {
   const owned = (
     id: string,

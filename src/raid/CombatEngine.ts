@@ -14,6 +14,7 @@
 // first living enemy on the opposite team; a side loses when all its units die.
 import type { OwnedZombie } from "../zombie/types";
 import { veterancyMultiplier } from "../zombie/traits";
+import { mutationBonus } from "../zombie/mutations";
 import { activeAbilities, combatEffect } from "../zombie/abilities";
 import {
   applyDamage,
@@ -136,7 +137,10 @@ export function focusFactor(focus: number, concentration: boolean): number {
 }
 
 /** Build the player's combat line from selected owned zombies. Each unit's stats
- *  compound three layers, all deterministic:
+ *  compound in the SOURCE'S PIPELINE ORDER (`-[ZombieActor modifyStats:]`, which chains
+ *  `modifyStatWithLevelScale:` → `modifyStatWithFarmerHeads:` → `modifyStatWithAbilities:`
+ *  → `modifyStatWithRank:` → `modifyStatWithMutations:`), all deterministic:
+ *   0. Player-level scale — the level-8→25 ramp, applied to the UNMUTATED base stat.
  *   1. Veterancy — +5%/rank from survived invasions (all stats).
  *   2. Its own unlocked ABILITIES (abilities.ts) — self buffs to damage / HP /
  *      speed / all-stats, gated exactly like the detail card (tier ≤ class rank
@@ -145,6 +149,13 @@ export function focusFactor(focus: number, concentration: boolean): number {
  *   3. Original type-targeted auras — Chivalry buffs Girl zombies, Grace buffs
  *      Regular zombies, Protect reduces damage to non-Headless types, and
  *      Fortitude buffs Headless Life.
+ *   4. MUTATIONS LAST — a flat +str/+con/+dex added on top of everything above, never
+ *      scaled or multiplied. `OwnedZombie.str/con/dex` already INCLUDE the mutation
+ *      bonus (makeOwned bakes it in so the detail card shows the listed stat), so the
+ *      bonus is peeled off here, the rest of the chain runs, and it is added back.
+ *      Baking it in before the level ramp — the old behaviour — let the lerp toward the
+ *      group endpoint eat most of it: a full 5-slot set was worth ~25 % of its value at
+ *      level 12, and only reached face value at level 25.
  *  Player attack multipliers aren't baked into zombies.json and the source attacks
  *  are ~1.0, so the base per-hit multiplier is 1x — scaled by the focus-based
  *  distraction factor (negated by Concentration) times any self damage ability. */
@@ -181,18 +192,24 @@ export function buildPlayerUnits(
   return rows.map(({ z, keys, eff }) => {
     const v = veterancyMultiplier(z.invasions);
     const base = z.focus ?? 0;
+    // Mutations are the LAST link of the source's stat chain, so peel them off the
+    // listed stat here and add them back untouched once everything else has applied.
+    const mut = mutationBonus(z.mutation);
     // Player-level stat ramp (binary modifyStatWithLevelScale:) — str/con/dex only,
     // NOT focus. Skipped (full base stats) when no playerLevel is supplied.
-    const bStr = lvl == null ? z.str : levelScaleStat(z.group, "str", z.str, lvl);
-    const bDex = lvl == null ? z.dex : levelScaleStat(z.group, "dex", z.dex, lvl);
-    const bCon = lvl == null ? z.con : levelScaleStat(z.group, "con", z.con, lvl);
+    const rawStr = z.str - mut.str;
+    const rawDex = z.dex - mut.dex;
+    const rawCon = z.con - mut.con;
+    const bStr = lvl == null ? rawStr : levelScaleStat(z.group, "str", rawStr, lvl);
+    const bDex = lvl == null ? rawDex : levelScaleStat(z.group, "dex", rawDex, lvl);
+    const bCon = lvl == null ? rawCon : levelScaleStat(z.group, "con", rawCon, lvl);
     const statAura = z.group === "Female" ? chivalry : z.group === "Regular" ? grace : 0;
     const lifeAura = statAura + (z.group === "Headless" ? fortitude : 0);
     const str = bStr * v * eff.allStatsMult * eff.selfDamageMult * (1 + statAura * 0.10) *
-      (opts.farmerStrengthMult ?? 1);
-    const dex = bDex * v * eff.allStatsMult * eff.selfSpeedMult * (1 + statAura * 0.10);
+      (opts.farmerStrengthMult ?? 1) + mut.str;
+    const dex = bDex * v * eff.allStatsMult * eff.selfSpeedMult * (1 + statAura * 0.10) + mut.dex;
     const con = bCon * v * eff.allStatsMult * eff.selfHpMult * (1 + lifeAura * 0.10) *
-      (opts.farmerLifeMult ?? 1);
+      (opts.farmerLifeMult ?? 1) + mut.con;
     const focus = base * v * eff.allStatsMult;
     // Distraction resistance keys off the unit's real focus stat. Damage abilities
     // are already part of finalPower (`str`) so lasers and healing see them too.

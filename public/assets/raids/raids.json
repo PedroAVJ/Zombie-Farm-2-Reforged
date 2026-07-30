@@ -181,87 +181,19 @@
   ],
   "stages": [
    {
-    "enemyKeys": [
-     "CityStageActorCrazedWorker"
-    ],
-    "wave": 1,
-    "synthesized": true
-   },
-   {
-    "enemyKeys": [
-     "CityStageActorCrazedWorker",
-     "CityStageActorCrazedWorker",
-     "CityStageActorCrazedWorker"
-    ],
-    "wave": 2,
-    "synthesized": true
-   },
-   {
-    "enemyKeys": [
-     "CityStageActorCrazedWorker",
-     "CityStageActorCrazedWorker",
-     "CityStageActorCrazedWorker",
-     "CityStageActorCrazedWorker",
-     "CityStageActorLawyer"
-    ],
-    "wave": 3,
-    "synthesized": true
-   },
-   {
-    "enemyKeys": [
-     "CityStageActorCrazedWorker",
-     "CityStageActorCrazedWorker",
-     "CityStageActorCrazedWorker",
-     "CityStageActorCrazedWorker",
-     "CityStageActorLawyer"
-    ],
-    "bossKey": "CityStageActorBoss",
-    "wave": 4,
-    "synthesized": true
-   },
-   {
-    "enemyKeys": [
-     "CityStageActorCrazedWorker",
-     "CityStageActorCrazedWorker",
-     "CityStageActorCrazedWorker",
-     "CityStageActorCrazedWorker",
-     "CityStageActorLawyer"
-    ],
-    "bossKey": "CityStageActorBoss",
-    "wave": 5,
-    "synthesized": true
-   },
-   {
+    "enemyKeys": [],
     "bossKey": "CityStageActorBoss",
     "population": 10,
     "weighted": [
      {
-      "enemy": "CityStageActorCrazedWorker",
-      "frequency": 67
+      "enemy": "CityStageActorLawyer",
+      "frequency": 70
      },
      {
-      "enemy": "CityStageActorLawyer",
-      "frequency": 33
-     }
-    ],
-    "wave": 6,
-    "synthesized": true
-   },
-   {
-    "bossKey": "CityStageActorBoss",
-    "population": 13,
-    "weighted": [
-     {
       "enemy": "CityStageActorCrazedWorker",
-      "frequency": 67
-     },
-     {
-      "enemy": "CityStageActorLawyer",
-      "frequency": 33
+      "frequency": 30
      }
-    ],
-    "wave": 7,
-    "synthesized": true
+    ]
    }
   ],
   "loot": [
@@ -344,87 +276,19 @@
   ],
   "stages": [
    {
-    "enemyKeys": [
-     "PirateStageActorSwashbuckler"
-    ],
-    "wave": 1,
-    "synthesized": true
-   },
-   {
-    "enemyKeys": [
-     "PirateStageActorSwashbuckler",
-     "PirateStageActorSwashbuckler",
-     "PirateStageActorSwashbuckler"
-    ],
-    "wave": 2,
-    "synthesized": true
-   },
-   {
-    "enemyKeys": [
-     "PirateStageActorSwashbuckler",
-     "PirateStageActorSwashbuckler",
-     "PirateStageActorSwashbuckler",
-     "PirateStageActorSwashbuckler",
-     "PirateStageActorScallywag"
-    ],
-    "wave": 3,
-    "synthesized": true
-   },
-   {
-    "enemyKeys": [
-     "PirateStageActorSwashbuckler",
-     "PirateStageActorSwashbuckler",
-     "PirateStageActorSwashbuckler",
-     "PirateStageActorSwashbuckler",
-     "PirateStageActorScallywag"
-    ],
+    "enemyKeys": [],
     "bossKey": "PirateStageActorBoss",
-    "wave": 4,
-    "synthesized": true
-   },
-   {
-    "enemyKeys": [
-     "PirateStageActorSwashbuckler",
-     "PirateStageActorSwashbuckler",
-     "PirateStageActorSwashbuckler",
-     "PirateStageActorSwashbuckler",
-     "PirateStageActorScallywag"
-    ],
-    "bossKey": "PirateStageActorBoss",
-    "wave": 5,
-    "synthesized": true
-   },
-   {
-    "bossKey": "PirateStageActorBoss",
-    "population": 7,
+    "population": 6,
     "weighted": [
      {
-      "enemy": "PirateStageActorSwashbuckler",
-      "frequency": 67
+      "enemy": "PirateStageActorScallywag",
+      "frequency": 83
      },
      {
-      "enemy": "PirateStageActorScallywag",
-      "frequency": 33
-     }
-    ],
-    "wave": 6,
-    "synthesized": true
-   },
-   {
-    "bossKey": "PirateStageActorBoss",
-    "population": 10,
-    "weighted": [
-     {
       "enemy": "PirateStageActorSwashbuckler",
-      "frequency": 67
-     },
-     {
-      "enemy": "PirateStageActorScallywag",
-      "frequency": 33
+      "frequency": 17
      }
-    ],
-    "wave": 7,
-    "synthesized": true
+    ]
    }
   ],
   "loot": [
@@ -496,87 +360,19 @@
   ],
   "stages": [
    {
-    "enemyKeys": [
-     "NinjaStageActorGirl"
-    ],
-    "wave": 1,
-    "synthesized": true
-   },
-   {
-    "enemyKeys": [
-     "NinjaStageActorGirl",
-     "NinjaStageActorGirl",
-     "NinjaStageActorGirl"
-    ],
-    "wave": 2,
-    "synthesized": true
-   },
-   {
-    "enemyKeys": [
-     "NinjaStageActorGirl",
-     "NinjaStageActorGirl",
-     "NinjaStageActorGirl",
-     "NinjaStageActorGirl",
-     "NinjaStageActorBoy"
-    ],
-    "wave": 3,
-    "synthesized": true
-   },
-   {
-    "enemyKeys": [
-     "NinjaStageActorGirl",
-     "NinjaStageActorGirl",
-     "NinjaStageActorGirl",
-     "NinjaStageActorGirl",
-     "NinjaStageActorBoy"
-    ],
-    "bossKey": "NinjaStageActorBoss",
-    "wave": 4,
-    "synthesized": true
-   },
-   {
-    "enemyKeys": [
-     "NinjaStageActorGirl",
-     "NinjaStageActorGirl",
-     "NinjaStageActorGirl",
-     "NinjaStageActorGirl",
-     "NinjaStageActorBoy"
-    ],
-    "bossKey": "NinjaStageActorBoss",
-    "wave": 5,
-    "synthesized": true
-   },
-   {
-    "bossKey": "NinjaStageActorBoss",
-    "population": 7,
-    "weighted": [
-     {
-      "enemy": "NinjaStageActorGirl",
-      "frequency": 67
-     },
-     {
-      "enemy": "NinjaStageActorBoy",
-      "frequency": 33
-     }
-    ],
-    "wave": 6,
-    "synthesized": true
-   },
-   {
+    "enemyKeys": [],
     "bossKey": "NinjaStageActorBoss",
     "population": 10,
     "weighted": [
      {
-      "enemy": "NinjaStageActorGirl",
-      "frequency": 67
+      "enemy": "NinjaStageActorBoy",
+      "frequency": 25
      },
      {
-      "enemy": "NinjaStageActorBoy",
-      "frequency": 33
+      "enemy": "NinjaStageActorGirl",
+      "frequency": 75
      }
-    ],
-    "wave": 7,
-    "synthesized": true
+    ]
    }
   ],
   "loot": [
@@ -648,87 +444,23 @@
   ],
   "stages": [
    {
-    "enemyKeys": [
-     "RobotStageActorJunkBot"
-    ],
-    "wave": 1,
-    "synthesized": true
-   },
-   {
-    "enemyKeys": [
-     "RobotStageActorJunkBot",
-     "RobotStageActorJunkBot",
-     "RobotStageActorJunkBot"
-    ],
-    "wave": 2,
-    "synthesized": true
-   },
-   {
-    "enemyKeys": [
-     "RobotStageActorJunkBot",
-     "RobotStageActorJunkBot",
-     "RobotStageActorJunkBot",
-     "RobotStageActorJunkBot",
-     "RobotStageActorBroBot"
-    ],
-    "wave": 3,
-    "synthesized": true
-   },
-   {
-    "enemyKeys": [
-     "RobotStageActorJunkBot",
-     "RobotStageActorJunkBot",
-     "RobotStageActorJunkBot",
-     "RobotStageActorJunkBot",
-     "RobotStageActorBroBot"
-    ],
+    "enemyKeys": [],
     "bossKey": "RobotStageActorBrainBot",
-    "wave": 4,
-    "synthesized": true
-   },
-   {
-    "enemyKeys": [
-     "RobotStageActorJunkBot",
-     "RobotStageActorJunkBot",
-     "RobotStageActorJunkBot",
-     "RobotStageActorJunkBot",
-     "RobotStageActorBroBot"
-    ],
-    "bossKey": "RobotStageActorBrainBot",
-    "wave": 5,
-    "synthesized": true
-   },
-   {
-    "bossKey": "RobotStageActorBrainBot",
-    "population": 7,
+    "population": 2,
     "weighted": [
-     {
-      "enemy": "RobotStageActorJunkBot",
-      "frequency": 67
-     },
      {
       "enemy": "RobotStageActorBroBot",
       "frequency": 33
-     }
-    ],
-    "wave": 6,
-    "synthesized": true
-   },
-   {
-    "bossKey": "RobotStageActorBrainBot",
-    "population": 10,
-    "weighted": [
-     {
-      "enemy": "RobotStageActorJunkBot",
-      "frequency": 67
      },
      {
-      "enemy": "RobotStageActorBroBot",
+      "enemy": "RobotStageActorJunkBot",
       "frequency": 33
+     },
+     {
+      "enemy": "RobotStageActorBrainBot",
+      "frequency": 34
      }
-    ],
-    "wave": 7,
-    "synthesized": true
+    ]
    }
   ],
   "loot": [
@@ -789,79 +521,15 @@
   ],
   "stages": [
    {
-    "enemyKeys": [
-     "AlienStageActorMinion"
-    ],
-    "wave": 1,
-    "synthesized": true
-   },
-   {
-    "enemyKeys": [
-     "AlienStageActorMinion",
-     "AlienStageActorMinion",
-     "AlienStageActorMinion"
-    ],
-    "wave": 2,
-    "synthesized": true
-   },
-   {
-    "enemyKeys": [
-     "AlienStageActorMinion",
-     "AlienStageActorMinion",
-     "AlienStageActorMinion",
-     "AlienStageActorMinion",
-     "AlienStageActorMinion"
-    ],
-    "wave": 3,
-    "synthesized": true
-   },
-   {
-    "enemyKeys": [
-     "AlienStageActorMinion",
-     "AlienStageActorMinion",
-     "AlienStageActorMinion",
-     "AlienStageActorMinion",
-     "AlienStageActorMinion"
-    ],
+    "enemyKeys": [],
     "bossKey": "AlienStageActorBoss",
-    "wave": 4,
-    "synthesized": true
-   },
-   {
-    "enemyKeys": [
-     "AlienStageActorMinion",
-     "AlienStageActorMinion",
-     "AlienStageActorMinion",
-     "AlienStageActorMinion",
-     "AlienStageActorMinion"
-    ],
-    "bossKey": "AlienStageActorBoss",
-    "wave": 5,
-    "synthesized": true
-   },
-   {
-    "bossKey": "AlienStageActorBoss",
-    "population": 7,
+    "population": 20,
     "weighted": [
      {
       "enemy": "AlienStageActorMinion",
       "frequency": 100
      }
-    ],
-    "wave": 6,
-    "synthesized": true
-   },
-   {
-    "bossKey": "AlienStageActorBoss",
-    "population": 10,
-    "weighted": [
-     {
-      "enemy": "AlienStageActorMinion",
-      "frequency": 100
-     }
-    ],
-    "wave": 7,
-    "synthesized": true
+    ]
    }
   ],
   "loot": [
@@ -922,87 +590,19 @@
   ],
   "stages": [
    {
-    "enemyKeys": [
-     "BeachStageActorMinion2"
-    ],
-    "wave": 1,
-    "synthesized": true
-   },
-   {
-    "enemyKeys": [
-     "BeachStageActorMinion2",
-     "BeachStageActorMinion2",
-     "BeachStageActorMinion2"
-    ],
-    "wave": 2,
-    "synthesized": true
-   },
-   {
-    "enemyKeys": [
-     "BeachStageActorMinion2",
-     "BeachStageActorMinion2",
-     "BeachStageActorMinion2",
-     "BeachStageActorMinion2",
-     "BeachStageActorMinion1"
-    ],
-    "wave": 3,
-    "synthesized": true
-   },
-   {
-    "enemyKeys": [
-     "BeachStageActorMinion2",
-     "BeachStageActorMinion2",
-     "BeachStageActorMinion2",
-     "BeachStageActorMinion2",
-     "BeachStageActorMinion1"
-    ],
+    "enemyKeys": [],
     "bossKey": "BeachStageActorBoss",
-    "wave": 4,
-    "synthesized": true
-   },
-   {
-    "enemyKeys": [
-     "BeachStageActorMinion2",
-     "BeachStageActorMinion2",
-     "BeachStageActorMinion2",
-     "BeachStageActorMinion2",
-     "BeachStageActorMinion1"
-    ],
-    "bossKey": "BeachStageActorBoss",
-    "wave": 5,
-    "synthesized": true
-   },
-   {
-    "bossKey": "BeachStageActorBoss",
-    "population": 7,
+    "population": 8,
     "weighted": [
      {
-      "enemy": "BeachStageActorMinion2",
-      "frequency": 67
+      "enemy": "BeachStageActorMinion1",
+      "frequency": 50
      },
      {
-      "enemy": "BeachStageActorMinion1",
-      "frequency": 33
-     }
-    ],
-    "wave": 6,
-    "synthesized": true
-   },
-   {
-    "bossKey": "BeachStageActorBoss",
-    "population": 10,
-    "weighted": [
-     {
       "enemy": "BeachStageActorMinion2",
-      "frequency": 67
-     },
-     {
-      "enemy": "BeachStageActorMinion1",
-      "frequency": 33
+      "frequency": 50
      }
-    ],
-    "wave": 7,
-    "synthesized": true
+    ]
    }
   ],
   "loot": [
@@ -1076,87 +676,19 @@
   ],
   "stages": [
    {
-    "enemyKeys": [
-     "CircusStageActorMinion1"
-    ],
-    "wave": 1,
-    "synthesized": true
-   },
-   {
-    "enemyKeys": [
-     "CircusStageActorMinion1",
-     "CircusStageActorMinion1",
-     "CircusStageActorMinion1"
-    ],
-    "wave": 2,
-    "synthesized": true
-   },
-   {
-    "enemyKeys": [
-     "CircusStageActorMinion1",
-     "CircusStageActorMinion1",
-     "CircusStageActorMinion1",
-     "CircusStageActorMinion1",
-     "CircusStageActorMinion2"
-    ],
-    "wave": 3,
-    "synthesized": true
-   },
-   {
-    "enemyKeys": [
-     "CircusStageActorMinion1",
-     "CircusStageActorMinion1",
-     "CircusStageActorMinion1",
-     "CircusStageActorMinion1",
-     "CircusStageActorMinion2"
-    ],
+    "enemyKeys": [],
     "bossKey": "CircusStageActorBoss",
-    "wave": 4,
-    "synthesized": true
-   },
-   {
-    "enemyKeys": [
-     "CircusStageActorMinion1",
-     "CircusStageActorMinion1",
-     "CircusStageActorMinion1",
-     "CircusStageActorMinion1",
-     "CircusStageActorMinion2"
-    ],
-    "bossKey": "CircusStageActorBoss",
-    "wave": 5,
-    "synthesized": true
-   },
-   {
-    "bossKey": "CircusStageActorBoss",
-    "population": 7,
+    "population": 8,
     "weighted": [
      {
       "enemy": "CircusStageActorMinion1",
-      "frequency": 67
+      "frequency": 20
      },
      {
       "enemy": "CircusStageActorMinion2",
-      "frequency": 33
+      "frequency": 80
      }
-    ],
-    "wave": 6,
-    "synthesized": true
-   },
-   {
-    "bossKey": "CircusStageActorBoss",
-    "population": 10,
-    "weighted": [
-     {
-      "enemy": "CircusStageActorMinion1",
-      "frequency": 67
-     },
-     {
-      "enemy": "CircusStageActorMinion2",
-      "frequency": 33
-     }
-    ],
-    "wave": 7,
-    "synthesized": true
+    ]
    }
   ],
   "loot": [
@@ -1223,103 +755,23 @@
   ],
   "stages": [
    {
-    "enemyKeys": [
-     "VideoGameStageGhostActor"
-    ],
-    "wave": 1,
-    "synthesized": true
-   },
-   {
-    "enemyKeys": [
-     "VideoGameStageGhostActor",
-     "VideoGameStageGhostActor",
-     "VideoGameStageGhostActor"
-    ],
-    "wave": 2,
-    "synthesized": true
-   },
-   {
-    "enemyKeys": [
-     "VideoGameStageGhostActor",
-     "VideoGameStageGhostActor",
-     "VideoGameStageGhostActor",
-     "VideoGameStageGhostActor",
-     "VideoGameStageZombieActor"
-    ],
-    "wave": 3,
-    "synthesized": true
-   },
-   {
-    "enemyKeys": [
-     "VideoGameStageGhostActor",
-     "VideoGameStageGhostActor",
-     "VideoGameStageGhostActor",
-     "VideoGameStageGhostActor",
-     "VideoGameStageZombieActor"
-    ],
+    "enemyKeys": [],
     "bossKey": "VideoGameStageBossActor",
-    "wave": 4,
-    "synthesized": true
-   },
-   {
-    "enemyKeys": [
-     "VideoGameStageGhostActor",
-     "VideoGameStageGhostActor",
-     "VideoGameStageGhostActor",
-     "VideoGameStageGhostActor",
-     "VideoGameStageZombieActor"
-    ],
-    "bossKey": "VideoGameStageBossActor",
-    "wave": 5,
-    "synthesized": true
-   },
-   {
-    "bossKey": "VideoGameStageBossActor",
-    "population": 7,
+    "population": 8,
     "weighted": [
      {
       "enemy": "VideoGameStageGhostActor",
-      "frequency": 40
-     },
-     {
-      "enemy": "VideoGameStageMonsterActor",
       "frequency": 30
      },
      {
       "enemy": "VideoGameStageKnightActor",
-      "frequency": 20
-     },
-     {
-      "enemy": "VideoGameStageZombieActor",
-      "frequency": 10
-     }
-    ],
-    "wave": 6,
-    "synthesized": true
-   },
-   {
-    "bossKey": "VideoGameStageBossActor",
-    "population": 10,
-    "weighted": [
-     {
-      "enemy": "VideoGameStageGhostActor",
-      "frequency": 40
+      "frequency": 30
      },
      {
       "enemy": "VideoGameStageMonsterActor",
       "frequency": 30
-     },
-     {
-      "enemy": "VideoGameStageKnightActor",
-      "frequency": 20
-     },
-     {
-      "enemy": "VideoGameStageZombieActor",
-      "frequency": 10
      }
-    ],
-    "wave": 7,
-    "synthesized": true
+    ]
    }
   ],
   "loot": [
@@ -1387,63 +839,14 @@
   ],
   "stages": [
    {
-    "enemyKeys": [
-     "TreeWorldStageZobraActor"
-    ],
-    "wave": 1,
-    "synthesized": true
-   },
-   {
-    "enemyKeys": [
-     "TreeWorldStageZobraActor",
-     "TreeWorldStageZobraActor",
-     "TreeWorldStageZobraActor"
-    ],
-    "wave": 2,
-    "synthesized": true
-   },
-   {
-    "enemyKeys": [
-     "TreeWorldStageZobraActor",
-     "TreeWorldStageZobraActor",
-     "TreeWorldStageZobraActor",
-     "TreeWorldStageZobraActor",
-     "TreeWorldStageRaccoonActor"
-    ],
-    "wave": 3,
-    "synthesized": true
-   },
-   {
-    "enemyKeys": [
-     "TreeWorldStageZobraActor",
-     "TreeWorldStageZobraActor",
-     "TreeWorldStageZobraActor",
-     "TreeWorldStageZobraActor",
-     "TreeWorldStageRaccoonActor"
-    ],
-    "bossKey": "TreeWorldStageBossActor",
-    "wave": 4,
-    "synthesized": true
-   },
-   {
-    "enemyKeys": [
-     "TreeWorldStageZobraActor",
-     "TreeWorldStageZobraActor",
-     "TreeWorldStageZobraActor",
-     "TreeWorldStageZobraActor",
-     "TreeWorldStageRaccoonActor"
-    ],
-    "bossKey": "TreeWorldStageBossActor",
-    "wave": 5,
-    "synthesized": true
-   },
-   {
+    "enemyKeys": [],
     "bossKey": "TreeWorldStageBossActor",
     "population": 8,
+    "throwSpeed": 1.5,
     "weighted": [
      {
       "enemy": "TreeWorldStageZobraActor",
-      "frequency": 50
+      "frequency": 34
      },
      {
       "enemy": "TreeWorldStageMantisActor",
@@ -1451,31 +854,9 @@
      },
      {
       "enemy": "TreeWorldStageRaccoonActor",
-      "frequency": 17
-     }
-    ],
-    "wave": 6,
-    "synthesized": true
-   },
-   {
-    "bossKey": "TreeWorldStageBossActor",
-    "population": 11,
-    "weighted": [
-     {
-      "enemy": "TreeWorldStageZobraActor",
-      "frequency": 50
-     },
-     {
-      "enemy": "TreeWorldStageMantisActor",
       "frequency": 33
-     },
-     {
-      "enemy": "TreeWorldStageRaccoonActor",
-      "frequency": 17
      }
-    ],
-    "wave": 7,
-    "synthesized": true
+    ]
    }
   ],
   "loot": [
@@ -1542,63 +923,14 @@
   ],
   "stages": [
    {
-    "enemyKeys": [
-     "ValentinesDayStageActorMinion1"
-    ],
-    "wave": 1,
-    "synthesized": true
-   },
-   {
-    "enemyKeys": [
-     "ValentinesDayStageActorMinion1",
-     "ValentinesDayStageActorMinion1",
-     "ValentinesDayStageActorMinion1"
-    ],
-    "wave": 2,
-    "synthesized": true
-   },
-   {
-    "enemyKeys": [
-     "ValentinesDayStageActorMinion1",
-     "ValentinesDayStageActorMinion1",
-     "ValentinesDayStageActorMinion1",
-     "ValentinesDayStageActorMinion1",
-     "ValentinesDayStageActorMinion3"
-    ],
-    "wave": 3,
-    "synthesized": true
-   },
-   {
-    "enemyKeys": [
-     "ValentinesDayStageActorMinion1",
-     "ValentinesDayStageActorMinion1",
-     "ValentinesDayStageActorMinion1",
-     "ValentinesDayStageActorMinion1",
-     "ValentinesDayStageActorMinion3"
-    ],
-    "bossKey": "ValentinesDayStageActorBoss",
-    "wave": 4,
-    "synthesized": true
-   },
-   {
-    "enemyKeys": [
-     "ValentinesDayStageActorMinion1",
-     "ValentinesDayStageActorMinion1",
-     "ValentinesDayStageActorMinion1",
-     "ValentinesDayStageActorMinion1",
-     "ValentinesDayStageActorMinion3"
-    ],
-    "bossKey": "ValentinesDayStageActorBoss",
-    "wave": 5,
-    "synthesized": true
-   },
-   {
+    "enemyKeys": [],
     "bossKey": "ValentinesDayStageActorBoss",
     "population": 8,
+    "throwSpeed": 1.5,
     "weighted": [
      {
       "enemy": "ValentinesDayStageActorMinion1",
-      "frequency": 50
+      "frequency": 34
      },
      {
       "enemy": "ValentinesDayStageActorMinion2",
@@ -1606,31 +938,9 @@
      },
      {
       "enemy": "ValentinesDayStageActorMinion3",
-      "frequency": 17
-     }
-    ],
-    "wave": 6,
-    "synthesized": true
-   },
-   {
-    "bossKey": "ValentinesDayStageActorBoss",
-    "population": 11,
-    "weighted": [
-     {
-      "enemy": "ValentinesDayStageActorMinion1",
-      "frequency": 50
-     },
-     {
-      "enemy": "ValentinesDayStageActorMinion2",
       "frequency": 33
-     },
-     {
-      "enemy": "ValentinesDayStageActorMinion3",
-      "frequency": 17
      }
-    ],
-    "wave": 7,
-    "synthesized": true
+    ]
    }
   ],
   "loot": [

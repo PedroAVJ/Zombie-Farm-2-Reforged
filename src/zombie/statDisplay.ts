@@ -104,8 +104,12 @@ export function statBreakdown(
   const v = veterancyMultiplier(z.invasions);
   const abilities = selfStatAbilities(z, abilityUnlocked);
 
-  let effective = raw * v;
+  // Mutations are the LAST link of the source's stat chain (see buildPlayerUnits), so
+  // the percentage modifiers compound on the UNMUTATED stat and the flat mutation bonus
+  // lands on top — multiplying it by veterancy here would overstate the card vs combat.
+  let effective = baseRaw * v;
   for (const k of abilities) effective *= abilityStatMult(k, stat);
+  effective += stat === "focus" ? 0 : mut;
 
   const lines: StatModifierLine[] = [];
   // Mutation — additive; shown in display units (e.g. "+13"). Focus can't be mutated,

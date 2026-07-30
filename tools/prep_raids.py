@@ -10,14 +10,14 @@ Reads the source invasion catalog + combat stats and emits a runtime bundle:
                                          for every attack those enemies use
   public/assets/raids/images/...         boss portraits + stage backgrounds
 
-Only Old McDonnell (ID 1) ships a full multi-stage difficulty LADDER in the source
-data (7 stages selected by player level — see fightStage); Lawyers/Tree World/
-Valentine's ship a single source stage, and the other 7 invasions ship none. The
-game is a difficulty ladder (verified in the binary: `stageSettings[playerLevel −
-recommendedLevel]`, one stage per invasion, no in-fight wave advancement), so to
-give EVERY raid the same per-level scaling McDonnell has, we extrapolate McDonnell's
-canonical ladder SHAPE (build_ladder) onto each raid using its own minions/boss/
-population from UnitStats.json. McDonnell keeps its authored stages verbatim.
+Every raid's wave composition is taken from the source VERBATIM (see stages_for).
+The binary picks the fought stage once, as `stageSettings[playerLevel −
+recommendedLevel]` clamped, with no in-fight wave advancement — so only Old McDonnell
+(ID 1), the one raid shipping a 7-entry ladder, scales with player level. Lawyers /
+Tree World / Valentine's author a single `stageSettings` stage; the other 7 invasions
+author their single wave on the raid entry's own `population` + `enemies` + `boss`
+fields. All three shapes are honoured, so those 10 raids field one fixed wave at every
+level, exactly as the source does.
 
 The boss's own bossActions bring its throw projectiles (parrot/anchor/kunai/…),
 which get copied into images/. Stage backgrounds (levelAssets) are copied for all
@@ -160,12 +160,15 @@ def population_pool(minions):
 
 
 def build_ladder(rid, unit_stats, base_pop, hazards=frozenset()):
-    """Extrapolate McDonnell's 7-stage difficulty ladder onto a raid, using its own
-    minions/boss. Stage indices mirror McDonnell exactly (bossIdx 3): the pre-boss
-    stages grow the grunt count, then the boss appears at recommendedLevel, then two
-    endless population waves. Unlike McDonnell — whose first boss stage disables
-    throwing — every OTHER boss throws from its first appearance (stage 3). Returns []
-    if the family can't be resolved (raid then falls back to any source stages)."""
+    """FALLBACK ONLY — extrapolate McDonnell's 7-stage ladder onto a raid that authors
+    no wave of its own. Not the normal path: every shipped raid authors its own
+    composition and `stages_for` uses that verbatim.
+
+    Stage indices mirror McDonnell exactly (bossIdx 3): the pre-boss stages grow the
+    grunt count, then the boss appears at recommendedLevel, then two endless population
+    waves. Unlike McDonnell — whose first boss stage disables throwing — every OTHER
+    boss throws from its first appearance (stage 3). Returns [] if the family can't be
+    resolved (raid then falls back to any source stages)."""
     primary, secondary, boss, minions = family_parts(rid, unit_stats, hazards)
     if not primary or not boss:
         return []
@@ -186,26 +189,73 @@ def build_ladder(rid, unit_stats, base_pop, hazards=frozenset()):
     return defs
 
 
-def stages_for(rid, e, unit_stats):
-    """Final per-level stage ladder for a raid.
+def synth_authored_stage(e, boss=None, hazards=frozenset()):
+    """The single authored wave of a raid that ships no `stageSettings`.
 
-    McDonnell (a full authored ladder) is kept verbatim, except its population-only
-    stages get a weighted minion pool attached — buildEnemyUnits spawns nothing from a
-    bare `population` field, so without this those late stages would be boss-only.
-    Every other raid gets McDonnell's ladder shape extrapolated onto its own family,
-    seeded with the raid's real source population where the source authored one stage."""
+    Seven raids (Pirates, Ninjas, Robots, Aliens, Summer Break, Circus, Video Games)
+    put their wave on the raid entry itself rather than in a stage: `population` is the
+    grunt count and `enemies` the weighted spawn table, with `boss` naming the boss.
+    That is the same shape `stageSettings` uses, so hand it to `norm_stage`. Hazard
+    actors (obstacle / initialSpawnClass) are dropped — they arrive on the obstacle
+    timer, not in the wave. Returns None when the entry authors no wave at all.
+
+    `boss` is the family-resolved fallback for the raids whose top-level `boss` field is
+    null. Robots is the case that matters: all three bots carry `bossActions` ("any can
+    be the boss") so the source names none, and without the fallback the raid would ship
+    a boss-less stage — no boss loot, no brain drop, no ability-tier unlock. Its authored
+    minion pool still lists the boss unit as a grunt; that is the source's own data and
+    is kept verbatim."""
+    pop = as_int(e.get("population"))
+    pool = [w for w in (e.get("enemies") or []) if w.get("enemy") not in hazards]
+    if not pop or not pool:
+        return None
+    return norm_stage({
+        "bossKey": e.get("boss") or boss,
+        "population": pop,
+        "enemies": pool,
+    })
+
+
+def stages_for(rid, e, unit_stats):
+    """Final stage list for a raid — the source's AUTHORED composition, verbatim.
+
+    ZF2 picks the fought stage ONCE, by `stageSettings[playerLevel − recommendedLevel]`
+    (clamped) — there is no in-fight wave advance. Only McDonnell ships a real ladder;
+    every other raid authors a SINGLE wave that is fought identically at every level.
+
+    Three shapes exist in Enemies.json, all handled here:
+      * McDonnell (ID 1) — 7 `stageSettings` entries, a genuine per-level ladder.
+      * Lawyers / Tree World / Valentine's — exactly ONE `stageSettings` entry
+        (bossKey + population + weighted `enemies`).
+      * The other 7 raids — no `stageSettings` at all. Their single wave is authored in
+        the raid entry's TOP-LEVEL `population` + `enemies` + `boss` fields, which is
+        what `synth_authored_stage` lifts into a stage.
+
+    A population stage needs a weighted spawn pool or `buildEnemyUnits` spawns the boss
+    alone, so any stage carrying `population` with neither `enemyKeys` nor `weighted`
+    gets one derived from the family's minions.
+
+    Extrapolating McDonnell's ladder onto the other raids (the previous behaviour, see
+    `build_ladder`) both under-fielded the mid raids — Circus 4500 HP against an
+    authored 6300 — and wildly over-fielded Robots / Video Games, whose authored
+    populations are 2 and 8. It survives only as the unresolvable-family fallback."""
     real = [norm_stage(s) for s in e.get("stageSettings", []) or []]
     hazards = hazard_keys(e)
-    primary, secondary, boss, minions = family_parts(rid, unit_stats, hazards)
-    src_pop = next((s["population"] for s in real if s.get("population")), None)
-    if len(real) >= 3:  # a genuine authored ladder (McDonnell) — keep it
-        if minions:
-            for s in real:
-                if s.get("population") and not s.get("enemyKeys") and not s.get("weighted"):
-                    s["weighted"] = population_pool(minions)
+    _, _, boss, minions = family_parts(rid, unit_stats, hazards)
+    if not real:
+        authored = synth_authored_stage(e, boss, hazards)
+        if authored:
+            real = [authored]
+    if minions:
+        for s in real:
+            if s.get("population") and not s.get("enemyKeys") and not s.get("weighted"):
+                s["weighted"] = population_pool(minions)
+    if real:
         return real
-    ladder = build_ladder(rid, unit_stats, src_pop or LADDER_POP_BASE, hazards)
-    return ladder or real
+    # No authored composition anywhere — fall back to the extrapolated ladder so the
+    # raid is at least playable, and say so loudly.
+    print(f"  ! raid {rid}: no authored wave, falling back to the extrapolated ladder")
+    return build_ladder(rid, unit_stats, LADDER_POP_BASE, hazards)
 
 
 def load(name):
