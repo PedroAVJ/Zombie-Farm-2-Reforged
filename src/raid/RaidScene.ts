@@ -209,6 +209,9 @@ const LETTERBOX_BOT = 0x101216;
 // Horizontal inset of the combat lane inside the stage rect: units used to run right
 // to ~4% of the edges and spill past the ground area of the art. Pull them in.
 const FIELD_INSET_FX = 0.1;
+// Waiting and focus-queue zombies use the left letterbox edge as their visual
+// boundary instead of floating well inside the authored raid image.
+const PLAYER_STAGING_NUDGE_FX = 0.06;
 const CENTER_Y = FIELD_H / 2; // sim y that sits on the ground line
 // Source fight-stage design space: level assets are authored 1:1 in 480x320 points
 // (verified: every fightBG*_bg is 480x320; structures like the barn are positioned
@@ -717,16 +720,17 @@ export class RaidScene {
 
   /** A circular framed portrait badge for a team bar (feet-agnostic head-ish crop). */
   private fillFaceBadge(badge: Container, tex: Texture | null, ring: number) {
-    const R = 26;
+    const R = 23;
     badge.removeChildren();
     badge.addChild(new Graphics().circle(0, 0, R).fill(0x1c1c1c));
     if (tex) {
       const sp = new Sprite(tex);
       sp.anchor.set(0.5, 0.5);
-      // Fill the circle from the TOP of the portrait (the face), not the middle.
-      const s = (R * 2 * 1.15) / Math.max(1, tex.width);
+      // Leave a little more breathing room inside the badge and lower the crop so
+      // the face sits naturally instead of pressing against the top rim.
+      const s = (R * 2 * 0.96) / Math.max(1, tex.width);
       sp.scale.set(s);
-      sp.y = -tex.height * s * 0.28;
+      sp.y = -tex.height * s * 0.14;
       const mask = new Graphics().circle(0, 0, R).fill(0xffffff);
       badge.addChild(mask, sp);
       sp.mask = mask;
@@ -932,9 +936,9 @@ export class RaidScene {
       wrap.addChild(bar, fill);
       const label = new Text({
         text: "",
-        style: { fontFamily: "sans-serif", fontSize: 18, fontWeight: "700", fill: 0xffffff },
+        style: { fontFamily: "sans-serif", fontSize: 16, fontWeight: "700", fill: 0xffffff },
       });
-      label.y = 26;
+      label.y = 21;
       wrap.addChild(label);
       this.container.addChild(wrap);
       return { wrap, bar, label };
@@ -950,7 +954,7 @@ export class RaidScene {
     // Round countdown (top-center) → turns red "ENRAGED" when the boss enrages.
     this.roundLabel = new Text({
       text: "",
-      style: { fontFamily: "sans-serif", fontSize: 20, fontWeight: "800", fill: 0xffffff },
+      style: { fontFamily: "sans-serif", fontSize: 18, fontWeight: "800", fill: 0xffffff },
     });
     this.roundLabel.anchor.set(0.5, 0);
     this.container.addChild(this.roundLabel);
@@ -1214,6 +1218,9 @@ export class RaidScene {
       const groundDrop = UNIT_GROUND_NUDGE * szs;
       const pos = renderPos(u);
       let [sx, sy] = u.isBoss ? bossPos(u, pos.x, pos.y) : [toX(pos.x) + slide, toY(pos.y) + groundDrop];
+      if (u.team === "player" && (u.state === "waiting" || u.state === "charging")) {
+        sx -= r.w * PLAYER_STAGING_NUDGE_FX;
+      }
       if (bossWrappingOffstage) {
         sx = r.left + r.w + 140;
         sy = perchY;
@@ -1534,20 +1541,21 @@ export class RaidScene {
     }
 
     // Team bars, top corners.
-    const barW = Math.min(W * 0.34, 380);
-    const barH = 20;
-    const topHudH = Math.max(72, H * 0.05 + barH + 34);
+    const barW = Math.min(W * 0.32, 350);
+    const barH = 17;
+    const topY = Math.max(9, H * 0.04);
+    const topHudH = Math.max(62, topY + barH + 26);
     this.topHudBack.clear()
       .rect(0, 0, W, topHudH).fill({ color: 0x15130f, alpha: 0.78 })
       .rect(0, topHudH - 4, W, 4).fill({ color: 0x090a08, alpha: 0.5 })
       .moveTo(0, topHudH - 1).lineTo(W, topHudH - 1)
       .stroke({ width: 2, color: 0xc7b78b, alpha: 0.48 });
-    this.pWrap.position.set(mx, H * 0.05);
-    this.eWrap.position.set(W - mx - barW, H * 0.05);
+    this.pWrap.position.set(mx, topY);
+    this.eWrap.position.set(W - mx - barW, topY);
     // Face badges just outside each bar (clamped on-screen): zombie left, enemy right.
-    const faceY = H * 0.05 + barH / 2;
-    this.pFace.position.set(Math.max(28, mx - 30), faceY);
-    this.eFace.position.set(Math.min(W - 28, W - mx + 30), faceY);
+    const faceY = topY + barH / 2 + 3;
+    this.pFace.position.set(Math.max(25, mx - 27), faceY);
+    this.eFace.position.set(Math.min(W - 25, W - mx + 27), faceY);
     // Both team bars read green when full (drain as the team loses HP).
     this.drawTeamBar(this.pBar, this.pFill, barW, barH, pHp / this.maxPlayerHp, PLAYER_COLOR);
     this.drawTeamBar(this.eBar, this.eFill, barW, barH, eHp / this.maxEnemyHp, PLAYER_COLOR);
@@ -1567,7 +1575,7 @@ export class RaidScene {
     } else {
       this.roundLabel.text = "";
     }
-    this.roundLabel.position.set(W / 2, H * 0.05);
+    this.roundLabel.position.set(W / 2, topY);
 
     // Retreat occupies the bottom-right action slot used by the farm quest control,
     // which is hidden while a battle owns the screen.
@@ -1578,10 +1586,21 @@ export class RaidScene {
     // Ability strip remains below the top-left health bar. Activated badges show how
     // many zombies are ready right now; dim a move when none can perform it.
     const CELL = 52;
-    this.abilityStrip.position.set(mx + 24, H * 0.05 + barH + 54 + 24);
+    this.abilityStrip.position.set(mx + 24, topHudH + 30);
     const status = new Map(this.sim.activatedStatus().map((s) => [s.key, s.ready]));
-    this.abilityCells.forEach((c, i) => {
-      c.cell.y = i * CELL;
+    const deployedAbilityKeys = new Set(
+      this.sim.units
+        .filter((u) => u.team === "player" && u.alive &&
+          (u.state === "advance" || u.state === "fight"))
+        .flatMap((u) => u.abilities)
+    );
+    let visibleAbilityIndex = 0;
+    this.abilityCells.forEach((c) => {
+      // Activated moves retain their authored timing (Mini Buddy is chosen during
+      // deployment). Passive team effects such as Chivalry and Grace appear only
+      // once a carrier has actually advanced onto the battlefield.
+      c.cell.visible = c.activated || deployedAbilityKeys.has(c.key);
+      if (c.cell.visible) c.cell.y = visibleAbilityIndex++ * CELL;
       if (c.cell.scale.x < 1) c.cell.scale.set(Math.min(1, c.cell.scale.x + dtSec * 4)); // ease tap-press back
       if (c.activated) {
         const ready = status.get(c.key) ?? 0;

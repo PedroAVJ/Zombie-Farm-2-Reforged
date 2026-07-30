@@ -78,6 +78,8 @@ export class ZombieUnit {
   // frame instead of via a wrapping container (which would collapse them to one z).
   private neck = { x: 0, y: 0 };
   private headParts: { sp: Sprite; bx: number; by: number }[] = [];
+  private eyeParts: { sp: Sprite; openScaleY: number }[] = [];
+  private eyesClosed = false;
   private parts: Sprite[] = [];
   private ring = new Graphics();
   private footF!: Sprite;
@@ -145,6 +147,7 @@ export class ZombieUnit {
     this.wy = wy;
     this.path = [];
     this.sleeping = false;
+    this.setEyesClosed(false);
     this.pauseMs = 100;
     this.fertilizeCastMs = FERTILIZE_CAST_MS;
     this.sync();
@@ -220,6 +223,9 @@ export class ZombieUnit {
       }
       if (p.group === "head") {
         this.headParts.push({ sp, bx: p.px, by: p.py }); // tilts with the head-nod
+        if (/Eye[LR](?:\.png)?$/i.test(p.file)) {
+          this.eyeParts.push({ sp, openScaleY: sp.scale.y });
+        }
       } else if (p.group === "footF") { this.footF = sp; this.footFBaseY = p.py; }
       else if (p.group === "footB") { this.footB = sp; this.footBBaseY = p.py; }
       else if (/Arm[FB](?:\.png)?$/i.test(p.file)) this.arms.push({ sp, baseRotation: sp.rotation });
@@ -234,6 +240,7 @@ export class ZombieUnit {
         this.parts.push(eyeball);
         this.root.addChild(eyeball);
         this.headParts.push({ sp: eyeball, bx: p.px, by: p.py });
+        this.eyeParts.push({ sp: eyeball, openScaleY: eyeball.scale.y });
         headForeground.push(eyeball);
       }
     }
@@ -347,6 +354,8 @@ export class ZombieUnit {
   // nap on it. Stops wandering until woken.
   sleepAt(col: number, row: number) {
     this.sleeping = true;
+    // Stay awake for the walk over; the eyes close once the final tile is reached.
+    this.setEyesClosed(false);
     const g = screenToGrid(this.wx, this.wy);
     const from = { col: Math.round(g.col), row: Math.round(g.row) };
     const cells = findPath(from, { col, row }, (c, r) => this.field.isPassable(c, r));
@@ -357,6 +366,7 @@ export class ZombieUnit {
   // Wake up and resume wandering.
   wake() {
     this.sleeping = false;
+    this.setEyesClosed(false);
     this.pauseMs = this.nextIdlePause();
   }
   get isSleeping(): boolean {
@@ -381,6 +391,16 @@ export class ZombieUnit {
 
   private nextIdlePause(): number {
     return IDLE_PAUSE_MIN_MS + Math.random() * IDLE_PAUSE_RANGE_MS;
+  }
+
+  private setEyesClosed(closed: boolean) {
+    if (this.eyesClosed === closed) return;
+    this.eyesClosed = closed;
+    for (const eye of this.eyeParts) {
+      // The eye art is centered on its socket, so flattening it vertically reads
+      // as a closed eyelid while preserving mutations, tint, and head movement.
+      eye.sp.scale.y = eye.openScaleY * (closed ? 0.08 : 1);
+    }
   }
 
   private tilt(dt: number, moving: boolean) {
@@ -491,6 +511,7 @@ export class ZombieUnit {
         walking = this.path.length > 0;
       }
     }
+    this.setEyesClosed(this.sleeping && this.path.length === 0);
     this.tilt(dt, walking);
     this.legs(walking, dt);
     this.poseArms(walking, dt);

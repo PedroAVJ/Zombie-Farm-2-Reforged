@@ -134,7 +134,7 @@ export class ZombieField {
 
   /** A deployed, voiced zombie for occasional farm ambience. */
   randomBrainBark(): { group: string; key: string } | null {
-    const voiced = this.units.filter((unit) => unit.group !== "Headless");
+    const voiced = this.units.filter((unit) => unit.group !== "Headless" && !unit.isSleeping);
     if (!voiced.length) return null;
     const unit = voiced[Math.floor(Math.random() * voiced.length)];
     return { group: unit.group, key: unit.typeKey };
