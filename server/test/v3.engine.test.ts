@@ -379,6 +379,33 @@ describe("protocol v3 command engine", () => {
     expect(result.state.farm.plots["0:0"]).toMatchObject({ state: "spent", zombie: false });
   });
 
+  it("keeps all four zombie plots when Insta-Harvest has only two army slots", () => {
+    const state = freshGameplayState();
+    state.inventory.insta_harvest = 1;
+    state.zombieMax = 2;
+    state.farm.plots = {
+      "0:0": { state: "planted", cropKey: "carrot", plantedAt: 0, growMs: 1, sell: 16, xp: 1, fertilized: false, zombie: false },
+      "4:0": { state: "planted", cropKey: "ZombieActorRegularTier1", plantedAt: 10, growMs: 1, sell: 0, xp: 1, fertilized: false, zombie: true },
+      "8:0": { state: "planted", cropKey: "ZombieActorGirlTier1", plantedAt: 20, growMs: 1, sell: 0, xp: 1, fertilized: false, zombie: true },
+      "12:0": { state: "planted", cropKey: "ZombieActorRegularTier1", plantedAt: 30, growMs: 1, sell: 0, xp: 1, fertilized: false, zombie: true },
+      "16:0": { state: "planted", cropKey: "ZombieActorGirlTier1", plantedAt: 40, growMs: 1, sell: 0, xp: 1, fertilized: false, zombie: true },
+    };
+    let id = 0;
+
+    const result = applyCommandBatch(
+      state,
+      commands({ type: "power.use", key: "insta_harvest" }),
+      { now: 1_000, id: () => `harvest-${++id}` },
+    );
+
+    expect(result.state.roster).toHaveLength(2);
+    expect(result.state.farm.plots["0:0"]).toMatchObject({ state: "spent", zombie: false });
+    expect(result.state.farm.plots["4:0"]).toMatchObject({ state: "spent", zombie: true });
+    expect(result.state.farm.plots["8:0"]).toMatchObject({ state: "spent", zombie: true });
+    expect(result.state.farm.plots["12:0"]).toMatchObject({ state: "planted", zombie: true });
+    expect(result.state.farm.plots["16:0"]).toMatchObject({ state: "planted", zombie: true });
+  });
+
   it("uses current catalog XP when harvesting a zombie plot with the old bad reward", () => {
     const state = freshGameplayState();
     state.farm.plots["0:0"] = {
@@ -458,6 +485,31 @@ describe("protocol v3 command engine", () => {
     ), { now: 1_000, random: () => 0.1, id: () => "power-mutant" });
     expect(result.state.farm.plots["0:4"].state).toBe("spent");
     expect(result.state.roster[0].mutation).toBe(4);
+  });
+
+  it("harvests ripe fruit trees in the same Insta-Harvest activation", () => {
+    const state = freshGameplayState();
+    state.inventory.insta_harvest = 1;
+    state.objects.objects.push(
+      { instanceId: "monolith", catalogKey: "monolithPlowing", status: "placed" },
+      { instanceId: "ripe-tree", catalogKey: "fruitTreeApple", status: "placed", readyAt: 100 },
+      { instanceId: "growing-tree", catalogKey: "fruitTreeApple", status: "placed", readyAt: 2_000 },
+    );
+    const goldBefore = state.balance.gold;
+    const xpBefore = state.balance.xp;
+
+    const result = applyCommandBatch(
+      state,
+      commands({ type: "power.use", key: "insta_harvest" }),
+      { now: 1_000 },
+    );
+
+    expect(result.results[0].status).toBe("applied");
+    expect(result.state.inventory.insta_harvest).toBe(0);
+    expect(result.state.balance.gold).toBeGreaterThan(goldBefore);
+    expect(result.state.balance.xp).toBe(xpBefore);
+    expect(result.state.objects.objects[1].readyAt).toBeGreaterThan(1_000);
+    expect(result.state.objects.objects[2].readyAt).toBe(2_000);
   });
 
   it("keeps the Mutant Monolith's zombie growth reduction authoritative", () => {
@@ -613,7 +665,7 @@ describe("protocol v3 command engine", () => {
     expect(result.state.objects.objects[0].readyAt).toBeGreaterThan(100);
   });
 
-  it("adds 1 xp per harvested fruit tree with a placed Plowing Monolith", () => {
+  it("does not award tree-harvest xp, even with a placed Plowing Monolith", () => {
     const state = freshGameplayState();
     state.objects.objects.push(
       { instanceId: "monolith", catalogKey: "monolithPlowing", status: "placed" },
@@ -626,7 +678,7 @@ describe("protocol v3 command engine", () => {
       { now: 100 }
     );
     expect(result.results[0].status).toBe("applied");
-    expect(result.state.balance.xp - state.balance.xp).toBe(2);
+    expect(result.state.balance.xp).toBe(state.balance.xp);
   });
 
   it("adopts the untracked free starter shed on its first paid upgrade", () => {

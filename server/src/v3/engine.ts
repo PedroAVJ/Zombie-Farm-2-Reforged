@@ -438,6 +438,17 @@ function applyOne(
           effects++;
           events.push(harvest.event);
         }
+        // Insta-Harvest includes every ripe placed fruit tree in this same atomic
+        // activation, using the normal tree rewards and regrow timing.
+        for (const obj of state.objects.objects) {
+          if (obj.status !== "placed") continue;
+          const rule = objectRules.get(obj.catalogKey);
+          if (!rule?.growMs || !rule.harvestValue || (obj.readyAt ?? 0) > options.now) continue;
+          state.balance.gold += farmerGold(rule.harvestValue, state.farmerHeadId);
+          obj.readyAt = options.now + rule.growMs;
+          effects++;
+          events.push({ type: "kCropHarvestedNotification", subject: rule.name });
+        }
       } else if (command.key === "insta_grow") {
         if (command.target === "zombie_pot") {
           // Zombie Pot timers/jobs are presentation state until collection. The
@@ -565,13 +576,11 @@ function applyOne(
     case "object.harvest_trees": {
       const ids = [...new Set(command.instanceIds)].slice(0, MAX_FARM_PLOTS);
       let harvested = 0;
-      const bonusXp = harvestXp(0, hasPlowingMonolith(state));
       for (const id of ids) {
         const obj = state.objects.objects.find((o) => o.instanceId === id && o.status === "placed");
         const rule = obj ? objectRules.get(obj.catalogKey) : undefined;
         if (!obj || !rule?.growMs || !rule.harvestValue || (obj.readyAt ?? 0) > options.now) continue;
         state.balance.gold += farmerGold(rule.harvestValue, state.farmerHeadId);
-        state.balance.xp += bonusXp;
         obj.readyAt = options.now + rule.growMs;
         harvested++;
         events.push({ type: "kCropHarvestedNotification", subject: rule.name });

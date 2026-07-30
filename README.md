@@ -109,7 +109,7 @@ must also update [SECURITY.md](SECURITY.md) and [server/README.md](server/README
 - **Selling always pays gold.** Gold-bought placeables refund 20% of cost; gold zombies return half their cost (minimum 1). Anything bought with brains — placeables or zombies — pays **1,000 gold per brain** of its original cost, so a 5-brain special zombie sells for 5,000 gold. Nothing refunds brains.
 - Buying with brains grants derived XP (`cost × 100` for decor and trees, `cost × 80` for functional items); gold purchases still grant the authored Market XP.
 - Persistent placeable objects, fruit trees, storage sheds, Mausoleum, graves, monoliths, Zombie Patch, and Zombie Pot.
-- A placed Plowing Monolith makes plowing free, removes the normal plow XP reward, and adds +1 XP to every crop, zombie, and fruit-tree harvest.
+- A placed Plowing Monolith makes plowing free, removes the normal plow XP reward, and adds +1 XP to crop and zombie harvests. Fruit trees do not grant harvest XP.
 - The five functional Monoliths share one source texture and are distinguished by their authentic per-item Market color, carried in the placeable catalog and applied as a multiplicative tint to the Market card, the placement ghost, and the placed object.
 - **Functional items are limited to one owned copy** (the Zombie Pot allows three), counting placed and stored copies together; a maxed item disappears from the Market list. Functional items are also permanent — they can be moved, rotated, and stored, but never sold.
 - The Remove tool confirms before selling a placed object or clearing a planted plot (which forfeits the growing crop).

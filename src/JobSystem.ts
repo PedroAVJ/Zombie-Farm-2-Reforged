@@ -371,14 +371,10 @@ export class JobSystem {
       const baseGold = job.objId ? this.field.harvestObject(job.objId) : null;
       if (baseGold) {
         const gold = this.state.farmerHarvestGold(baseGold);
-        const xp = harvestXp(0, this.field.hasPlowFree());
-        if (this.state.onTreeHarvest && job.objId) this.state.onTreeHarvest(job.objId, gold, xp);
-        else {
-          this.state.addGold(gold);
-          if (xp) this.state.addXp(xp);
-        }
+        if (this.state.onTreeHarvest && job.objId) this.state.onTreeHarvest(job.objId, gold);
+        else this.state.addGold(gold);
         if (treeName) this.quest.post(QuestEvent.CropHarvested, treeName);
-        this.float(job.cx, job.cy, `+${gold}g${xp ? `  +${xp}xp` : ""}`);
+        this.float(job.cx, job.cy, `+${gold}g`);
         this.playSfx("xp");
       }
       return;

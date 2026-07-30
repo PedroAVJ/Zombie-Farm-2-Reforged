@@ -965,6 +965,19 @@ async function main() {
         }
         harvested++;
       }
+      // Trees are part of the same immediate, farm-wide activation. Online, the
+      // single power command below awards them authoritatively; locally we mirror
+      // the normal tree harvest's gold, quest event, and regrow timer.
+      for (const id of field.ripeTreeIds()) {
+        const def = field.objectDefOf(id);
+        const baseGold = field.harvestObject(id);
+        if (!def || baseGold === null) continue;
+        if (!state.onFarm) {
+          state.addGold(state.farmerHarvestGold(baseGold));
+        }
+        questBus.post(QuestEvent.CropHarvested, def.name);
+        harvested++;
+      }
       if (harvested) floatText(c.x, c.y, `Harvested ${harvested}!`);
       return harvested > 0;
     }
@@ -1188,7 +1201,7 @@ async function main() {
     // hook is what tells the game "boosts are server-owned"); counts reconcile like
     // currency, so the blob's boost list becomes an ignored cache.
     state.onInventory = (action, optimistic) => economy!.submitInventory(action, optimistic);
-    state.onTreeHarvest = (instanceId, gold, xp) => economy!.submitTreeHarvest([instanceId], gold, xp);
+    state.onTreeHarvest = (instanceId, gold) => economy!.submitTreeHarvest([instanceId], gold);
     // Reconciliation also adopts fertilization from another/restored client. A crop
     // rolled here is already marked, so markFertilized prevents duplicate FX.
     economy.onCropFertilized = (oc, or) => {
@@ -1201,6 +1214,11 @@ async function main() {
     economy.onFarmState = (farmState) => {
       const authoritative = [
         ...farmState.plowed.map((p) => ({ oc: p.oc, or: p.pr, state: "plowed" as const })),
+        ...(farmState.spent ?? []).map((p) => ({
+          oc: p.oc,
+          or: p.pr,
+          state: p.zombie ? "hole" as const : "dirt" as const,
+        })),
         ...farmState.crops.map((p) => ({
           oc: p.oc,
           or: p.pr,

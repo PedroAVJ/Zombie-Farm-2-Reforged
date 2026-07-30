@@ -461,12 +461,14 @@ describe("v3 raid dependency ids", () => {
       gameplay: { ...gameplay, farm: { version: 1, plots: {
         "4:6": { state: "planted" as const, cropKey: "carrot", plantedAt: 2, growMs: 100,
           sell: 1, xp: 1, fertilized: false, zombie: false },
+        "8:6": { state: "spent" as const, zombie: true },
       } } },
       farmVersionBefore: 0, farmVersionAfter: 1, netDelta: { gold: -10, brains: 0, xp: 0 },
       questChanges: [], createdZombieIds: [],
     } satisfies CommandBatchResponse);
     expect(projections).toHaveLength(1);
     expect(projections[0].crops.map((crop) => [crop.oc, crop.pr])).toEqual([[4, 6]]);
+    expect(projections[0].spent).toEqual([{ oc: 8, pr: 6, zombie: true }]);
   });
 
   it("carries harvest id aliases across a deferred roster projection", () => {

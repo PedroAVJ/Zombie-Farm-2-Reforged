@@ -1275,6 +1275,12 @@ export class Field {
     const o = this.objects.get(id);
     return !!o && !!o.def.harvestValue && o.ready;
   }
+  /** Every ripe fruit tree, for farm-wide harvest powers. */
+  ripeTreeIds(): string[] {
+    return [...this.objects.values()]
+      .filter((o) => !!o.def.harvestValue && o.ready)
+      .map((o) => o.id);
+  }
   // Reconcile a fruit tree's ripen timer with the authoritative server state.
   // This also restores the ripe presentation when a local harvest is rejected.
   syncObjectReadyAt(id: string, readyAt: number): boolean {

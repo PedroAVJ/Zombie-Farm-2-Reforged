@@ -1442,6 +1442,13 @@
   #hud .zbtns { margin-top: 8px; }
 }
 
+/* Wider portrait phones still have enough horizontal room for level progress.
+   Keep it beside the level number, while the narrow-phone rule above continues
+   to protect the currency chips on genuinely tight screens. */
+@media (orientation: portrait) and (min-width: 400px) and (max-width: 430px) {
+  #hud .level-chip .xpbar { display: block; width: 30px; flex: 0 1 30px; }
+}
+
 /* On portrait phones the fixed 210px raid list left too little room for the raid
    description. Turn it into a horizontal chooser so details get the full width. */
 @media (max-width: 560px) {

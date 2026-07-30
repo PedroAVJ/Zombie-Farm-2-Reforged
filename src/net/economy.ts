@@ -386,10 +386,10 @@ export class EconomyClient {
     this.enqueue({ type: "object.status", instanceId, status });
   }
 
-  submitTreeHarvest(instanceIds: string[], optimisticGold = 0, optimisticXp = 0): void {
+  submitTreeHarvest(instanceIds: string[], optimisticGold = 0): void {
     if (instanceIds.length) this.enqueue(
       { type: "object.harvest_trees", instanceIds },
-      { gold: optimisticGold, xp: optimisticXp }
+      { gold: optimisticGold }
     );
   }
 
@@ -722,10 +722,12 @@ export class EconomyClient {
     this.state.zombiePotBought = gameplay.zombiePotBought ?? false;
     const deferStructural = this.commandsBySequence.size > 0;
     const plowed: api.FarmState["plowed"] = [];
+    const spent: NonNullable<api.FarmState["spent"]> = [];
     const crops: api.FarmState["crops"] = [];
     for (const [key, plot] of Object.entries(gameplay.farm.plots)) {
       const [oc, pr] = key.split(":").map(Number);
       if (plot.state === "plowed") plowed.push({ oc, pr });
+      else if (plot.state === "spent") spent.push({ oc, pr, zombie: !!plot.zombie });
       else if (plot.state === "planted") {
         crops.push({
           oc,
@@ -748,7 +750,7 @@ export class EconomyClient {
       });
       this.state.syncStorage(gameplay.storage.received, gameplay.storage.stored);
       for (const crop of crops) if (crop.fertilized) this.onCropFertilized?.(crop.oc, crop.pr);
-      this.onFarmState?.({ plowed, crops });
+      this.onFarmState?.({ plowed, spent, crops });
       this.onObjectState?.(
         gameplay.objects.objects,
         { ...this.deferredObjectAliases, ...objectAliases },

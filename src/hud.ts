@@ -430,7 +430,7 @@ export class Hud {
     this.brainsEl = bv;
     this.zombiesEl = zv;
     const lv = document.createElement("div");
-    lv.className = "chip";
+    lv.className = "chip level-chip";
     const star = document.createElement("img");
     star.src = UI("topbar_level_icon.png");
     star.style.height = "18px";

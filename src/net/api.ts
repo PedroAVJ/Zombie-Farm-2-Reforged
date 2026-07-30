@@ -633,6 +633,8 @@ export interface FarmResult {
 
 export interface FarmState {
   plowed: { oc: number; pr: number }[];
+  /** Harvested plots remain owned soil: zombie holes versus ordinary crop dirt. */
+  spent?: { oc: number; pr: number; zombie: boolean }[];
   crops: {
     oc: number;
     pr: number;
