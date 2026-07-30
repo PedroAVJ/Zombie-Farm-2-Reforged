@@ -35,7 +35,7 @@ import { screenToGrid, tileCenter, TILE_H, TILE_W, HW, HH } from "./iso";
 import { setFootprint } from "./depthSort";
 import { NightLayer, makeLight } from "./lighting";
 import { buyXp, sellBack, zombieSellValue } from "./economy";
-import { harvestXp } from "./farmRewards";
+import { harvestXp, plowXp } from "./farmRewards";
 import {
   DEFAULT_FARM_BACKGROUND, getFarmBackground, isFarmBackground, setFarmBackground,
   FARM_BG_DENSITY, type FarmBackground, getDayNightMode, setDayNightMode,
@@ -733,7 +733,8 @@ async function main() {
     (currency, needed) => hud.showToast(
       currency === "gold" ? "Not enough coins." : `Not enough brains (need ${needed}).`
     ),
-    popHarvestIcon
+    popHarvestIcon,
+    () => zombies.canHarvestZombie()
   );
 
   // Quest-complete celebration, styled like the level-up popup. Quests can finish in
@@ -865,6 +866,9 @@ async function main() {
     powerUnitIds = [];
     growTarget = null;
   };
+  hud.canUseBoost = (def) =>
+    def.effect !== "plow" ||
+    field.serialize().some((plot) => plot.state === "dirt" || plot.state === "hole");
 
   // The speed-grow (Insta-Grow) boost, exposed so the HUD can render the equippable
   // Grow tool (icon + live count) and the growing-crop info window can offer it.
@@ -931,7 +935,7 @@ async function main() {
       const mutationContexts = new Map(field.ripePlots().filter((plot) => plot.isZombie)
         .map((plot) => [`${plot.oc}:${plot.or}`, field.zombieMutationContextAt(plot.oc, plot.or)]));
       for (const pl of field.ripePlots()) {
-        if (pl.isZombie && !zombies.canAdd()) continue; // respect the army cap
+        if (pl.isZombie && !zombies.canHarvestZombie()) continue;
         const r = field.harvestAt(pl.oc, pl.or);
         if (!r) continue;
         const cropCenter = field.plotCenterOf(pl.oc, pl.or);
@@ -966,11 +970,15 @@ async function main() {
     }
     if (def.effect === "plow") {
       const n = field.replowSpent();
+      const xp = n * plowXp(field.hasPlowFree());
+      // The boost replaces only the gold cost: its XP matches the same plots being
+      // plowed manually. Online balance rewards are applied authoritatively below.
+      if (n && !state.onInventory) state.addXp(xp);
       for (let i = 0; i < n; i++) {
         questBus.post(QuestEvent.SoilPlowed, "Plow");
         questBus.post(QuestEvent.NewSoilPlowed, "Plow");
       }
-      if (n) floatText(c.x, c.y, `Plowed ${n}!`);
+      if (n) floatText(c.x, c.y, xp > 0 ? `Plowed ${n}!  +${xp}xp` : `Plowed ${n}!`);
       return n > 0;
     }
     if (def.effect === "gift") {
@@ -3559,8 +3567,8 @@ async function main() {
             onSell: () => sellObject(oid),
           });
         } else if (field.isRipe(col, row)) {
-          // Harvesting a ripe zombie crop grows an owned unit — refuse at army cap.
-          if (field.ripeZombieAt(col, row) && !zombies.canAdd()) {
+          // Refuse only when neither the active army nor Mausoleum has a free slot.
+          if (field.ripeZombieAt(col, row) && !zombies.canHarvestZombie()) {
             const c = tileCenter(col, row);
             floatText(c.x, c.y, "Army full!");
           } else {

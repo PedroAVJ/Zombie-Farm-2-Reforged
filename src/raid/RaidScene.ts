@@ -11,7 +11,7 @@
 // portraits, not side-view stage actors.
 import { AnimatedSprite, Application, Assets, Container, Graphics, Rectangle, Sprite, Text, Texture } from "pixi.js";
 import { GameAssets, raidImage } from "../assets";
-import { BattleSim, BOSS_STRUCT_X, BOSS_STRUCT_Y, ENEMY_HOLD_X, ENEMY_SPAWN_X, FIELD_H, FIELD_W, SimUnit, TELEPORT_PX } from "./BattleSim";
+import { BattleSim, BOSS_STRUCT_X, BOSS_STRUCT_Y, CHARGE_X, ENEMY_HOLD_X, ENEMY_SPAWN_X, FIELD_H, FIELD_W, SimUnit, TELEPORT_PX } from "./BattleSim";
 import { RaidActor } from "./RaidActor";
 import { EnemyActor, type EnemyAttackPose } from "./EnemyActor";
 import { ParticleField, ParticleConfig } from "./Particles";
@@ -22,6 +22,7 @@ import {
   extrapolatePosition,
   interpolatePosition,
   isOffstageBossReentryFrame,
+  playerStagingOffset,
   visualCountdown,
 } from "./renderInterpolation";
 import { zombieRaidHeightScale } from "../zombie/displayScale";
@@ -1225,8 +1226,10 @@ export class RaidScene {
       const groundDrop = UNIT_GROUND_NUDGE * szs;
       const pos = renderPos(u);
       let [sx, sy] = u.isBoss ? bossPos(u, pos.x, pos.y) : [toX(pos.x) + slide, toY(pos.y) + groundDrop];
-      if (u.team === "player" && (u.state === "waiting" || u.state === "charging")) {
-        sx -= r.w * PLAYER_STAGING_NUDGE_FX;
+      if (u.team === "player") {
+        const stagingOffsetPx = r.w * PLAYER_STAGING_NUDGE_FX;
+        const stagingOffsetSim = stagingOffsetPx / this.scaleX();
+        sx -= playerStagingOffset(u.state, pos.x, CHARGE_X, stagingOffsetSim) * this.scaleX();
       }
       if (bossWrappingOffstage) {
         sx = r.left + r.w + 140;

@@ -28,6 +28,9 @@ interface QueueOptions {
 
 const OUTBOX_PREFIX = "zf2r.online.outbox.v1";
 const LEGACY_OUTBOX_PREFIX = "zf2r.v3.commands";
+// The Worker accepts at most 120 semantic commands per rolling minute. Sending
+// 60 per 30-second window leaves rapid optimistic purchases below that limit.
+const COMMAND_SEND_LIMIT = Math.min(COMMAND_BATCH_LIMIT, 60);
 const uuid = (): string => crypto.randomUUID();
 
 /** One durable, ordered mutation lane for every non-raid gameplay command. */
@@ -134,8 +137,10 @@ export class CommandQueue {
     this.pending.push({ sequence, command });
     this.persist();
     this.onSizeChange?.(this.size);
-    if (this.pending.length >= COMMAND_BATCH_LIMIT) void this.flush();
-    else this.scheduleFromFirstCommand();
+    // Keep rapid-fire market purchases fully optimistic. Reaching the wire batch
+    // size must not force a request while the player is still clicking; the fixed
+    // window drains the durable outbox in bounded batches after the interaction.
+    this.scheduleFromFirstCommand();
     return sequence;
   }
 
@@ -176,7 +181,7 @@ export class CommandQueue {
   private async flushLoop(): Promise<void> {
     while (!this.paused && (this.inFlight || this.pending.length)) {
       if (!this.inFlight) {
-        const commands = this.pending.splice(0, COMMAND_BATCH_LIMIT);
+        const commands = this.pending.splice(0, COMMAND_SEND_LIMIT);
         this.inFlight = {
           protocolVersion: GAMEPLAY_PROTOCOL,
           deviceId: api.writerClientId(),
@@ -207,7 +212,7 @@ export class CommandQueue {
       this.onProjection?.(response);
       // Commands queued while the request was in flight wait in the next fixed
       // window unless their own deadline already elapsed.
-      if (this.pending.length && this.now() - this.queuedAt < this.windowMs && this.pending.length < COMMAND_BATCH_LIMIT) return;
+      if (this.pending.length && this.now() - this.queuedAt < this.windowMs) return;
     }
   }
 

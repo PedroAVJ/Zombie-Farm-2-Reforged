@@ -208,10 +208,12 @@ function rewardHarvest(
   mutationCropKeys: readonly string[] = []
 ): { ok: true; event: QuestEvent } | { ok: false; error: string } {
   if (plot.zombie) {
-    // Growing a zombie is different from receiving an award: a ripe zombie crop
-    // stays planted until there is room in the active army.
+    // A grown zombie enters the active army first, then an available Mausoleum.
+    // If both are full, the ripe crop remains planted.
     const cap = placedCapacity(state);
-    if (state.roster.filter((unit) => !unit.stored).length >= cap.army) {
+    const active = state.roster.filter((unit) => !unit.stored).length;
+    const stored = state.roster.filter((unit) => unit.stored).length;
+    if (active >= cap.army && stored >= cap.storage) {
       return { ok: false, error: "capacity_full" };
     }
     const id = makeId();
@@ -221,8 +223,7 @@ function rewardHarvest(
       headless: rule?.group === "Headless",
       random,
     });
-    // Capacity was checked above, so a grown zombie always enters the active army.
-    state.roster.push({ id, key, mutation, invasions: 0, stored: false });
+    state.roster.push({ id, key, mutation, invasions: 0, stored: active >= cap.army });
     created.push(id);
     state.balance.xp += harvestXp(zombieCropEcon(key)?.xp ?? 0, hasPlowingMonolith(state));
     return { ok: true, event: { type: "kCropHarvestedZombieNotification", subject: zombieNames.get(key) ?? key } };
@@ -410,8 +411,14 @@ function applyOne(
         for (const [key, plot] of Object.entries(state.farm.plots)) {
           if (plot.state !== "spent") continue;
           state.farm.plots[key] = { state: "plowed" };
+          // Insta-Plow waives the gold cost, but otherwise rewards each plot like
+          // a manual plow (including the Plowing Monolith's XP tradeoff).
+          state.balance.xp += plowXp(hasPlowingMonolith(state));
           effects++;
-          events.push({ type: "kSoilPlowedNotification", subject: "Plow" });
+          events.push(
+            { type: "kSoilPlowedNotification", subject: "Plow" },
+            { type: "kNewSoilPlowedNotification", subject: "Plow" },
+          );
         }
       } else if (command.key === "insta_harvest") {
         const mutationPlots = clone(state.farm.plots);

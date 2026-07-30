@@ -473,7 +473,7 @@ describe("protocol v3 command engine", () => {
     expect(result.state.farm.plots["0:0"]).toMatchObject({ growMs: 10_800_000 });
   });
 
-  it("keeps a ripe zombie planted when the active army is full, even with storage room", () => {
+  it("stores a ripe zombie in the Mausoleum when the active army is full", () => {
     const state = freshGameplayState();
     state.zombieMax = 1;
     state.objects.objects.push({ instanceId: "mausoleum", catalogKey: "mausoleum3", status: "placed" });
@@ -485,11 +485,13 @@ describe("protocol v3 command engine", () => {
 
     const result = applyCommandBatch(state, commands(
       { type: "farm.harvest", oc: 0, or: 0 },
-    ), { now: 1_000, id: () => "should-not-be-used" });
+    ), { now: 1_000, id: () => "stored-harvest" });
 
-    expect(result.results[0]).toMatchObject({ status: "rejected", error: "capacity_full" });
-    expect(result.state.farm.plots["0:0"]).toMatchObject({ state: "planted", cropKey: "ZombieActorGirlTier1" });
-    expect(result.state.roster).toHaveLength(1);
+    expect(result.results[0]).toMatchObject({ status: "applied", createdIds: ["stored-harvest"] });
+    expect(result.state.farm.plots["0:0"]).toMatchObject({ state: "spent", zombie: true });
+    expect(result.state.roster).toContainEqual(expect.objectContaining({
+      id: "stored-harvest", key: "ZombieActorGirlTier1", stored: true,
+    }));
   });
 
   it("rejects removed zombie-purchase powers even if stale inventory contains one", () => {
@@ -570,17 +572,36 @@ describe("protocol v3 command engine", () => {
     state.inventory.insta_plow = 2;
     state.farm.plots = {
       "0:0": { state: "spent" },
+      "0:4": { state: "spent", zombie: true },
       "4:0": { state: "plowed" },
       "8:0": { state: "planted", cropKey: "carrot", plantedAt: 0, growMs: 99_999, sell: 16, xp: 1, fertilized: false, zombie: false },
     };
+    const goldBefore = state.balance.gold;
+    const xpBefore = state.balance.xp;
     const first = applyCommandBatch(state, commands({ type: "power.use", key: "insta_plow" }), { now: 1 });
     expect(first.results[0].status).toBe("applied");
     expect(first.state.inventory.insta_plow).toBe(1);
     expect(first.state.farm.plots["0:0"].state).toBe("plowed");
+    expect(first.state.farm.plots["0:4"].state).toBe("plowed");
     expect(first.state.farm.plots["8:0"].state).toBe("planted");
+    expect(first.state.balance.gold).toBe(goldBefore);
+    expect(first.state.balance.xp).toBe(xpBefore + 2);
     const second = applyCommandBatch(first.state, commands({ type: "power.use", key: "insta_plow" }), { now: 2 });
     expect(second.results[0]).toMatchObject({ status: "rejected", error: "no_effect" });
     expect(second.state.inventory.insta_plow).toBe(1);
+  });
+
+  it("Insta-Plow follows the Plowing Monolith's manual-plow XP rule", () => {
+    const state = freshGameplayState();
+    state.inventory.insta_plow = 1;
+    state.farm.plots["0:0"] = { state: "spent" };
+    state.objects.objects.push({
+      instanceId: "plow-monolith", catalogKey: "monolithPlowing", status: "placed",
+    });
+    const xpBefore = state.balance.xp;
+    const result = applyCommandBatch(state, commands({ type: "power.use", key: "insta_plow" }), { now: 1 });
+    expect(result.results[0].status).toBe("applied");
+    expect(result.state.balance.xp).toBe(xpBefore);
   });
 
   it("coalesces duplicate tree ids and aggregates rewards into state once", () => {

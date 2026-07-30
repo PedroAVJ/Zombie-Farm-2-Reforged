@@ -1,4 +1,4 @@
-# Zombie Farm 2 Reforged
+# Zombie Farm Reforged
 
 A browser-based reimplementation of **Zombie Farm 2**, built from the mechanics,
 data, and assets organized in `../ZF2R_extracted/`. When online services are

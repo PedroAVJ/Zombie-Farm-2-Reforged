@@ -1071,6 +1071,8 @@ export class Hud {
   // Buy a boost into inventory (returns true if paid); use one from inventory.
   onBuyBoost: ((def: BoostDef) => boolean) | null = null;
   onUseBoost: ((def: BoostDef) => void) | null = null;
+  /** Whether a farm boost currently has a valid target. Used to prevent no-op uses. */
+  canUseBoost: ((def: BoostDef) => boolean) | null = null;
 
   // Entering placement mode for a bought object (set by main).
   onBuy: ((def: PlaceableDef) => void) | null = null;

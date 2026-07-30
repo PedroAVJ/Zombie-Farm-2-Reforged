@@ -4,6 +4,7 @@ import {
   interpolateFixedStep,
   interpolatePosition,
   isOffstageBossReentryFrame,
+  playerStagingOffset,
   visualCountdown,
 } from "./renderInterpolation";
 
@@ -18,6 +19,15 @@ describe("raid render interpolation", () => {
 
   it("snaps teleports instead of sliding across the battlefield", () => {
     expect(interpolatePosition({ x: 0, y: 0 }, { x: 100, y: 20 }, 10, 50, 40)).toEqual({ x: 100, y: 20 });
+  });
+
+  it("walks a released zombie out of its left staging offset without teleporting", () => {
+    expect(playerStagingOffset("waiting", 100, 220, 75)).toBe(75);
+    expect(playerStagingOffset("charging", 220, 220, 75)).toBe(75);
+    expect(playerStagingOffset("advance", 220, 220, 75)).toBe(75);
+    expect(playerStagingOffset("advance", 250, 220, 75)).toBe(45);
+    expect(playerStagingOffset("advance", 295, 220, 75)).toBe(0);
+    expect(playerStagingOffset("fight", 295, 220, 75)).toBe(0);
   });
 
   it("keeps the boss's perch-to-ground wrap transition offstage", () => {

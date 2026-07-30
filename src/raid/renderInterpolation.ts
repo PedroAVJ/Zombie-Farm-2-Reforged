@@ -25,6 +25,22 @@ export function interpolatePosition(
 }
 
 /**
+ * Keep the presentation-only left staging offset when a zombie is released, then
+ * ease it out as the simulator advances from the focus slot. This preserves the
+ * original-game staging position without snapping to the simulator's older slot.
+ */
+export function playerStagingOffset(
+  state: string,
+  x: number,
+  chargeX: number,
+  offset: number
+): number {
+  if (state === "waiting" || state === "charging") return offset;
+  if (state !== "advance") return 0;
+  return Math.max(0, offset - Math.max(0, x - chargeX));
+}
+
+/**
  * The ordinary raid boss changes from its elevated exit route to its ground-level
  * re-entry route in one simulation step. Keep that transition offstage for the
  * remainder of the render interval so a wide boss cannot flash at ground level

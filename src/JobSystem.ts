@@ -88,7 +88,10 @@ export class JobSystem {
     // making a valid plot look unresponsive when the player lacked currency.
     private onInsufficientFunds: (currency: JobCurrency, needed: number) => void = () => {},
     // Visual-only collection feedback. Called after a successful crop harvest.
-    private onHarvestFx: (result: HarvestResult, x: number, y: number) => void = () => {}
+    private onHarvestFx: (result: HarvestResult, x: number, y: number) => void = () => {},
+    // Rechecked when the farmer reaches a queued zombie harvest. Capacity can fill
+    // after the tap but before arrival, so enqueue-time validation is insufficient.
+    private canHarvestZombie: () => boolean = () => true
   ) {}
 
   private key(kind: JobKind, oc: number, or: number) {
@@ -316,6 +319,14 @@ export class JobSystem {
       this.phase = "walk";
       const walking = this.walk.goToPoint(next.cx, next.cy, () => {
         if (next.kind === "walk") {
+          this.finish();
+          return;
+        }
+        // Still walk to a queued zombie, but do not begin the work animation or
+        // mutate the plot once both the active army and Mausoleum are full.
+        if (next.kind === "harvest" && this.field.ripeZombieAt(next.oc, next.or) &&
+            !this.canHarvestZombie()) {
+          this.float(next.cx, next.cy, "Army full!");
           this.finish();
           return;
         }

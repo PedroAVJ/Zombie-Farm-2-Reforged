@@ -157,6 +157,43 @@ describe("JobSystem elapsed-time catch-up", () => {
     expect(jobs.busy).toBe(false);
   });
 
+  it("walks to a queued zombie but skips harvesting when capacity filled before arrival", () => {
+    const walk = new FakeWalk();
+    const messages: string[] = [];
+    const harvestAt = vi.fn();
+    const setWorking = vi.fn();
+    const field = {
+      highlightLayer: new Container(), plowHighlightLayer: new Container(), labelLayer: new Container(),
+      plotOriginAt: (col: number, row: number) => ({ oc: col, or: row }),
+      isRipe: () => true, ripeZombieAt: () => true,
+      plotCenterOf: (col: number, row: number) => ({ x: col, y: row }),
+      hasFastWork: () => false,
+      harvestAt,
+    };
+    const state = {
+      onFarm: null, onTreeHarvest: null, canMutateOnline: null,
+    };
+    const jobs = new JobSystem(
+      field as never, { setWorking } as never, walk as never, state as never,
+      (_x, _y, message) => messages.push(message),
+      () => {}, undefined, undefined, undefined, undefined, undefined, undefined, undefined,
+      () => false,
+    );
+
+    expect(jobs.enqueue("harvest", 4, 8)).toBe(true);
+    jobs.enqueueWalk(20, 20);
+    jobs.update(0);
+    walk.update(0.2);
+    // The next queued task starts on the following foreground tick.
+    jobs.update(0);
+
+    expect(walk.arrivals).toEqual([4, 20]);
+    expect(messages).toEqual(["Army full!"]);
+    expect(setWorking).not.toHaveBeenCalled();
+    expect(harvestAt).not.toHaveBeenCalled();
+    expect(jobs.busy).toBe(true);
+  });
+
   it("retains each planting's logical completion time during catch-up", () => {
     vi.useFakeTimers();
     const now = 1_000_000;

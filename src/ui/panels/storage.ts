@@ -8,6 +8,8 @@ import { BASE } from "../../base";
 import type { ReceivedView } from "../hudTypes";
 import { storageBoostRows } from "../storageBoosts";
 
+const INSTA_PLOW_DELAY_MS = 500;
+
 export function openStorage(hud: Hud, initialTab: string = "Items", managePen = false): void {
   document.querySelector("#hud .st-bg")?.remove();
   const bg = document.createElement("div");
@@ -176,7 +178,20 @@ export function openStorage(hud: Hud, initialTab: string = "Items", managePen = 
             btn.onclick = () => { bg.remove(); hud.setMode("instagrow"); };
           } else if (def.usableOnFarm) {
             btn.textContent = "Use";
-            btn.onclick = () => { hud.onUseBoost?.(def); render(); };
+            const usable = hud.canUseBoost?.(def) ?? true;
+            btn.disabled = !usable;
+            if (!usable && def.effect === "plow") btn.title = "There are no unplowed dirt tiles.";
+            btn.onclick = () => {
+              if (!(hud.canUseBoost?.(def) ?? true)) return;
+              if (def.effect === "plow") {
+                // Reveal the farm first, then plow every eligible tile together.
+                bg.remove();
+                window.setTimeout(() => hud.onUseBoost?.(def), INSTA_PLOW_DELAY_MS);
+                return;
+              }
+              hud.onUseBoost?.(def);
+              render();
+            };
           } else {
             // Battle boosts (Invasion Voucher / Concentration / Golden Dice) are all
             // chosen on the Invade screens, not from Storage — so just label them.

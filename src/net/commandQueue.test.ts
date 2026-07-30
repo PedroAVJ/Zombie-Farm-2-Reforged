@@ -74,7 +74,7 @@ describe("protocol v3 command queue", () => {
     expect(sent[0].commands).toHaveLength(2);
   });
 
-  it("flushes at 64 commands and keeps one ordered in-flight batch", async () => {
+  it("keeps rapid purchases optimistic until the batch window closes", async () => {
     vi.useFakeTimers();
     const sent: any[] = [];
     vi.spyOn(api, "sendCommandBatch").mockImplementation(async (batch) => {
@@ -83,10 +83,41 @@ describe("protocol v3 command queue", () => {
     });
     const queue = new CommandQueue("batch-cap-test");
     queue.adoptBootstrap(bootstrap);
-    for (let i = 0; i < 64; i++) queue.enqueue({ type: "farm.plow", oc: (i % 8) * 4, or: 0 });
-    await vi.runAllTimersAsync();
+    for (let i = 0; i < 60; i++) queue.enqueue({ type: "farm.plow", oc: (i % 8) * 4, or: 0 });
+    await vi.advanceTimersByTimeAsync(COMMAND_BATCH_WINDOW_MS - 1);
+    expect(sent).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(1);
     expect(sent).toHaveLength(1);
-    expect(sent[0].commands.map((entry: any) => entry.sequence)).toEqual(Array.from({ length: 64 }, (_, i) => i + 1));
+    expect(sent[0].commands.map((entry: any) => entry.sequence)).toEqual(Array.from({ length: 60 }, (_, i) => i + 1));
+  });
+
+  it("accepts more than one wire batch optimistically and drains later batches on later windows", async () => {
+    vi.useFakeTimers();
+    const sent: any[] = [];
+    vi.spyOn(api, "sendCommandBatch").mockImplementation(async (batch) => {
+      sent.push(batch);
+      return responseFor(batch);
+    });
+    const queue = new CommandQueue("multi-window-market-test");
+    queue.adoptBootstrap(bootstrap);
+    for (let i = 0; i < 122; i++) queue.enqueue({ type: "power.buy", key: "insta_grow" });
+    expect(queue.size).toBe(122);
+    expect(sent).toHaveLength(0);
+
+    await vi.advanceTimersByTimeAsync(COMMAND_BATCH_WINDOW_MS);
+    expect(sent).toHaveLength(1);
+    expect(sent[0].commands).toHaveLength(60);
+    expect(queue.size).toBe(62);
+
+    await vi.advanceTimersByTimeAsync(COMMAND_BATCH_WINDOW_MS);
+    expect(sent).toHaveLength(2);
+    expect(sent[1].commands).toHaveLength(60);
+    expect(queue.size).toBe(2);
+
+    await vi.advanceTimersByTimeAsync(COMMAND_BATCH_WINDOW_MS);
+    expect(sent).toHaveLength(3);
+    expect(sent[2].commands).toHaveLength(2);
+    expect(queue.size).toBe(0);
   });
 
   it("settles commands queued behind an already in-flight batch", async () => {

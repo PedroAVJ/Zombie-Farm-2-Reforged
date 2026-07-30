@@ -102,6 +102,11 @@ export class ZombieField {
     return this.units.length < this.state.zombieMax;
   }
 
+  /** Can a grown zombie be collected into either the active army or Mausoleum? */
+  canHarvestZombie(): boolean {
+    return this.canAdd() || (!!this.field.mausoleumId() && !this.mausoleumFull);
+  }
+
   /** A crop was just planted at plot (oc,or): each DEPLOYED Garden zombie rolls its
    *  tier's `fertilizeChance` (first success wins), matching the source's per-actor
    *  roll. On success the crop is flagged for a 2x harvest, the winning zombie
@@ -188,15 +193,22 @@ export class ZombieField {
     return unit;
   }
 
-  /** Spawn an owned zombie whose provenance the SERVER records as part of some other
-   *  action — a harvested zombie crop, or a redeemed gift voucher — suppressing the
-   *  generic onGrant. That action carries this exact unit id, so firing onGrant too would
-   *  be a redundant, rejected roster grant. Returns the new unit (whose `.id` the caller
-   *  sends to the server), or null if the army is at capacity / the key is unknown. */
-  spawnVerified(key: string, col: number, row: number, mutation?: number): ZombieUnit | null {
+  /** Spawn an owned zombie whose provenance the SERVER records as part of a harvest,
+   *  suppressing the generic onGrant. The action carries this exact unit id, so firing
+   *  onGrant too would be redundant. Returns null only if both destinations are full
+   *  or the key is unknown. */
+  spawnVerified(
+    key: string, col: number, row: number, mutation?: number
+  ): ZombieUnit | OwnedZombie | null {
     this.harvesting = true;
     try {
-      return this.spawn(key, col, row, mutation);
+      if (this.canAdd()) return this.spawn(key, col, row, mutation);
+      if (!this.field.mausoleumId() || this.mausoleumFull) return null;
+      const def = this.resolve(key);
+      if (!def) return null;
+      const data = makeOwned(`z${this.nextId++}`, def, col, row, 0, mutation);
+      this.stored.push(data);
+      return data;
     } finally {
       this.harvesting = false;
     }

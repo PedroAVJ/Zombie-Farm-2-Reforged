@@ -48,7 +48,7 @@ import {
 export const FIELD_W = 1000;
 export const FIELD_H = 560;
 
-const CHARGE_X = 220; // staging slot the front zombie steps into to focus
+export const CHARGE_X = 220; // staging slot the front zombie steps into to focus
 export const ENEMY_HOLD_X = 915; // enemies hold in the structure's doorway (not the far edge),
 // ~2/3 of a sprite forward of the entrance so they stand IN the open door
 export const ENEMY_SPAWN_X = 1120; // off the right edge (hidden) before emerging
