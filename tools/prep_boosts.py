@@ -11,14 +11,14 @@ Effect classification (from the entry's boolean flags):
   instaGrow    -> "grow"          single-use: grows ONE crop; bought 10x per purchase
   instaHarvest -> "harvest"       harvest every ripe plot
   instaPlow    -> "plow"          re-plow all harvested (spent) plots
-  treatAsGift  -> "gift"          grant a specific zombie (giftZombieKey)
+  treatAsGift entries are skipped; zombie-purchase powers are not part of Reforged.
   instaHunger  -> "concentration" invasion boost -> spent on the Invade screen
   goldenDice   -> "dice"          invasion boost -> spent on the Invade screen
 
 Refresher boosts are skipped entirely — the game has no crop-freshness system, so
 crops stay at full sell value once ripe and there is nothing to refresh.
 
-Farm-usable effects (grow/harvest/plow/gift) set usableOnFarm=true; the
+Farm-usable effects (grow/harvest/plow) set usableOnFarm=true; the
 invasion boosts (concentration/dice) are spent from the Invade screen instead.
 
 Run:  python tools/prep_boosts.py
@@ -49,7 +49,7 @@ def effect_of(e):
     return "other"
 
 
-FARM_USABLE = {"grow", "harvest", "plow", "gift"}
+FARM_USABLE = {"grow", "harvest", "plow"}
 
 
 def main():
@@ -89,6 +89,10 @@ def main():
         if e.get("refresher"):
             continue
         eff = effect_of(e)
+        # These gift entries are zombie purchases disguised as consumable powers.
+        # Their zombies remain available through the ordinary Zombie Market.
+        if eff == "gift":
+            continue
         key = e.get("tile") or slug(e["name"])
         icon = ""
         ss = e.get("spriteSheet", "")

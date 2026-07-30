@@ -492,30 +492,15 @@ describe("protocol v3 command engine", () => {
     expect(result.state.roster).toHaveLength(1);
   });
 
-  it("overflows an awarded gift zombie into full storage while manual storage stays capped", () => {
+  it("rejects removed zombie-purchase powers even if stale inventory contains one", () => {
     const state = freshGameplayState();
-    state.zombieMax = 1;
     state.inventory.flower_zombie_pot = 1;
-    state.objects.objects.push({ instanceId: "mausoleum", catalogKey: "mausoleum3", status: "placed" });
-    state.roster.push({ id: "active", key: "ZombieActorRegularTier1", mutation: 0, invasions: 0, stored: false });
-    for (let index = 0; index < 15; index++) {
-      state.roster.push({ id: `stored-${index}`, key: "ZombieActorGirlTier1", mutation: 0, invasions: 0, stored: true });
-    }
-
-    const manual = applyCommandBatch(state, commands(
-      { type: "roster.status", unitId: "active", stored: true },
-    ), { now: 1 });
-    expect(manual.results[0]).toMatchObject({ status: "rejected", error: "storage_full" });
-
-    const awarded = applyCommandBatch(state, commands(
+    const result = applyCommandBatch(state, commands(
       { type: "power.use", key: "flower_zombie_pot" },
-    ), { now: 2, id: () => "overflow-award" });
-    expect(awarded.results[0]).toMatchObject({ status: "applied", createdIds: ["overflow-award"] });
-    expect(awarded.state.roster.find((unit) => unit.id === "overflow-award")).toMatchObject({
-      key: "ZombieActorGardenTier3GreenFlower",
-      stored: true,
-    });
-    expect(awarded.state.roster.filter((unit) => unit.stored)).toHaveLength(16);
+    ), { now: 2, id: () => "must-not-be-used" });
+    expect(result.results[0]).toMatchObject({ status: "rejected", error: "bad_item" });
+    expect(result.state.inventory.flower_zombie_pot).toBe(1);
+    expect(result.state.roster).toEqual([]);
   });
 
   it("does not consume Harvest power when capacity blocks its only ripe zombie", () => {

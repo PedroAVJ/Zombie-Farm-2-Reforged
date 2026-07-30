@@ -3,13 +3,11 @@
 // purchase grants. Consumable boost COUNTS are server-owned (the `inventory` table);
 // the save blob's boost list becomes an ignored cache, like currency.
 //
-// KEEP IN SYNC with boosts.json (10 boosts).
+// KEEP IN SYNC with boosts.json (6 boosts).
 //
-// Scope: consumable boosts only. A "gift" boost is a voucher: using one consumes the
-// voucher and grants the zombie named by `gift` into the server roster (see
-// planGiftRedeem / applyInventoryActions), so a redeemed gift zombie is a legitimately
-// sellable unit with verified provenance. Non-boost inventory (placed objects, ground
-// skins, farm-size, received loot) is not covered here.
+// Scope: consumable boosts only. Zombie-purchase "gift" powers are intentionally
+// omitted. Non-boost inventory (placed objects, ground skins, farm-size, received
+// loot) is not covered here.
 
 export interface BoostEcon {
   /** Purchase cost, in `brains` if `brains` is true else gold. */
@@ -28,10 +26,6 @@ export const BOOSTS: Readonly<Record<string, BoostEcon>> = {
   insta_grow: { cost: 1, brains: true, perPurchase: 20, level: 0 },
   insta_harvest: { cost: 1, brains: true, perPurchase: 4, level: 0 },
   insta_plow: { cost: 1, brains: true, perPurchase: 4, level: 0 },
-  crazy_zombie_voucher: { cost: 10, brains: true, perPurchase: 1, level: 25, gift: "ZombieActorRegularCrazy" },
-  valentine_gift: { cost: 10, brains: true, perPurchase: 1, level: 25, gift: "ZombieActorGardenCupid" },
-  valentine_gift_2012: { cost: 10, brains: true, perPurchase: 1, level: 25, gift: "ZombieActorGardenCupidPink" },
-  flower_zombie_pot: { cost: 5, brains: true, perPurchase: 1, level: 0, gift: "ZombieActorGardenTier3GreenFlower" },
   concentration: { cost: 1, brains: true, perPurchase: 2, level: 0 },
   golden_dice: { cost: 1, brains: true, perPurchase: 1, level: 0 },
   invasion_voucher: { cost: 2000, brains: false, perPurchase: 1, level: 0 },
@@ -50,16 +44,12 @@ export const CONCENTRATION_KEY = "concentration";
  *  ("Insta-Plow"), so a loot drop that is really a boost has to be resolved by name —
  *  mirroring the client's `assets.boosts.find(b => b.name === drop)`. Six boosts appear
  *  in loot tables (Insta-Grow/Harvest/Plow, Concentration, Golden Dice, Invasion
- *  Voucher); the rest are listed for completeness.
+ *  Voucher).
  *  KEEP IN SYNC with boosts.json `name`. */
 export const BOOST_BY_NAME: Readonly<Record<string, string>> = {
   "Insta-Grow": "insta_grow",
   "Insta-Harvest": "insta_harvest",
   "Insta-Plow": "insta_plow",
-  "Crazy Zombie Voucher": "crazy_zombie_voucher",
-  "Valentine Gift": "valentine_gift",
-  "Valentine Gift 2012": "valentine_gift_2012",
-  "Flower Zombie Pot": "flower_zombie_pot",
   Concentration: "concentration",
   "Golden Dice": "golden_dice",
   "Invasion Voucher": "invasion_voucher",

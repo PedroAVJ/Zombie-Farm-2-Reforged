@@ -14,6 +14,8 @@ const STEP_PERIOD = 0.26; // seconds per arm-swing half-cycle while walking
 const ARM_SWING = 0.5; // radians the arms rock fore/aft while walking
 const LEG_SWING = 0.32; // radians the legs rock while walking
 const WORK_SPEED = 8.5; // hoe-chop angular speed while working
+const LANTERN_HAND_DX = -5;
+const LANTERN_HAND_DY = 8;
 
 export class Actor {
   readonly container = new Container();
@@ -23,6 +25,7 @@ export class Actor {
   private frontArm!: Sprite;
   private bootBack!: Sprite;
   private bootFront!: Sprite;
+  private lantern!: Sprite;
   private plough!: Sprite;
   private bodyDef!: FarmerBodyDef;
 
@@ -35,6 +38,7 @@ export class Actor {
 
   private moving = false;
   private working = false;
+  private lanternEnabled = false;
   private workSpeed = 1; // multiplier on the hoe-chop rate (2 = twice as fast)
   private facing = 1; // +1 right, -1 left
   private phase = 0; // walk clock
@@ -50,6 +54,16 @@ export class Actor {
     this.bootBack = this.part("boot_back.png");
     this.bootFront = this.part("boot_front.png");
     this.head = this.part("malehead1.png");
+    // The source lantern asset has no useful attachment transform in the rig.
+    // Hang a reduced copy from the farmer's opposite hand and render it over the
+    // hand, matching the original game's bold, readable attachment layering.
+    this.lantern = new Sprite(this.assets.player["lamp.png"]);
+    this.lantern.anchor.set(0.5, 0);
+    this.lantern.scale.set(0.65);
+    this.lantern.zIndex = 8;
+    this.lantern.visible = false;
+    this.container.addChild(this.lantern);
+    this.positionLanternOnHand();
     // The hoe sits in the front hand (z between body and front arm), hidden until
     // the farmer works a plot.
     this.plough = this.part("plough.png");
@@ -103,7 +117,38 @@ export class Actor {
   setMoving(m: boolean) {
     if (m) this.working = false;
     this.moving = m;
+    this.updateLanternVisibility();
     if (!m) this.resetPose();
+  }
+
+  /** The carried lantern is visible at night except while both hands use the hoe. */
+  setLanternVisible(visible: boolean) {
+    this.lanternEnabled = visible;
+    this.updateLanternVisibility();
+  }
+
+  private updateLanternVisibility() {
+    this.lantern.visible = this.lanternEnabled && !this.working;
+  }
+
+  /** Follow the animated back-arm hand while letting the lantern hang naturally. */
+  private positionLanternOnHand() {
+    const rotation = this.backArm.rotation;
+    const cos = Math.cos(rotation);
+    const sin = Math.sin(rotation);
+    this.lantern.position.set(
+      this.backArm.x + LANTERN_HAND_DX * cos - LANTERN_HAND_DY * sin,
+      this.backArm.y + LANTERN_HAND_DX * sin + LANTERN_HAND_DY * cos,
+    );
+    this.lantern.rotation = rotation * 0.35;
+  }
+
+  /** World-space center of the lantern, used to center its night-light bubble. */
+  lanternWorldPosition() {
+    return {
+      x: this.container.x + this.lantern.x * this.facing,
+      y: this.container.y + this.lantern.y + this.lantern.height * 0.5,
+    };
   }
 
   // Enter/leave the hoeing animation (used at the end of a walk-to-plot job).
@@ -114,6 +159,7 @@ export class Actor {
     this.workSpeed = speed;
     this.workPhase = 0;
     this.plough.visible = w;
+    this.updateLanternVisibility();
     if (!w) this.resetPose();
   }
 
@@ -139,6 +185,7 @@ export class Actor {
     this.bootBack.rotation = 0;
     this.bootFront.y = this.bootFrontBaseY;
     this.bootFront.rotation = 0;
+    this.positionLanternOnHand();
     this.plough.position.set(this.ploughBaseX, this.ploughBaseY);
     this.plough.rotation = 0;
   }
@@ -169,6 +216,7 @@ export class Actor {
     this.bootFront.rotation = swing * LEG_SWING;
     this.bootBack.y = this.bootBackBaseY - Math.max(0, bob);
     this.bootFront.y = this.bootFrontBaseY - Math.max(0, -bob);
+    this.positionLanternOnHand();
   }
 
   // Hoeing: head tilted forward, BOTH arms held out FORWARD roughly parallel to the

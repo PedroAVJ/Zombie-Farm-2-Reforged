@@ -613,7 +613,7 @@ export class RaidScene {
     ]);
 
     this.buildTeamBars();
-    this.fillFaceBadge(this.pFace, zFace, 0x8bc34a);
+    this.fillFaceBadge(this.pFace, zFace, 0x8bc34a, 0.7);
     this.fillFaceBadge(this.eFace, eFace, 0xef5350);
     await this.buildAbilityStrip();
     [this.bubbleTexButterfly, this.bubbleTexBrain, this.brainTex] = await Promise.all([
@@ -719,7 +719,12 @@ export class RaidScene {
   }
 
   /** A circular framed portrait badge for a team bar (feet-agnostic head-ish crop). */
-  private fillFaceBadge(badge: Container, tex: Texture | null, ring: number) {
+  private fillFaceBadge(
+    badge: Container,
+    tex: Texture | null,
+    ring: number,
+    iconScale = 1,
+  ) {
     const R = 23;
     badge.removeChildren();
     badge.addChild(new Graphics().circle(0, 0, R).fill(0x1c1c1c));
@@ -728,9 +733,11 @@ export class RaidScene {
       sp.anchor.set(0.5, 0.5);
       // Leave a little more breathing room inside the badge and lower the crop so
       // the face sits naturally instead of pressing against the top rim.
-      const s = (R * 2 * 0.96) / Math.max(1, tex.width);
+      const s = ((R * 2 * 0.96) / Math.max(1, tex.width)) * iconScale;
       sp.scale.set(s);
-      sp.y = -tex.height * s * 0.14;
+      // Both portraits sit about one-quarter icon-height lower than the previous
+      // crop, without moving their circular frames.
+      sp.y = tex.height * s * 0.11;
       const mask = new Graphics().circle(0, 0, R).fill(0xffffff);
       badge.addChild(mask, sp);
       sp.mask = mask;

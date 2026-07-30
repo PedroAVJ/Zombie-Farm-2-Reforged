@@ -391,9 +391,10 @@ function applyOne(
       return { sequence, status: "applied" };
     }
     case "power.use": {
+      const boost = boostEcon(command.key);
+      if (!boost) return reject(sequence, "bad_item");
       const have = state.inventory[command.key] ?? 0;
       if (have < 1) return reject(sequence, "none_owned");
-      const boost = boostEcon(command.key);
       if (boost?.gift) {
         if (state.roster.some((unit) => unit.key === boost.gift)) return reject(sequence, "already_owned");
         const id = options.id();

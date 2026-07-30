@@ -449,6 +449,9 @@ async function main() {
   const setNight = (on: boolean) => {
     isNight = on;
     night.visible = on;
+    actor.setLanternVisible(on);
+    lanternInner.visible = on;
+    lanternOuter.visible = on;
     // Leave the viewport FILLER (the area beyond the hills backdrop) the daytime
     // hill/grass green in both modes — it's the exact colour of the backdrop hills
     // (sampled 0x67bb4e). At night the NightLayer's dark overlay covers the whole
@@ -3801,9 +3804,9 @@ async function main() {
       [actor.container, ...zombies.characterContainers(), ...(petActor ? [petActor.container] : [])],
     );
     field.update(dt);
-    // Farmer's lantern follows him (raised onto his body), lit only at night.
+    // Farmer's lantern light follows the lamp carried in his hand, only at night.
     if (isNight) {
-      const lx = actor.container.x, ly = actor.container.y - 34;
+      const { x: lx, y: ly } = actor.lanternWorldPosition();
       lanternInner.position.set(lx, ly);
       lanternOuter.position.set(lx, ly);
       // Rebuild the light-map (dark mask with the lights erased into it) and lay it

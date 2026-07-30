@@ -1666,9 +1666,13 @@ export async function applyInventoryActions(
       continue;
     }
     const have = inv[a.key] ?? 0;
+    const econ = boostEcon(a.key);
+    if (!econ) {
+      results.push({ id: a.id, status: "rejected", error: "bad_item" });
+      continue;
+    }
 
     if (a.type === "buy") {
-      const econ = boostEcon(a.key);
       const plan = planBuy(a, econ, bal, have, levelForXp(bal.xp));
       if (!plan.ok) {
         results.push({ id: a.id, status: "rejected", error: plan.error });
@@ -1691,13 +1695,12 @@ export async function applyInventoryActions(
       bal[plan.currency] -= plan.cost;
       inv[a.key] = have + plan.grant;
       results.push({ id: a.id, status: "applied" });
-    } else if (a.type === "use" && boostEcon(a.key)?.gift) {
+    } else if (a.type === "use" && econ.gift) {
       // Gift-voucher redeem: consume one voucher and grant the zombie it names, in one
       // batch. The unit is a VERIFIED grant (its key comes from the catalog, and the
       // voucher was bought at full price), so it's legitimately sellable — unlike the
       // old client-only spawn, which the server never saw.
-      const econ = boostEcon(a.key);
-      const plan = planGiftRedeem(a, econ, have, await rosterHasKey(db, accountId, econ!.gift!));
+      const plan = planGiftRedeem(a, econ, have, await rosterHasKey(db, accountId, econ.gift));
       if (!plan.ok) {
         results.push({ id: a.id, status: "rejected", error: plan.error });
         continue;

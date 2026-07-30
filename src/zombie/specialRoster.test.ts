@@ -48,14 +48,7 @@ describe("complete special-zombie roster", () => {
     expect(rewards.every((zombie) => !market.has(zombie.key))).toBe(true);
   });
 
-  it("routes every hidden gift to a distinct real catalog zombie", () => {
-    const giftKeys = boosts.filter((boost) => boost.effect === "gift").map((boost) => boost.giftZombieKey);
-    expect(giftKeys.sort()).toEqual([
-      "ZombieActorGardenCupid",
-      "ZombieActorGardenCupidPink",
-      "ZombieActorGardenTier3GreenFlower",
-      "ZombieActorRegularCrazy",
-    ]);
-    expect(giftKeys.every((key) => zombies.some((zombie) => zombie.key === key))).toBe(true);
+  it("does not expose zombie purchases as consumable powers", () => {
+    expect(boosts.filter((boost) => boost.effect === "gift")).toEqual([]);
   });
 });
