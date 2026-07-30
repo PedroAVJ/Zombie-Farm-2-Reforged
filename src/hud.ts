@@ -113,7 +113,7 @@ function functionalDescription(def: PlaceableDef): string | undefined {
     return `Raises your zombie army limit by ${def.armyMax}, so you can send more zombies on each invasion.`;
   if (def.plowFree) return "Plowing soil costs no gold while this stands on your farm.";
   if (def.fastWork)
-    return "Farming is instant — plow, plant, water and harvest finish with no waiting.";
+    return "Farming is instant — plowing, planting, and harvesting finish with no waiting.";
   if (def.mutantMonolith)
     return "Nearby mutation crops always mutate harvested zombies. Mutant zombies also grow in half the time.";
   if (def.combineFast)
@@ -1386,7 +1386,16 @@ export class Hud {
     searchInput.type = "search";
     searchInput.placeholder = "Search…";
     searchInput.setAttribute("aria-label", "Search the market");
-    searchRow.appendChild(searchInput);
+    const searchToggle = document.createElement("button");
+    searchToggle.className = "mkt-search-toggle";
+    searchToggle.type = "button";
+    searchToggle.title = "Search the market";
+    searchToggle.setAttribute("aria-label", "Search the market");
+    searchToggle.setAttribute("aria-expanded", "false");
+    searchToggle.innerHTML =
+      '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"></circle><path d="m15.5 15.5 5 5"></path></svg>';
+    searchRow.append(searchInput, searchToggle);
+    title.appendChild(searchRow);
 
     const grid = document.createElement("div");
     grid.className = "mkt-grid";
@@ -1632,7 +1641,35 @@ export class Hud {
     prevBtn.onclick = () => { if (page > 0) { page--; this.audio.play("menuClick"); renderGrid(); } };
     nextBtn.onclick = () => { page++; this.audio.play("menuClick"); renderGrid(); };
     // Live-filter as the player types; every keystroke returns to the first page.
-    searchInput.oninput = () => { search = searchInput.value; page = 0; renderGrid(); };
+    const collapseSearch = () => {
+      searchRow.classList.remove("expanded");
+      searchToggle.setAttribute("aria-expanded", "false");
+    };
+    searchToggle.onclick = () => {
+      searchRow.classList.add("expanded");
+      searchToggle.setAttribute("aria-expanded", "true");
+      searchInput.focus();
+    };
+    searchInput.onblur = () => collapseSearch();
+    searchInput.onkeydown = (event) => {
+      if (event.key !== "Escape") return;
+      if (searchInput.value) {
+        searchInput.value = "";
+        search = "";
+        page = 0;
+        searchRow.classList.remove("has-query");
+        renderGrid();
+      } else {
+        collapseSearch();
+        searchToggle.focus();
+      }
+    };
+    searchInput.oninput = () => {
+      search = searchInput.value;
+      page = 0;
+      searchRow.classList.toggle("has-query", !!search);
+      renderGrid();
+    };
 
     const renderSubs = () => {
       subsEl.innerHTML = "";
@@ -1659,6 +1696,7 @@ export class Hud {
         // A new category starts a fresh search.
         search = "";
         searchInput.value = "";
+        searchRow.classList.remove("has-query");
         tabsEl.querySelectorAll(".mkt-tab").forEach((e) => e.classList.remove("sel"));
         b.classList.add("sel");
         renderSubs();
@@ -1667,7 +1705,7 @@ export class Hud {
       tabsEl.appendChild(b);
     }
 
-    mkt.append(title, close, cur, tabsEl, subsEl, searchRow, grid, pager);
+    mkt.append(title, close, cur, tabsEl, subsEl, grid, pager);
     if (tutorialBoostMarket) {
       tabsEl.style.display = "none";
       subsEl.style.display = "none";

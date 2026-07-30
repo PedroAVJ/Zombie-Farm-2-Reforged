@@ -161,11 +161,15 @@ export class AudioManager {
     this.bgm.volume = 0.4 * this.musicVolume;
     this.ambBed.volume = 0.25 * this.ambienceVolume;
 
-    // `visibilitychange` covers background tabs/minimized windows while the
-    // focus events also cover switching to another desktop window.
+    // Hidden/backgrounded pages always stop audio. Focus events additionally
+    // support the optional visible-desktop-window mute behavior. Mobile browsers
+    // may emit pagehide/freeze more reliably than blur or visibilitychange.
     window.addEventListener("focus", this.syncFocusAudio);
     window.addEventListener("blur", this.syncFocusAudio);
+    window.addEventListener("pagehide", this.pauseForBackground);
+    window.addEventListener("pageshow", this.syncFocusAudio);
     document.addEventListener("visibilitychange", this.syncFocusAudio);
+    document.addEventListener("freeze", this.pauseForBackground);
 
     if (this.musicOn && this.canPlay()) void this.bgm.play().catch(() => this.arm());
     if (this.ambienceOn && this.canPlay()) this.startAmbience();
@@ -228,17 +232,24 @@ export class AudioManager {
   }
 
   private canPlay(): boolean {
-    return !this.muteWhenUnfocused || (!document.hidden && document.hasFocus());
+    return !document.hidden && (!this.muteWhenUnfocused || document.hasFocus());
   }
 
+  private pauseForBackground = () => {
+    this.activeBgm().pause();
+    this.stopAmbience();
+    for (const audio of this.oneShots) audio.pause();
+    this.oneShots.clear();
+    // Where supported, immediately relinquish the OS media session so a
+    // backgrounded PWA/tab no longer presents itself as active music.
+    try {
+      if (typeof navigator !== "undefined" && navigator.mediaSession)
+        navigator.mediaSession.playbackState = "none";
+    } catch { /* Media Session is optional and browser-controlled. */ }
+  };
+
   private syncFocusAudio = () => {
-    if (!this.canPlay()) {
-      this.activeBgm().pause();
-      this.stopAmbience();
-      for (const audio of this.oneShots) audio.pause();
-      this.oneShots.clear();
-      return;
-    }
+    if (!this.canPlay()) return this.pauseForBackground();
     if (this.musicOn) void this.activeBgm().play().catch(() => this.arm());
     if (this.ambienceOn) this.startAmbience();
   };

@@ -81,7 +81,7 @@ export const FARMERS_GUIDE_PAGES: GuidePage[] = [
     sections: [
       {
         title: "Raids",
-        body: "Choose an invasion, assemble an army, and time your focus actions during the fight. Tougher stages bring stronger enemies and better rewards. Fallen zombies are permanently lost, though they may be revived immediately after the battle for the cost of 1 brain.",
+        body: "Choose an invasion and assemble an army for the fight. Tougher stages bring stronger enemies and better rewards. Fallen zombies are permanently lost, though they may be revived immediately after the battle for the cost of 1 brain.",
       },
       {
         title: "Epic Bosses",
@@ -93,7 +93,7 @@ export const FARMERS_GUIDE_PAGES: GuidePage[] = [
     id: "social",
     label: "Social",
     title: "Friends & community",
-    intro: "Online Farm adds ways to play alongside other farmers. Community links are also here when you need a hand.",
+    intro: "Online Farm adds ways to play alongside other farmers.",
     sections: [
       {
         title: "Friends",
@@ -113,7 +113,7 @@ export const FARMERS_GUIDE_PAGES: GuidePage[] = [
     id: "project",
     label: "Project",
     title: "Open source & credits",
-    intro: "Zombie Farm 2 Reforged is a non-commercial, open-source fan reimplementation built for study and preservation.",
+    intro: "Zombie Farm 2 Reforged is a non-commercial, open-source fan reimplementation built for preservation.",
     sections: [
       {
         title: "GitHub",

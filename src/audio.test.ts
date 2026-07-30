@@ -115,6 +115,29 @@ describe("AudioManager focus muting", () => {
     expect(ambience.paused).toBe(true);
   });
 
+  it("always pauses a hidden mobile page even when focus muting is disabled", () => {
+    storage.set(SETTINGS_KEY, JSON.stringify({ muteWhenUnfocused: false }));
+    new AudioManager();
+    const [music, ambience] = MockAudio.instances;
+
+    hidden = true;
+    document.dispatchEvent(new Event("visibilitychange"));
+
+    expect(music.paused).toBe(true);
+    expect(ambience.paused).toBe(true);
+  });
+
+  it("stops audio on mobile pagehide even before hidden state updates", () => {
+    storage.set(SETTINGS_KEY, JSON.stringify({ muteWhenUnfocused: false }));
+    new AudioManager();
+    const [music, ambience] = MockAudio.instances;
+
+    windowTarget.dispatchEvent(new Event("pagehide"));
+
+    expect(music.paused).toBe(true);
+    expect(ambience.paused).toBe(true);
+  });
+
   it("restores and applies independent channel volumes", () => {
     storage.set(SETTINGS_KEY, JSON.stringify({
       musicVolume: 0.5, sfxVolume: 0.25, ambienceVolume: 0.4,
