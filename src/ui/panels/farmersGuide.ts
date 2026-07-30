@@ -42,6 +42,30 @@ export const FARMERS_GUIDE_PAGES: GuidePage[] = [
     ],
   },
   {
+    id: "install",
+    label: "Install",
+    title: "Installing the App",
+    intro: "Zombie Farm Reforged can be installed straight from your browser, no app store required.",
+    sections: [
+      {
+        title: "Why Install",
+        body: "Installing puts a Zombie Farm icon on your desktop, dock, or home screen, so the game opens in one tap instead of through a bookmark. It also runs in its own window with no address bar or browser tabs taking up space, which leaves more room for your farm. The game files are cached on your device after the first visit, so later launches start faster.",
+      },
+      {
+        title: "On Desktop",
+        body: "In Chrome or Edge, open the game and look for the install icon at the right-hand end of the address bar, or find Install in the browser menu. In Safari on macOS, choose File and then Add to Dock. Once installed, the game behaves like any other app and can be pinned, uninstalled, or launched normally.",
+      },
+      {
+        title: "On Phones and Tablets",
+        body: "In Safari on iPhone or iPad, tap the Share button and choose Add to Home Screen. In Chrome on Android, open the browser menu and choose Install app or Add to Home screen. The installed app runs fullscreen, which is the most comfortable way to play on a small display.",
+      },
+      {
+        title: "Saves and Updates",
+        body: "An installed app can keep its own separate browser storage, so a Local Farm played in a browser tab may not appear inside the installed app. Export a backup from Settings before installing, then import it once the app is open. A Local Farm can be played without an internet connection once its artwork has been cached, while an Online Farm always needs a connection. New versions arrive automatically: when one is ready, a small prompt appears so you can reload at a safe moment rather than in the middle of an invasion.",
+      },
+    ],
+  },
+  {
     id: "currency",
     label: "Currency",
     title: "Currency",
