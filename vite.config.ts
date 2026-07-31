@@ -56,7 +56,9 @@ export default defineConfig(({ mode }) => {
     // Build identity for crash diagnostics: CI exports GITHUB_SHA, so a pasted report
     // names the exact bundle. Falls back to "dev" for local builds.
     define: {
-      __BUILD_SHA__: JSON.stringify((process.env.GITHUB_SHA ?? "dev").slice(0, 7)),
+      __BUILD_SHA__: JSON.stringify((
+        process.env.GITHUB_SHA ?? process.env.VERCEL_GIT_COMMIT_SHA ?? "dev"
+      ).slice(0, 7)),
     },
     build: {
       // Diagnostics are close to useless against minified frames ("t is not a function
