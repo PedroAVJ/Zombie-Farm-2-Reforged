@@ -102,7 +102,7 @@ must also update [SECURITY.md](SECURITY.md) and [server/README.md](server/README
 - Free-placed 4x4 plots with plow, plant, harvest, zombie-hole, and offline timers.
 - **Multi-plot plow selection**: drag to preview a rectangle of 4x4 plots (invalid plots stay visible in red and are skipped) and commit them as one batch of plow jobs. On touch the preview can be repositioned and resized with edge handles before a confirming tap.
 - Queued farm jobs keep advancing while the browser tab is hidden, and jobs replayed from elapsed offline time are stamped at their real completion moment, so growth timers stay accurate across backgrounding.
-- Local Farm persists unfinished farmer jobs across close/reopen and replays them from elapsed wall time.
+- Local Farm persists unfinished farmer jobs across close/reopen and completes the entire valid queue when the farm returns, preserving the original game's reload shortcut.
 - Objects placed against the farm's south/east edge (notably fruit trees) are harvestable — their walk-to point is clamped onto the grid, and a job with an unreachable destination cancels instead of jamming the queue.
 - Source-derived crop and zombie catalogs with level/currency/grave gates.
 - Local gold, brains, XP, level curve, item economy, and level-up unlock popup. A new farm starts with 400 gold and **1 brain** (the tutorial spends it on Insta-Grow).

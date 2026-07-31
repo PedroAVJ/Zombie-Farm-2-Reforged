@@ -292,7 +292,7 @@ describe("JobSystem elapsed-time catch-up", () => {
     expect(notices).toEqual([["gold", 10], ["gold", 25]]);
   });
 
-  it("serializes pending Local Farm intent and replays it after reopening", () => {
+  it("serializes pending Local Farm intent and completes it on an immediate reopen", () => {
     vi.useFakeTimers();
     vi.setSystemTime(1_000_000);
     const firstWalk = new FakeWalk();
@@ -315,7 +315,6 @@ describe("JobSystem elapsed-time catch-up", () => {
     const saved = first.serializePending();
     expect(saved?.jobs).toMatchObject([{ kind: "till", oc: 4, or: 8 }]);
 
-    vi.setSystemTime(1_010_000);
     const restored = new JobSystem(
       field as never, { setWorking: () => {} } as never, new FakeWalk() as never, state as never, () => {},
     );
@@ -323,5 +322,67 @@ describe("JobSystem elapsed-time catch-up", () => {
 
     expect(restored.busy).toBe(false);
     expect(state.gold).toBe(90);
+  });
+
+  it("completes restored plow, plant, harvest, and fruit-tree jobs at reopen time", () => {
+    vi.useFakeTimers();
+    const reopenedAt = 2_000_000;
+    vi.setSystemTime(reopenedAt);
+    const walk = new FakeWalk();
+    const completed: string[] = [];
+    const plantedAt: number[] = [];
+    const field = {
+      highlightLayer: new Container(), plowHighlightLayer: new Container(), labelLayer: new Container(),
+      resolveTill: (col: number, row: number) => ({ valid: true, oc: col, or: row }),
+      reserveTill: () => {}, unreserveTill: () => {},
+      plotOriginAt: (col: number, row: number) => ({ oc: col, or: row }),
+      canPlant: () => true, isRipe: () => true, ripeZombieAt: () => false,
+      plotCenterOf: (col: number, row: number) => ({ x: col, y: row }),
+      objectHighlightArea: () => null,
+      hasFastWork: () => false, hasPlowFree: () => false,
+      tillAt: (col: number, row: number) => { completed.push(`till:${col},${row}`); return true; },
+      plantAt: (col: number, row: number, _cfg: unknown, at: number) => {
+        completed.push(`plant:${col},${row}`);
+        plantedAt.push(at);
+        return true;
+      },
+      harvestAt: (col: number, row: number) => {
+        completed.push(`harvest:${col},${row}`);
+        return { name: "Carrot", sell: 3, xp: 2, growMs: 60_000, isZombie: false, fertilized: false };
+      },
+      objectDefOf: () => ({ name: "Apple Tree" }),
+      harvestObject: (id: string) => { completed.push(`tree:${id}`); return 5; },
+    };
+    const state = {
+      gold: 100, brains: 0, level: 1,
+      spendGold: (amount: number) => { state.gold -= amount; },
+      addGold: (amount: number) => { state.gold += amount; },
+      addXp: () => {}, farmerHarvestGold: (amount: number) => amount,
+      onFarm: null, onTreeHarvest: null, canMutateOnline: null,
+    };
+    const crop = {
+      key: "carrot", name: "Carrot", stages: [], growMs: 60_000,
+      cost: 1, sell: 3, xp: 2, unlockLevel: 1,
+    };
+    const jobs = new JobSystem(
+      field as never, { setWorking: () => {} } as never, walk as never, state as never, () => {},
+    );
+
+    jobs.restorePending({
+      savedAt: reopenedAt,
+      jobs: [
+        { kind: "till", oc: 0, or: 0, cx: 0, cy: 0 },
+        { kind: "plant", oc: 1, or: 0, cx: 1, cy: 0, cropKey: "carrot" },
+        { kind: "harvest", oc: 2, or: 0, cx: 2, cy: 0 },
+        { kind: "harvestTree", oc: -1, or: -1, cx: 3, cy: 0, objectId: "tree-1" },
+      ],
+    }, (key) => key === crop.key ? crop : undefined);
+
+    expect(completed).toEqual([
+      "till:0,0", "plant:1,0", "harvest:2,0", "tree:tree-1",
+    ]);
+    expect(plantedAt).toEqual([reopenedAt]);
+    expect(state.gold).toBe(97);
+    expect(jobs.busy).toBe(false);
   });
 });

@@ -169,7 +169,7 @@ export class JobSystem {
   }
 
   /** Persist action intent, not Pixi animation state. A partially-walked/worked
-   * action safely restarts from its target and elapsed wall time replays it. */
+   * action safely restarts from its target and completes when the farm reopens. */
   serializePending(): FarmJobQueueSave | undefined {
     const jobs = [...(this.active ? [this.active] : []), ...this.queue];
     if (!jobs.length) return undefined;
@@ -189,7 +189,12 @@ export class JobSystem {
   }
 
   /** Restore a Local Farm queue after the field and objects are hydrated. Invalid
-   * or obsolete targets are dropped by the same validation used for fresh taps. */
+   * or obsolete targets are dropped by the same validation used for fresh taps.
+   *
+   * The original mobile game completed queued work after a close/reopen. Preserve
+   * that familiar Local Farm workflow here: reopening drains every valid saved job,
+   * regardless of how little wall time passed. Live/backgrounded queues still use
+   * advanceElapsed() and therefore retain their normal timing until a real reload. */
   restorePending(
     save: FarmJobQueueSave | undefined,
     cropOf: (key: string) => CropConfig | undefined,
@@ -206,13 +211,33 @@ export class JobSystem {
         this.enqueue(job.kind, job.oc, job.or);
       }
     }
-    const oldest = save.jobs.reduce(
-      (value, job) => Number.isFinite(job.queuedAt) ? Math.min(value, job.queuedAt!) : value,
-      Number.POSITIVE_INFINITY,
-    );
-    const savedAt = Number.isFinite(oldest) ? oldest
-      : Number.isFinite(save.savedAt) ? save.savedAt : Date.now();
-    this.advanceElapsed(Math.max(0, Date.now() - savedAt) / 1000, true);
+    this.finishRestoredQueue();
+  }
+
+  /** Complete a queue restored by reopening the Local Farm. Reuse the ordinary
+   * movement/work pipeline so costs, rewards, capacity gates, quests, and invalid
+   * target handling stay identical to foreground play. All planting completions
+   * are stamped at reopen time rather than being backdated by an invented interval. */
+  private finishRestoredQueue() {
+    const reopenedAt = Date.now();
+    const prior = this.audioSuppressed;
+    const priorReplayNow = this.replayNow;
+    this.audioSuppressed = true;
+    try {
+      while (this.busy || this.walk.moving) {
+        this.replayNow = reopenedAt;
+        this.update(CATCH_UP_STEP_SEC);
+
+        // Match advanceElapsed's malformed-target guard. Normal jobs either own a
+        // live walk target or are dropped by update(), so the drain always converges.
+        if (this.active && this.phase === "walk" && !this.walk.moving) break;
+
+        this.walk.update(CATCH_UP_STEP_SEC);
+      }
+    } finally {
+      this.audioSuppressed = prior;
+      this.replayNow = priorReplayNow;
+    }
   }
 
   /** Advance farmer movement and queued work by real elapsed time.
