@@ -22,6 +22,8 @@ const STATE_PATH = "personal-cloud/farm.json";
 const LEASE_MS = 10 * 60 * 1000;
 const MAX_BODY_BYTES = 1_500_000;
 const MAX_RETRIES = 6;
+const INSTALL_TICKET_MS = 30 * 60 * 1000;
+const MAX_ACCESS_KEYS = 12;
 
 type CloudWriter = {
   clientId: string;
@@ -39,6 +41,8 @@ type CloudState = {
   updatedAt: number;
   save: unknown | null;
   writer: CloudWriter | null;
+  accessKeys?: { hash: string; createdAt: number; label: string }[];
+  installTicket?: { hash: string; expiresAt: number } | null;
 };
 
 type ReadState = { state: CloudState; etag: string };
@@ -52,13 +56,21 @@ function secureEqual(left: string, right: string): boolean {
   return mismatch === 0;
 }
 
-function authorized(req: VercelRequest): boolean {
-  const expected = process.env.PERSONAL_CLOUD_KEY_HASH?.trim();
+function bearerToken(req: VercelRequest): string | null {
   const header = Array.isArray(req.headers.authorization)
     ? req.headers.authorization[0]
     : req.headers.authorization;
-  const token = header?.match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
-  return !!expected && !!token && secureEqual(sha256(token), expected);
+  return header?.match(/^Bearer\s+(.+)$/i)?.[1]?.trim() ?? null;
+}
+
+async function authorized(req: VercelRequest): Promise<boolean> {
+  const expected = process.env.PERSONAL_CLOUD_KEY_HASH?.trim();
+  const token = bearerToken(req);
+  if (!expected || !token) return false;
+  const hash = sha256(token);
+  if (secureEqual(hash, expected)) return true;
+  const current = await readState();
+  return current?.state.accessKeys?.some((key) => secureEqual(key.hash, hash)) ?? false;
 }
 
 function object(value: unknown): value is Record<string, unknown> {
@@ -74,13 +86,19 @@ function validSave(value: unknown): boolean {
 function validState(value: unknown): value is CloudState {
   if (!object(value) || value.version !== 1 || !Number.isSafeInteger(value.revision)) return false;
   if (typeof value.updatedAt !== "number" || (value.save !== null && !validSave(value.save))) return false;
-  if (value.writer === null) return true;
-  if (!object(value.writer)) return false;
   const writer = value.writer;
-  return typeof writer.clientId === "string" && typeof writer.sessionId === "string" &&
+  const writerValid = writer === null || (object(writer) &&
+    typeof writer.clientId === "string" && typeof writer.sessionId === "string" &&
     typeof writer.label === "string" && Number.isSafeInteger(writer.generation) &&
     typeof writer.tokenHash === "string" && typeof writer.lastActivityAt === "number" &&
-    typeof writer.leaseUntil === "number";
+    typeof writer.leaseUntil === "number");
+  const accessValid = value.accessKeys === undefined || (Array.isArray(value.accessKeys) && value.accessKeys.every((key) =>
+    object(key) && typeof key.hash === "string" && typeof key.createdAt === "number" && typeof key.label === "string"
+  ));
+  const ticket = value.installTicket;
+  const ticketValid = ticket === undefined || ticket === null ||
+    (object(ticket) && typeof ticket.hash === "string" && typeof ticket.expiresAt === "number");
+  return writerValid && accessValid && ticketValid;
 }
 
 async function readState(): Promise<ReadState | null> {
@@ -117,7 +135,15 @@ async function writeState(state: CloudState, etag: string | null): Promise<void>
 }
 
 function freshState(): CloudState {
-  return { version: 1, revision: 0, updatedAt: Date.now(), save: null, writer: null };
+  return {
+    version: 1,
+    revision: 0,
+    updatedAt: Date.now(),
+    save: null,
+    writer: null,
+    accessKeys: [],
+    installTicket: null,
+  };
 }
 
 function text(value: unknown, max = 128): string | null {
@@ -300,23 +326,107 @@ async function release(body: Record<string, unknown>, res: VercelResponse): Prom
   }
 }
 
+async function issueInstallTicket(res: VercelResponse): Promise<void> {
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    const current = await readState();
+    const state = current?.state ?? freshState();
+    const now = Date.now();
+    const ticket = `zfpi_${randomBytes(32).toString("base64url")}`;
+    const next: CloudState = {
+      ...state,
+      revision: state.revision + 1,
+      updatedAt: now,
+      installTicket: { hash: sha256(ticket), expiresAt: now + INSTALL_TICKET_MS },
+    };
+    try {
+      await writeState(next, current?.etag ?? null);
+      return json(res, 200, { ok: true, ticket, expiresAt: now + INSTALL_TICKET_MS });
+    } catch (error) {
+      if (!retryable(error) || attempt === MAX_RETRIES - 1) throw error;
+      await retryDelay(attempt);
+    }
+  }
+}
+
+async function exchangeInstallTicket(body: Record<string, unknown>, res: VercelResponse): Promise<void> {
+  const ticket = text(body.ticket, 256);
+  const label = text(body.label, 80) ?? "iPhone Home Screen app";
+  if (!ticket || !/^zfpi_[A-Za-z0-9_-]{32,128}$/.test(ticket)) {
+    return json(res, 401, { code: "bad_install_ticket" });
+  }
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    const current = await readState();
+    const now = Date.now();
+    const stored = current?.state.installTicket;
+    if (!current || !stored || stored.expiresAt <= now || !secureEqual(stored.hash, sha256(ticket))) {
+      return json(res, 401, { code: "bad_install_ticket" });
+    }
+    const accessToken = `zfpc_${randomBytes(32).toString("base64url")}`;
+    const accessKeys = [
+      ...(current.state.accessKeys ?? []).slice(-(MAX_ACCESS_KEYS - 1)),
+      { hash: sha256(accessToken), createdAt: now, label },
+    ];
+    const next: CloudState = {
+      ...current.state,
+      revision: current.state.revision + 1,
+      updatedAt: now,
+      accessKeys,
+      installTicket: null,
+    };
+    try {
+      await writeState(next, current.etag);
+      return json(res, 200, { ok: true, accessToken });
+    } catch (error) {
+      if (!retryable(error) || attempt === MAX_RETRIES - 1) throw error;
+      await retryDelay(attempt);
+    }
+  }
+}
+
+async function revokeAccess(req: VercelRequest, res: VercelResponse): Promise<void> {
+  const token = bearerToken(req);
+  if (!token) return json(res, 200, { ok: true });
+  const tokenHash = sha256(token);
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    const current = await readState();
+    if (!current) return json(res, 200, { ok: true });
+    const accessKeys = (current.state.accessKeys ?? []).filter((key) => !secureEqual(key.hash, tokenHash));
+    if (accessKeys.length === (current.state.accessKeys ?? []).length) return json(res, 200, { ok: true });
+    const next: CloudState = {
+      ...current.state,
+      revision: current.state.revision + 1,
+      updatedAt: Date.now(),
+      accessKeys,
+    };
+    try {
+      await writeState(next, current.etag);
+      return json(res, 200, { ok: true });
+    } catch (error) {
+      if (!retryable(error) || attempt === MAX_RETRIES - 1) throw error;
+      await retryDelay(attempt);
+    }
+  }
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   if (req.method !== "POST") return json(res, 405, { code: "method_not_allowed" });
   if (!process.env.BLOB_READ_WRITE_TOKEN && !process.env.VERCEL_OIDC_TOKEN) {
     return json(res, 503, { code: "cloud_not_configured" });
   }
   if (!process.env.PERSONAL_CLOUD_KEY_HASH) return json(res, 503, { code: "cloud_auth_not_configured" });
-  if (!authorized(req)) return json(res, 401, { code: "bad_cloud_key" });
-
   const contentLength = Number(req.headers["content-length"] ?? 0);
   if (contentLength > MAX_BODY_BYTES) return json(res, 413, { code: "save_too_large" });
   const body = object(req.body) ? req.body : {};
   try {
+    if (body.action === "exchange-install-ticket") return await exchangeInstallTicket(body, res);
+    if (!await authorized(req)) return json(res, 401, { code: "bad_cloud_key" });
     if (body.action === "open") return await openFarm(body, res);
     if (body.action === "save") return await saveFarm(body, res);
     if (body.action === "heartbeat") return await heartbeat(body, res);
     if (body.action === "status") return await status(body, res);
     if (body.action === "release") return await release(body, res);
+    if (body.action === "issue-install-ticket") return await issueInstallTicket(res);
+    if (body.action === "revoke-access") return await revokeAccess(req, res);
     return json(res, 400, { code: "bad_action" });
   } catch (error) {
     console.error("[personal-cloud] request failed", error instanceof Error ? error.message : error);

@@ -9,6 +9,7 @@ const PAIRING_PARAM = "personal-cloud";
 const SAVE_DELAY_MS = 750;
 const RETRY_MS = 10_000;
 const HEARTBEAT_MS = 60_000;
+const INSTALL_COOKIE = "zf2r_personal_cloud_install";
 
 type Connection = { token: string; profileId: string };
 type WriterCredential = { token: string; generation: number; leaseUntil: number };
@@ -94,6 +95,28 @@ function endpoint(): string {
   return new URL("api/personal-cloud", new URL(import.meta.env.BASE_URL, location.href)).toString();
 }
 
+function standaloneApp(): boolean {
+  return matchMedia("(display-mode: standalone)").matches ||
+    (navigator as Navigator & { standalone?: boolean }).standalone === true;
+}
+
+function appleMobileBrowser(): boolean {
+  return /iPhone|iPad|iPod/i.test(navigator.userAgent) ||
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+}
+
+function installCookie(value: string, maxAge: number): void {
+  const path = new URL(import.meta.env.BASE_URL, location.href).pathname;
+  const secure = location.protocol === "https:" ? "; Secure" : "";
+  document.cookie = `${INSTALL_COOKIE}=${encodeURIComponent(value)}; Max-Age=${maxAge}; Path=${path}; SameSite=Strict${secure}`;
+}
+
+function readInstallCookie(): string | null {
+  const prefix = `${INSTALL_COOKIE}=`;
+  const pair = document.cookie.split("; ").find((item) => item.startsWith(prefix));
+  return pair ? decodeURIComponent(pair.slice(prefix.length)) : null;
+}
+
 async function readJson(response: Response): Promise<ApiPayload> {
   try { return await response.json() as ApiPayload; }
   catch { return {}; }
@@ -116,6 +139,31 @@ export function capturePersonalCloudPairingLink(): boolean {
   const suffix = params.toString();
   history.replaceState(history.state, "", `${location.pathname}${location.search}${suffix ? `#${suffix}` : ""}`);
   return true;
+}
+
+/** iOS intentionally gives an installed Home Screen web app fresh local storage.
+ * Safari does copy first-party cookies at install time, so exchange a short-lived,
+ * single-use ticket for a device access key on the standalone app's first launch. */
+export async function capturePersonalCloudHomeScreenTicket(): Promise<boolean> {
+  if (!standaloneApp() || connection()) return false;
+  const ticket = readInstallCookie();
+  if (!ticket || !/^zfpi_[A-Za-z0-9_-]{32,128}$/.test(ticket)) return false;
+  try {
+    const response = await fetch(endpoint(), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "exchange-install-ticket", ticket, label: deviceLabel() }),
+      cache: "no-store",
+      credentials: "omit",
+    });
+    const data = await readJson(response);
+    const token = typeof data.accessToken === "string" ? data.accessToken : "";
+    if (!response.ok || !validPairingToken(token)) return false;
+    const profile = activeProfile();
+    storageSet(localStorage, CONNECTION_KEY, { token, profileId: profile.id } satisfies Connection);
+    installCookie("", 0);
+    return true;
+  } catch { return false; }
 }
 
 export function personalCloudConnectionStatus(): PersonalCloudUiStatus {
@@ -245,6 +293,18 @@ export class PersonalCloudClient {
     return personalCloudPairingUrl()!;
   }
 
+  async prepareHomeScreenInstall(): Promise<boolean> {
+    if (!appleMobileBrowser() || standaloneApp()) return false;
+    try {
+      const { response, data } = await this.request({ action: "issue-install-ticket" });
+      const ticket = typeof data.ticket === "string" ? data.ticket : "";
+      const expiresAt = typeof data.expiresAt === "number" ? data.expiresAt : 0;
+      if (!response.ok || !/^zfpi_[A-Za-z0-9_-]{32,128}$/.test(ticket) || expiresAt <= Date.now()) return false;
+      installCookie(ticket, Math.max(1, Math.floor((expiresAt - Date.now()) / 1000)));
+      return true;
+    } catch { return false; }
+  }
+
   private loseWriter(data: ApiPayload): void {
     if (!this.active) return;
     this.active = false;
@@ -353,6 +413,8 @@ export class PersonalCloudClient {
     try {
       if (this.credential) await this.request({ action: "release" });
     } catch { /* the local unlink must still succeed while offline */ }
+    try { await this.request({ action: "revoke-access" }); }
+    catch { /* a leaked/offline server cannot block unlinking this device */ }
     this.pause();
     disconnectPersonalCloudLocally();
   }

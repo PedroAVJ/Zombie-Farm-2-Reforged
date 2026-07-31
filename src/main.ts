@@ -71,6 +71,7 @@ import {
   showLocalUnavailable, usesOnlineGameplay, type PlayMode,
 } from "./playMode";
 import {
+  capturePersonalCloudHomeScreenTicket,
   capturePersonalCloudPairingLink,
   disconnectPersonalCloudLocally,
   personalCloudConnectionStatus,
@@ -100,7 +101,8 @@ async function main() {
   initPlatform();
   // Pairing credentials live in the URL fragment, which is never sent to Vercel.
   // Capture + erase it before any network request or farm-mode decision.
-  capturePersonalCloudPairingLink();
+  const pairedFromLink = capturePersonalCloudPairingLink();
+  if (!pairedFromLink) await capturePersonalCloudHomeScreenTicket();
   // Local Farm and Online Farm are deliberately independent save domains. Choose
   // before touching auth so Local Farm never makes account/gameplay server calls,
   // even when this browser still has a valid Online Farm session.
@@ -130,6 +132,7 @@ async function main() {
           personalCloud = null;
         }
       }
+      if (personalCloudOpen && pairedFromLink) await startupCloud.prepareHomeScreenInstall();
     } catch (error) {
       console.warn("[personal-cloud] startup unavailable", error);
       personalCloudMessage = "Personal Cloud couldn't connect. This device is continuing from its Local Farm save.";
