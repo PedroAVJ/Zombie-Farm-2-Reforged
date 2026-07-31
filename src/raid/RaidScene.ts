@@ -913,6 +913,10 @@ export class RaidScene {
     // everyone else, including a boss with no structure (sky-perch UFO), is in front.
     const layer = u.isBoss && this.perchLayer ? this.bossBackLayer : this.tokenLayer;
     layer.addChild(root);
+    // Player tokens are visual only: focus/ability input lives in the separate
+    // bubble and HUD controls. Keeping zombies out of pointer hit-testing lets the
+    // visually lower Circus trapeze remain tappable even behind a Large zombie.
+    if (u.team === "player") root.eventMode = "none";
     // A summoned wall (carrotWall / junkWall) is tappable to chip it (ZFFightWall touch),
     // in addition to the zombies attacking it.
     if (u.isWall) {
