@@ -329,6 +329,55 @@ export function openSettings(hud: Hud): void {
       timeWarp,
       noteEl("Advances only this Local Farm's timers, then reloads. Your device clock and Online Farm never change."),
     );
+
+    const cloud = hud.getPersonalCloudStatus?.();
+    if (cloud) {
+      const cloudRow = document.createElement("div");
+      cloudRow.className = "set-row";
+      const cloudLabel = document.createElement("span");
+      cloudLabel.textContent = "Personal Cloud";
+      const cloudControls = document.createElement("div");
+      cloudControls.className = "set-username-controls";
+      const cloudState = document.createElement("span");
+      cloudState.className = "set-cloud-status";
+      cloudState.textContent = !cloud.linked ? "Not connected" : cloud.active
+        ? cloud.lastSyncedAt ? `Synced ${relTime(cloud.lastSyncedAt)}` : "Connected"
+        : `Linked to ${cloud.profileName ?? "another profile"}`;
+      cloudControls.append(cloudState);
+
+      if (cloud.linked && hud.onCopyPersonalCloudLink) {
+        const copyLink = document.createElement("button");
+        copyLink.className = "set-action";
+        copyLink.textContent = "Copy iPhone Link";
+        copyLink.onclick = async () => {
+          copyLink.disabled = true;
+          const copied = await hud.onCopyPersonalCloudLink!();
+          copyLink.disabled = false;
+          hud.showToast(copied
+            ? "Private Personal Cloud link copied. Open it on your iPhone."
+            : "Couldn't copy the link on this browser.");
+        };
+        cloudControls.append(copyLink);
+      }
+      if (cloud.linked && hud.onDisconnectPersonalCloud) {
+        const disconnect = document.createElement("button");
+        disconnect.className = "set-action";
+        disconnect.textContent = "Disconnect Device";
+        disconnect.onclick = async () => {
+          disconnect.disabled = true;
+          disconnect.textContent = "Disconnecting…";
+          await hud.onDisconnectPersonalCloud!();
+        };
+        cloudControls.append(disconnect);
+      }
+      cloudRow.append(cloudLabel, cloudControls);
+      localStorageControls.push(
+        cloudRow,
+        noteEl(cloud.message ?? (cloud.linked
+          ? "Your active Local Farm syncs to a private Vercel store. One device writes at a time; another device can explicitly take over after opening your private link."
+          : "Open your private Personal Cloud pairing link on this device to connect its active Local Farm.")),
+      );
+    }
   }
   // Diagnostics: available in BOTH farm modes, because crashes happen in both. Copying
   // is entirely local (clipboard) — nothing is transmitted. Testers paste it into the

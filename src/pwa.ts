@@ -7,16 +7,23 @@
 // 'unsafe-inline' for scripts — this module is bundled, so it runs under
 // script-src 'self'.
 //
-// registerType is "prompt": a new version never reloads on its own (a silent
-// reload mid-raid would be awful). Instead we surface a small toast and let the
-// player tap "Reload" when they're ready.
+// registerType is "prompt": a newly-discovered version never interrupts live
+// play. An explicit browser refresh is different: the player already chose to
+// reload, so if that navigation discovers a waiting worker we activate it and
+// perform the one required follow-up reload automatically.
 import { registerSW } from "virtual:pwa-register";
 import type { PlayMode } from "./playMode";
+import { shouldActivateWaitingWorker } from "./pwaUpdate";
 
 /** Retained so a non-service-worker caller (the ruleset-skew check) can reuse the
  *  SW's activate-and-reload path when an update is genuinely waiting. Null in dev,
  *  in browsers without service workers, and before initPwa runs. */
 let updateSW: ((reloadPage?: boolean) => Promise<void>) | null = null;
+
+function navigationType(): string | undefined {
+  const entry = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined;
+  return entry?.type;
+}
 
 /** Wire up the service worker. Call once at startup. Safe to call in dev. */
 export function initPwa(mode: PlayMode): void {
@@ -26,6 +33,12 @@ export function initPwa(mode: PlayMode): void {
 
   updateSW = registerSW({
     onNeedRefresh() {
+      if (shouldActivateWaitingWorker(navigationType())) {
+        // registerSW assigns its updater before this callback is delivered, but a
+        // microtask also makes that ordering explicit for mocked/test registers.
+        queueMicrotask(() => void updateSW?.(true));
+        return;
+      }
       showUpdateToast("A new version is ready.", () => void updateSW?.(true)); // skip waiting + reload
     },
     onOfflineReady() {

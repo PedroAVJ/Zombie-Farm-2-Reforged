@@ -420,6 +420,30 @@
 #hud .set-username-save:disabled { opacity: .5; cursor: default; }
 #hud .set-username-status { min-height: 15px; margin: 3px 2px 0; font-size: 12px; color: #cbe6a0; }
 #hud .set-username-status.error { color: #ffb09f; }
+#hud .set-cloud-status { align-self: center; color: #dff8b8; font-size: 12px;
+  white-space: nowrap; }
+
+/* Personal Cloud's writer gate can appear before Pixi/Hud finishes booting, so it
+   is rooted directly under <body> rather than #hud. It intentionally sits above
+   the boot plate and has no backdrop-dismiss path: the player must either take
+   over the cloud writer lease or explicitly continue as an independent Local Farm. */
+.personal-cloud-gate { position: fixed; inset: 0; z-index: 100002; display: grid;
+  place-items: center; box-sizing: border-box; padding: 18px;
+  background: rgba(18, 28, 12, .82); font-family: "Trebuchet MS", system-ui, sans-serif; }
+.personal-cloud-gate-panel { width: min(430px, 94vw); box-sizing: border-box;
+  padding: 22px; border: 3px solid #3b250f; border-radius: 16px;
+  background: linear-gradient(#774825, #4d2c16); color: #fff4cf;
+  box-shadow: 0 16px 50px rgba(0, 0, 0, .55); text-align: center; }
+.personal-cloud-gate-panel h2 { margin: 0 0 12px; font-size: 23px; }
+.personal-cloud-gate-panel p { margin: 8px 0; line-height: 1.4; }
+.personal-cloud-gate-status { min-height: 20px; color: #ffd2a5; font-size: 13px; }
+.personal-cloud-gate-buttons { display: flex; flex-wrap: wrap; justify-content: center;
+  gap: 10px; margin-top: 14px; }
+.personal-cloud-gate-buttons button { min-width: 165px; padding: 10px 14px;
+  border: 2px solid #241506; border-radius: 9px; background: #d5611a; color: white;
+  font: 700 14px/1.1 "Trebuchet MS", system-ui, sans-serif; cursor: pointer; }
+.personal-cloud-gate-buttons button:first-child { background: #6f7f55; }
+.personal-cloud-gate-buttons button:disabled { opacity: .55; cursor: default; }
 #hud .set-version { margin-top: 12px; padding-top: 9px; border-top: 1px solid rgba(255,255,255,.15);
   color: #b6a986; font: 700 11px system-ui, sans-serif; text-align: center; text-shadow: none; }
 #hud .toggle { width: 62px; height: 28px; border-radius: 15px; border: 2px solid #1e1207;

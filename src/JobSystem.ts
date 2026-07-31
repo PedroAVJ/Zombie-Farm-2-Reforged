@@ -52,6 +52,9 @@ interface Job {
 }
 
 export class JobSystem {
+  /** Save semantic queue intent as soon as work is enqueued. Main coalesces this
+   * hook so a dragged multi-plot selection still produces one durable snapshot. */
+  onQueueChange: (() => void) | null = null;
   private queue: Job[] = [];
   private active: Job | null = null;
   private phase: "walk" | "work" | null = null;
@@ -139,6 +142,7 @@ export class JobSystem {
     const diamond = this.makeDiamond(c.x, c.y, PLOT, kind === "till");
     this.queue.push({ kind, oc, or, cx: c.x, cy: c.y, queuedAt: Date.now(), diamond, bar: null, cfg, pendKey: k });
     this.pending.add(k);
+    this.onQueueChange?.();
     return true;
   }
 
@@ -153,6 +157,7 @@ export class JobSystem {
       diamond, bar: null, objId, pendKey: k,
     });
     this.pending.add(k);
+    this.onQueueChange?.();
     return true;
   }
 
@@ -162,6 +167,7 @@ export class JobSystem {
     this.queue.push({
       kind: "walk", oc: -1, or: -1, cx: x, cy: y, queuedAt: Date.now(), diamond: null, bar: null,
     });
+    this.onQueueChange?.();
   }
 
   get busy(): boolean {

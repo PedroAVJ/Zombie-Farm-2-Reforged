@@ -64,6 +64,9 @@ export class SaveManager {
   private objectLayouts = new Map<string, ObjectLayout>();
   private readonly localKey: string | null;
   onStorageError: ((message: string) => void) | null = null;
+  /** Optional remote mirror for Local Farm. The browser save remains primary and
+   * is always committed first; cloud failure can never block the local write. */
+  onLocalSave: ((save: SaveGame) => void) | null = null;
 
   constructor(
     private state: GameState,
@@ -255,6 +258,8 @@ export class SaveManager {
       if (current !== null) localStorage.setItem(backup, current);
       localStorage.setItem(key, encoded);
       localStorage.removeItem(temporary);
+      try { this.onLocalSave?.(blob); }
+      catch (error) { console.warn("[personal-cloud] local mirror callback failed", error); }
     } catch (error) {
       console.warn("[save] local write failed", error);
       this.onStorageError?.("Local Farm could not be saved. Check browser storage or export a backup.");

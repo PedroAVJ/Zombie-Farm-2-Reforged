@@ -70,6 +70,15 @@ import {
   choosePlayMode, setPreferredPlayMode, showOnlineUnavailable,
   showLocalUnavailable, usesOnlineGameplay, type PlayMode,
 } from "./playMode";
+import {
+  capturePersonalCloudPairingLink,
+  disconnectPersonalCloudLocally,
+  personalCloudConnectionStatus,
+  personalCloudForActiveProfile,
+  personalCloudPairingUrl,
+  showPersonalCloudWriterGate,
+  type PersonalCloudOpen,
+} from "./cloud/personalCloud";
 
 // The boot / start screen lives in index.html and paints on the first frame (no
 // empty-farm flash). We report load milestones to it and, once the game is fully
@@ -89,12 +98,44 @@ async function main() {
   // Detect device up front so <html data-platform> is set before the HUD's CSS
   // renders (drives the compact/desktop layout; re-evaluates on resize/rotate).
   initPlatform();
+  // Pairing credentials live in the URL fragment, which is never sent to Vercel.
+  // Capture + erase it before any network request or farm-mode decision.
+  capturePersonalCloudPairingLink();
   // Local Farm and Online Farm are deliberately independent save domains. Choose
   // before touching auth so Local Farm never makes account/gameplay server calls,
   // even when this browser still has a valid Online Farm session.
   const playMode: PlayMode = await choosePlayMode(auth.isOnlineAvailable());
   const onlineFarm = usesOnlineGameplay(playMode);
   initPwa(playMode);
+  let personalCloud = playMode === "local" ? personalCloudForActiveProfile() : null;
+  let personalCloudOpen: PersonalCloudOpen | null = null;
+  let personalCloudMessage = "";
+  if (personalCloud) {
+    const startupCloud = personalCloud;
+    try {
+      const opened = await startupCloud.open();
+      if (opened.status === "writer") personalCloudOpen = opened;
+      else {
+        let taken: PersonalCloudOpen | null = null;
+        const choice = await showPersonalCloudWriterGate(opened.writerLabel, async () => {
+          const result = await startupCloud.open(true);
+          if (result.status !== "writer") return false;
+          taken = result;
+          return true;
+        });
+        if (choice === "taken") personalCloudOpen = taken;
+        else {
+          startupCloud.pause();
+          disconnectPersonalCloudLocally();
+          personalCloud = null;
+        }
+      }
+    } catch (error) {
+      console.warn("[personal-cloud] startup unavailable", error);
+      personalCloudMessage = "Personal Cloud couldn't connect. This device is continuing from its Local Farm save.";
+      startupCloud.pause();
+    }
+  }
   if (onlineFarm) {
     await auth.refreshIfSignedIn();
     await requireAuth();
@@ -1024,6 +1065,29 @@ async function main() {
     jobs,
   );
   saveManager.onStorageError = (message) => hud.showToast(message);
+  // Queue selection itself does not change currency until the farmer reaches a
+  // target. Persist that intent immediately (one microtask per dragged batch), so
+  // refresh/force-close always has the complete semantic queue to replay.
+  let queueSaveScheduled = false;
+  jobs.onQueueChange = () => {
+    if (queueSaveScheduled) return;
+    queueSaveScheduled = true;
+    queueMicrotask(() => {
+      queueSaveScheduled = false;
+      saveManager.flushCritical();
+    });
+  };
+
+  // The cloud snapshot replaces only this device's linked active profile. The
+  // ordinary Local Farm loader then validates/hydrates it and retains its normal
+  // backup/recovery behavior.
+  if (personalCloudOpen?.save) {
+    if (!saveManager.importLocal(JSON.stringify(personalCloudOpen.save))) {
+      personalCloudMessage = "The Personal Cloud save was not valid, so this device kept its Local Farm.";
+      personalCloud?.pause();
+      personalCloudOpen = null;
+    }
+  }
 
   // Visit mode: if a friend farm was requested (via enterVisit → reload), hydrate
   // THEIR read-only save into these fresh singletons and — crucially — never call
@@ -1108,6 +1172,40 @@ async function main() {
     // Backfill newly-added presentation fields (such as woodland density) even
     // when an existing player does not immediately change another farm value.
     saveManager.save();
+
+    if (personalCloud && personalCloudOpen) {
+      const cloud = personalCloud;
+      cloud.onWriterLost = (writerLabel) => {
+        saveManager.onLocalSave = null;
+        void showPersonalCloudWriterGate(writerLabel ?? "another device", async () => {
+          const opened = await cloud.open(true);
+          if (opened.status !== "writer") return false;
+          saveManager.onLocalSave = null;
+          saveManager.suspend();
+          if (opened.save && !saveManager.importLocal(JSON.stringify(opened.save))) return false;
+          location.reload();
+          return true;
+        }).then(async (choice) => {
+          if (choice !== "local") return;
+          await cloud.disconnect();
+          personalCloudMessage = "Personal Cloud disconnected. This browser is keeping its independent Local Farm.";
+          hud.showToast("Personal Cloud disconnected. This Local Farm remains on this device.", 6000);
+        });
+      };
+      try {
+        // Seed an empty cloud from this profile, or immediately persist any queue
+        // work that was completed while the cloud snapshot reopened.
+        await cloud.saveNow(saveManager.serialize());
+        personalCloudMessage = "";
+        saveManager.onLocalSave = (save) => cloud.queueSave(save);
+        cloud.start();
+      } catch (error) {
+        console.warn("[personal-cloud] initial save failed", error);
+        saveManager.onLocalSave = (save) => cloud.queueSave(save);
+        cloud.queueSave(saveManager.serialize());
+        cloud.start();
+      }
+    }
     console.log(
       loadResult.kind === "online-cached"
         ? `[save] showing cached Online Farm from ${new Date(loadResult.savedAt).toISOString()}`
@@ -2136,6 +2234,38 @@ async function main() {
     }
     // Prevent pagehide/autosave from overwriting the already-aged save with the
     // current in-memory timestamps while this page reloads.
+    saveManager.suspend();
+    location.reload();
+  } : null;
+  hud.getPersonalCloudStatus = playMode === "local" ? () => {
+    const status = personalCloud?.uiStatus() ?? personalCloudConnectionStatus();
+    return personalCloudMessage ? { ...status, active: false, message: personalCloudMessage } : status;
+  } : null;
+  hud.onCopyPersonalCloudLink = playMode === "local" ? async () => {
+    const link = personalCloudPairingUrl();
+    if (!link) return false;
+    try {
+      await navigator.clipboard.writeText(link);
+      return true;
+    } catch {
+      const fallback = document.createElement("textarea");
+      fallback.value = link;
+      fallback.readOnly = true;
+      fallback.style.position = "fixed";
+      fallback.style.opacity = "0";
+      document.body.append(fallback);
+      fallback.select();
+      const copied = document.execCommand("copy");
+      fallback.remove();
+      return copied;
+    }
+  } : null;
+  hud.onDisconnectPersonalCloud = playMode === "local" ? async () => {
+    saveManager.onLocalSave = null;
+    saveManager.flushCritical();
+    if (personalCloud) await personalCloud.disconnect();
+    else disconnectPersonalCloudLocally();
+    personalCloud = null;
     saveManager.suspend();
     location.reload();
   } : null;

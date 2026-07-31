@@ -4,8 +4,9 @@ A browser-based reimplementation of **Zombie Farm 2**, built from the mechanics,
 data, and assets organized in `../ZF2R_extracted/`. When online services are
 configured, the title screen offers two deliberately independent farms:
 
-- **Local Farm** — fully client-side, saved only in this browser, with no account
-  or gameplay server required.
+- **Local Farm** — fully client-side by default, with no account or gameplay
+  server required. Pedro's hosted fork can optionally mirror one Local Farm
+  profile to a private Personal Cloud store for play across his own devices.
 - **Online Farm** — Google-authenticated and server-authoritative, with cloud
   saves, friends, gifting, the Black Market, and friend-farm visits.
 
@@ -173,6 +174,7 @@ must also update [SECURITY.md](SECURITY.md) and [server/README.md](server/README
 ### Saving and testing
 - Versioned, isolated persistence: complete Local Farm saves with a last-known-good backup and JSON export/import; server-authoritative Online Farm state with a per-account read-only snapshot, presentation cache, and durable command outbox.
 - Pedro's fork adds **Local Farm Time Warp** controls in Settings (`+1 hour`, `+8 hours`, `+1 day`). They age only the existing Local Farm save timestamps and reload; the device clock and Online Farm are never changed, and the resulting save remains compatible with the upstream JSON format.
+- Pedro's fork also offers an opt-in **Personal Cloud Farm** backed by a private Vercel Blob. A high-entropy pairing link binds only the active Local Farm profile on each device; the browser save remains primary, writes use an exclusive 10-minute device lease, and a second device must explicitly take over. The private key stays in the URL fragment/local storage and is never embedded in the public bundle.
 - Production builds of Pedro's fork are intentionally Local Farm only: the upstream API and Google sign-in configuration are unset so the hosted mod cannot connect to Online Farm.
 - Automated Vitest suites exist for both client (`npm test`) and server (economy, loot, combat stats/prediction, mutations, Zombie Pot, ability unlocking, raid catalog/ordering, friend logic, and the server-side friend-visit save projection). Coverage is incomplete; the GitHub Pages deploy is gated by the client suite, and the Worker deploy is gated by migration validation, the server suite, and typechecking.
 

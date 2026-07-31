@@ -72,7 +72,7 @@ export default defineConfig(({ mode }) => {
       // we precache only the app shell (JS/CSS/HTML + boot + icons + boot art) and
       // runtime cache-first the big art/audio so each asset caches on first view.
       VitePWA({
-        registerType: "prompt", // show a "new version" toast; never auto-reload (bad mid-raid)
+        registerType: "prompt", // live updates prompt; an explicit browser refresh activates them (pwa.ts)
         injectRegister: false, // we register manually in src/pwa.ts — the CSP forbids inline scripts
         manifest: false, // we already ship public/manifest.webmanifest + <head> tags
         includeAssets: [],

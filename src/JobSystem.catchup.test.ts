@@ -30,6 +30,23 @@ class FakeWalk {
 describe("JobSystem elapsed-time catch-up", () => {
   afterEach(() => vi.useRealTimers());
 
+  it("announces queued intent immediately so reload persistence can flush it", () => {
+    const jobs = new JobSystem(
+      {} as never,
+      {} as never,
+      new FakeWalk() as never,
+      {} as never,
+      () => {},
+    );
+    const changed = vi.fn();
+    jobs.onQueueChange = changed;
+
+    jobs.enqueueWalk(10, 10);
+
+    expect(changed).toHaveBeenCalledOnce();
+    expect(jobs.serializePending()?.jobs).toMatchObject([{ kind: "walk", cx: 10, cy: 10 }]);
+  });
+
   it("crosses movement callbacks and completes multiple queued jobs", () => {
     const walk = new FakeWalk();
     const jobs = new JobSystem(

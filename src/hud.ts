@@ -14,6 +14,7 @@ import { ALL_BITS, MUTATIONS, mutationLabel, mutationBonus } from "./zombie/muta
 import { QuestView } from "./quest/types";
 import type { RaidCardView, RaidPartyView, RaidResultView, RaidLaunchOpts, LootDrop } from "./raid/RaidManager";
 import type { ProfileIndex } from "./save/profiles";
+import type { PersonalCloudUiStatus } from "./cloud/personalCloud";
 import { canGiftBrain, type Friend } from "./social/friends";
 import { isMobile } from "./platform";
 import { type DayNightMode, type FarmBackground } from "./prefs";
@@ -1229,6 +1230,10 @@ export class Hud {
   onResetLocal: (() => void) | null = null;
   /** Advance the Local Farm's timers by deltaMs, persist, and reload (Local only). */
   onAdvanceLocalTime: ((deltaMs: number) => void) | null = null;
+  /** Device-private sync for the active Local Farm profile. */
+  getPersonalCloudStatus: (() => PersonalCloudUiStatus) | null = null;
+  onCopyPersonalCloudLink: (() => Promise<boolean>) | null = null;
+  onDisconnectPersonalCloud: (() => Promise<void>) | null = null;
   // ---- friends (offline stub; set by main) ----
   /** The current friends list. */
   getFriends: (() => Friend[]) | null = null;
