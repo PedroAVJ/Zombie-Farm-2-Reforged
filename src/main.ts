@@ -122,7 +122,8 @@ async function main() {
   let epicBoss = new EpicBossManager(DR_GROUNDHOG);
   state.seedFarmerCatalog(assets.farmer);
   const audio = new AudioManager(); // music/SFX default off (toggled in Settings)
-  const hud = new Hud(state, audio, playMode);
+  // Local-only builds (no server configured) must never advertise Online Farm.
+  const hud = new Hud(state, audio, playMode, auth.isOnlineAvailable());
   hud.setPlayStatus(playMode, playMode === "online" ? "reconnecting" : "synced");
   const mutationPortraits = new MutationPortraits(app.renderer, assets);
   hud.zombieMutationPortraitOf = (key, mutation, color) => mutationPortraits.get(key, mutation, color);
@@ -2093,13 +2094,15 @@ async function main() {
   } : null;
   hud.onRenameProfile = playMode === "local" ? (id, name) => profiles.renameProfile(id, name) : null;
   hud.onDeleteProfile = playMode === "local" ? (id) => profiles.deleteProfile(id) : null;
-  hud.onSwitchFarm = (destination) => {
+  // No handler on Local-only builds: there is no other farm to switch to, and
+  // the UI (Settings / profile panel / farm-status button) hides the option.
+  hud.onSwitchFarm = auth.isOnlineAvailable() ? (destination) => {
     saveManager.flush();
     void economy?.flush().catch(() => {});
     saveManager.suspend();
     setPreferredPlayMode(destination);
     location.reload();
-  };
+  } : null;
   hud.onExportLocal = playMode === "local" ? () => {
     saveManager.flushCritical();
     const raw = saveManager.exportLocal();

@@ -26,7 +26,7 @@ import { classTierRank } from "./zombie/taxonomy";
 import { BASE } from "./base";
 import { compareCropMarketOrder } from "./marketOrder";
 import { fillPartySelection, orderPartyRoster } from "./raid/partySelection";
-import { otherPlayMode, playModeDestinationLabel, type PlayMode } from "./playMode";
+import { localFarmProfileNote, otherPlayMode, playModeDestinationLabel, type PlayMode } from "./playMode";
 import type {
   BlackMarketListResponse, BlackMarketMutationResponse, BlackMarketOrderKind,
   BlackMarketOrderView,
@@ -188,11 +188,17 @@ export class Hud {
     return this.placingObj;
   }
 
-  constructor(readonly state: GameState, readonly audio: AudioManager, playMode: PlayMode = "local") {
+  constructor(
+    readonly state: GameState,
+    readonly audio: AudioManager,
+    playMode: PlayMode = "local",
+    canSwitchFarm = true,
+  ) {
     // Styles are injected by the `import "./ui/hud.css"` at the top of this module.
     this.el = document.getElementById("hud")!;
     this.el.innerHTML = "";
     this.playMode = playMode;
+    this.canSwitchFarm = canSwitchFarm;
     this.buildTopBar();
     this.buildQuests();
     this.buildMenu();
@@ -471,8 +477,10 @@ export class Hud {
     this.playStatusEl.className = "play-status local";
     this.playStatusEl.textContent = "LOCAL FARM";
     this.playStatusEl.setAttribute("type", "button");
-    this.playStatusEl.setAttribute("aria-label", "Current farm: Local Farm. Choose Local or Online.");
-    this.playStatusEl.title = "Choose Local or Online";
+    this.playStatusEl.setAttribute("aria-label", this.canSwitchFarm
+      ? "Current farm: Local Farm. Choose Local or Online."
+      : "Current farm: Local Farm. Saved on this device.");
+    this.playStatusEl.title = this.canSwitchFarm ? "Choose Local or Online" : "Local Farm";
     this.playStatusEl.onclick = () => this.openProfiles();
 
     // Account button: a person icon just right of the nameplate. Opens the same
@@ -651,11 +659,14 @@ export class Hud {
       : state === "reconnecting" ? "ONLINE · RECONNECTING"
       : state === "saving" ? `ONLINE · SAVING${pending ? ` (${pending})` : ""}`
       : "ONLINE · SYNCED";
+    // Local-only builds have exactly one farm: the button still opens the farm
+    // panel, but never invites switching.
+    const chooseHint = this.canSwitchFarm ? " Choose Local or Online." : "";
     this.playStatusEl.setAttribute(
       "aria-label",
-      `${mode === "local" ? "Local Farm" : "Online Farm"}: ${statusLabel}. Choose Local or Online.`
+      `${mode === "local" ? "Local Farm" : "Online Farm"}: ${statusLabel}.${chooseHint}`
     );
-    this.playStatusEl.title = `${statusLabel}. Choose Local or Online.`;
+    this.playStatusEl.title = `${statusLabel}.${chooseHint}`;
   }
 
   // Brief top-center banner for quest completion (messageComplete).
@@ -1209,6 +1220,9 @@ export class Hud {
   onDeleteProfile: ((id: string) => void) | null = null;
   /** Current independent farm mode and direct switch to the other farm. */
   playMode: PlayMode = "local";
+  /** False when Online Farm isn't configured at all (Local-only build): no UI
+   *  surface may offer or advertise switching farms. Set at construction. */
+  canSwitchFarm = true;
   onSwitchFarm: ((mode: PlayMode) => void) | null = null;
   onExportLocal: (() => void) | null = null;
   onImportLocal: ((raw: string) => boolean) | null = null;
@@ -2300,22 +2314,24 @@ export class Hud {
       // Local Farm has no account or social state.
       const note = document.createElement("div");
       note.className = "fr-empty";
-      note.textContent = "Local Farm is saved on this device. Online Farm has separate progress.";
+      note.textContent = localFarmProfileNote(this.canSwitchFarm);
       panel.append(note);
     }
 
-    const switchActions = document.createElement("div");
-    switchActions.className = "zbtns";
-    const switchFarm = document.createElement("button");
-    switchFarm.className = "zbtn locate";
-    const destination = otherPlayMode(this.playMode);
-    switchFarm.textContent = playModeDestinationLabel(this.playMode);
-    switchFarm.onclick = () => {
-      close();
-      this.onSwitchFarm?.(destination);
-    };
-    switchActions.appendChild(switchFarm);
-    panel.appendChild(switchActions);
+    if (this.canSwitchFarm) {
+      const switchActions = document.createElement("div");
+      switchActions.className = "zbtns";
+      const switchFarm = document.createElement("button");
+      switchFarm.className = "zbtn locate";
+      const destination = otherPlayMode(this.playMode);
+      switchFarm.textContent = playModeDestinationLabel(this.playMode);
+      switchFarm.onclick = () => {
+        close();
+        this.onSwitchFarm?.(destination);
+      };
+      switchActions.appendChild(switchFarm);
+      panel.appendChild(switchActions);
+    }
   }
 
   /** Confirm a destructive social action before touching local or server state. */

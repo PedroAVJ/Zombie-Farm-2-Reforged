@@ -15,6 +15,22 @@ export function usesOnlineGameplay(mode: PlayMode): boolean {
   return mode === "online";
 }
 
+/** Settings note under the farm-mode row. Local-only builds (no Online Farm
+ *  configured) must not advertise the other farm. */
+export function farmModeSettingsNote(mode: PlayMode, canSwitchFarm: boolean): string {
+  if (mode === "online") return "Saved to your account. Local Farm has separate progress.";
+  return canSwitchFarm
+    ? "Saved on this device only. Online Farm has separate progress."
+    : "Saved on this device only.";
+}
+
+/** Profile-panel note for a Local Farm with no account state. */
+export function localFarmProfileNote(canSwitchFarm: boolean): string {
+  return canSwitchFarm
+    ? "Local Farm is saved on this device. Online Farm has separate progress."
+    : "Local Farm is saved on this device.";
+}
+
 export function getPreferredPlayMode(): PlayMode | null {
   try {
     const value = localStorage.getItem(MODE_KEY);

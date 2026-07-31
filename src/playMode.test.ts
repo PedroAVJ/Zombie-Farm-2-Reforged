@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   choosePlayMode, clearPreferredPlayMode, getPreferredPlayMode, setPreferredPlayMode,
+  farmModeSettingsNote, localFarmProfileNote,
   otherPlayMode, playModeDestinationLabel, usesOnlineGameplay,
 } from "./playMode";
 
@@ -52,5 +53,21 @@ describe("play mode preference", () => {
     expect(playModeDestinationLabel("local")).toBe("Go to Online Farm");
     expect(otherPlayMode("online")).toBe("local");
     expect(playModeDestinationLabel("online")).toBe("Go to Local Farm");
+  });
+
+  it("mentions the other farm only when switching can actually be offered", () => {
+    expect(farmModeSettingsNote("local", true))
+      .toBe("Saved on this device only. Online Farm has separate progress.");
+    expect(farmModeSettingsNote("online", true))
+      .toBe("Saved to your account. Local Farm has separate progress.");
+    expect(localFarmProfileNote(true))
+      .toBe("Local Farm is saved on this device. Online Farm has separate progress.");
+  });
+
+  it("never advertises Online Farm on a Local-only build", () => {
+    expect(farmModeSettingsNote("local", false)).toBe("Saved on this device only.");
+    expect(localFarmProfileNote(false)).toBe("Local Farm is saved on this device.");
+    expect(farmModeSettingsNote("local", false)).not.toContain("Online");
+    expect(localFarmProfileNote(false)).not.toContain("Online");
   });
 });

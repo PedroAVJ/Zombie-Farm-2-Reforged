@@ -8,7 +8,7 @@ import { BUILD_ID } from "../../version";
 import { diagnosticsReport, diagnosticsCount, clearDiagnostics } from "../../diagnostics";
 import { getSpriteSet, setSpriteSet, FARM_BACKGROUNDS } from "../../prefs";
 import { ABILITY_POOL, ABILITY_TIER, TIER_BOSS } from "../../zombie/traits";
-import { otherPlayMode, playModeDestinationLabel } from "../../playMode";
+import { farmModeSettingsNote, otherPlayMode, playModeDestinationLabel } from "../../playMode";
 
 export async function confirmLocalFarmReset(
   hud: Pick<Hud, "confirmInGame" | "onResetLocal">,
@@ -257,15 +257,18 @@ export function openSettings(hud: Hud): void {
   farmMode.className = "set-row";
   const farmModeLabel = document.createElement("span");
   farmModeLabel.textContent = hud.playMode === "local" ? "Local Farm" : "Online Farm";
-  const switchFarm = document.createElement("button");
-  switchFarm.className = "set-action";
-  const destination = otherPlayMode(hud.playMode);
-  switchFarm.textContent = playModeDestinationLabel(hud.playMode);
-  switchFarm.onclick = () => hud.onSwitchFarm?.(destination);
-  farmMode.append(farmModeLabel, switchFarm);
-  const farmModeNote = noteEl(hud.playMode === "local"
-    ? "Saved on this device only. Online Farm has separate progress."
-    : "Saved to your account. Local Farm has separate progress.");
+  farmMode.append(farmModeLabel);
+  // Local-only builds (no Online Farm configured) have nothing to switch to, so
+  // the row is just the mode label — never a dead "Go to Online Farm" button.
+  if (hud.canSwitchFarm) {
+    const switchFarm = document.createElement("button");
+    switchFarm.className = "set-action";
+    const destination = otherPlayMode(hud.playMode);
+    switchFarm.textContent = playModeDestinationLabel(hud.playMode);
+    switchFarm.onclick = () => hud.onSwitchFarm?.(destination);
+    farmMode.append(switchFarm);
+  }
+  const farmModeNote = noteEl(farmModeSettingsNote(hud.playMode, hud.canSwitchFarm));
   const localStorageControls: HTMLElement[] = [];
   if (hud.playMode === "local") {
     const actions = document.createElement("div");
