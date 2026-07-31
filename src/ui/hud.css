@@ -408,6 +408,8 @@
   white-space: pre; overflow: auto; resize: vertical; }
 #hud .set-username { margin: 4px 0 8px; }
 #hud .set-username-controls { display: flex; gap: 7px; }
+#hud .time-warp-controls { flex-wrap: wrap; justify-content: flex-end; }
+#hud .time-warp-controls .set-action { min-width: 0; white-space: nowrap; }
 #hud .set-username-input { width: 150px; box-sizing: border-box; padding: 6px 8px;
   border: 2px solid #1e1207; border-radius: 7px; background: #2a1c0c; color: #ffe9a8;
   font: 700 14px system-ui, sans-serif; outline: none; }

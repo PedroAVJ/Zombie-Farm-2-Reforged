@@ -15,6 +15,7 @@ import { GAMEPLAY_PROTOCOL } from "../net/protocol";
 import { reconcileTutorialCompletion } from "../tutorial/steps";
 import type { PlayMode } from "../playMode";
 import type { JobSystem } from "../JobSystem";
+import { advanceLocalSaveTime } from "./timeWarp";
 
 export type FarmLoadResult =
   | { kind: "local-existing" }
@@ -191,6 +192,12 @@ export class SaveManager {
   }
 
   flush(): void { this.autoFlush ? this.autoFlush() : this.save(); }
+  /** Advance only a Local Farm's persisted gameplay timers. Online Farm is never eligible. */
+  advanceLocalTime(deltaMs: number): boolean {
+    if (this.mode !== "local" || !Number.isFinite(deltaMs) || deltaMs <= 0) return false;
+    this.writeLocal(advanceLocalSaveTime(this.serialize(), deltaMs));
+    return true;
+  }
   /** Persist state that must survive an immediate reload (currently Zombie Pot jobs). */
   flushCritical(): void {
     if (this.suspended) return;

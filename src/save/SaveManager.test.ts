@@ -86,6 +86,41 @@ describe("SaveManager object layout races", () => {
 });
 
 describe("SaveManager mode isolation", () => {
+  it("refuses to time-warp Online Farm state", () => {
+    vi.stubGlobal("localStorage", memoryStorage());
+    const manager = new SaveManager(
+      {} as never, {} as never, {} as never, {} as never, {} as never,
+      new Map(), new Map(), async () => undefined, "online",
+    );
+    vi.spyOn(manager, "serialize").mockReturnValue({ version: 1, savedAt: 1 } as never);
+
+    expect(manager.advanceLocalTime(60 * 60 * 1000)).toBe(false);
+    expect(localStorage.length).toBe(0);
+  });
+
+  it("persists an aged Local Farm through the normal save writer", () => {
+    vi.stubGlobal("localStorage", memoryStorage());
+    const manager = new SaveManager(
+      {} as never, {} as never, {} as never, {} as never, {} as never,
+      new Map(), new Map(), async () => undefined, "local",
+    );
+    vi.spyOn(manager, "serialize").mockReturnValue({
+      version: 1,
+      savedAt: 20_000,
+      player: {},
+      farm: {
+        plots: [{ crop: { plantedAt: 10_000 } }],
+      },
+    } as never);
+
+    expect(manager.advanceLocalTime(4_000)).toBe(true);
+
+    const primary = Array.from({ length: localStorage.length }, (_, index) => localStorage.key(index)!)
+      .find((key) => !key.endsWith(".backup") && !key.endsWith(".tmp") && key.includes("local.save"));
+    expect(primary).toBeTruthy();
+    expect(JSON.parse(localStorage.getItem(primary!) ?? "null").farm.plots[0].crop.plantedAt).toBe(6_000);
+  });
+
   it("never falls back to a Local Farm write from Online Farm", () => {
     vi.stubGlobal("localStorage", memoryStorage());
     vi.spyOn(api, "isConfigured").mockReturnValue(false);

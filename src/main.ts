@@ -2126,6 +2126,16 @@ async function main() {
     saveManager.clear();
     location.reload();
   } : null;
+  hud.onAdvanceLocalTime = playMode === "local" ? (deltaMs) => {
+    if (!saveManager.advanceLocalTime(deltaMs)) {
+      hud.showToast("Local Farm time could not be advanced.");
+      return;
+    }
+    // Prevent pagehide/autosave from overwriting the already-aged save with the
+    // current in-memory timestamps while this page reloads.
+    saveManager.suspend();
+    location.reload();
+  } : null;
 
   // ---- friends: OFFLINE path (local stub, autosaved via GameState.onChange).
   // Used when no server is configured or the player is signed out. ----

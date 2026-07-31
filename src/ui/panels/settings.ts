@@ -299,9 +299,32 @@ export function openSettings(hud: Hud): void {
     resetButton.onclick = () => void confirmLocalFarmReset(hud);
     controls.append(exportButton, importButton, resetButton, picker);
     actions.append(label, controls);
+
+    const timeWarp = document.createElement("div");
+    timeWarp.className = "set-row set-time-warp";
+    const timeWarpLabel = document.createElement("span");
+    timeWarpLabel.textContent = "Time Warp";
+    const timeWarpControls = document.createElement("div");
+    timeWarpControls.className = "set-username-controls time-warp-controls";
+    const jumps = [
+      { label: "+1 hour", deltaMs: 60 * 60 * 1000 },
+      { label: "+8 hours", deltaMs: 8 * 60 * 60 * 1000 },
+      { label: "+1 day", deltaMs: 24 * 60 * 60 * 1000 },
+    ];
+    for (const jump of jumps) {
+      const button = document.createElement("button");
+      button.className = "set-action";
+      button.textContent = jump.label;
+      button.onclick = () => hud.onAdvanceLocalTime?.(jump.deltaMs);
+      timeWarpControls.append(button);
+    }
+    timeWarp.append(timeWarpLabel, timeWarpControls);
+
     localStorageControls.push(
       actions,
       noteEl("Clearing browser data can remove Local Farm. Export a backup to keep it safe."),
+      timeWarp,
+      noteEl("Advances only this Local Farm's timers, then reloads. Your device clock and Online Farm never change."),
     );
   }
   // Diagnostics: available in BOTH farm modes, because crashes happen in both. Copying

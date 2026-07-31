@@ -1213,6 +1213,8 @@ export class Hud {
   onExportLocal: (() => void) | null = null;
   onImportLocal: ((raw: string) => boolean) | null = null;
   onResetLocal: (() => void) | null = null;
+  /** Advance the Local Farm's timers by deltaMs, persist, and reload (Local only). */
+  onAdvanceLocalTime: ((deltaMs: number) => void) | null = null;
   // ---- friends (offline stub; set by main) ----
   /** The current friends list. */
   getFriends: (() => Friend[]) | null = null;
