@@ -313,13 +313,16 @@ describe("JobSystem elapsed-time catch-up", () => {
     vi.useFakeTimers();
     vi.setSystemTime(1_000_000);
     const firstWalk = new FakeWalk();
+    const completed: string[] = [];
     const field = {
       highlightLayer: new Container(), plowHighlightLayer: new Container(), labelLayer: new Container(),
-      resolveTill: (col: number, row: number) => ({ valid: true, oc: col, or: row }),
+      // Mirror Field.resolveTill for empty soil: callers pick the center tile and
+      // the field resolves it to the 4x4 plot origin two tiles earlier.
+      resolveTill: (col: number, row: number) => ({ valid: true, oc: col - 2, or: row - 2 }),
       reserveTill: () => {}, unreserveTill: () => {},
       plotCenterOf: (col: number, row: number) => ({ x: col, y: row }),
       hasFastWork: () => false, hasPlowFree: () => false,
-      tillAt: () => true,
+      tillAt: (col: number, row: number) => { completed.push(`${col},${row}`); return true; },
     };
     const state = {
       gold: 100, spendGold: (amount: number) => { state.gold -= amount; }, addXp: () => {},
@@ -328,7 +331,7 @@ describe("JobSystem elapsed-time catch-up", () => {
     const first = new JobSystem(
       field as never, { setWorking: () => {} } as never, firstWalk as never, state as never, () => {},
     );
-    first.enqueue("till", 4, 8);
+    first.enqueue("till", 6, 10);
     const saved = first.serializePending();
     expect(saved?.jobs).toMatchObject([{ kind: "till", oc: 4, or: 8 }]);
 
@@ -338,6 +341,7 @@ describe("JobSystem elapsed-time catch-up", () => {
     restored.restorePending(saved, () => undefined);
 
     expect(restored.busy).toBe(false);
+    expect(completed).toEqual(["4,8"]);
     expect(state.gold).toBe(90);
   });
 
@@ -350,7 +354,7 @@ describe("JobSystem elapsed-time catch-up", () => {
     const plantedAt: number[] = [];
     const field = {
       highlightLayer: new Container(), plowHighlightLayer: new Container(), labelLayer: new Container(),
-      resolveTill: (col: number, row: number) => ({ valid: true, oc: col, or: row }),
+      resolveTill: (col: number, row: number) => ({ valid: true, oc: col - 2, or: row - 2 }),
       reserveTill: () => {}, unreserveTill: () => {},
       plotOriginAt: (col: number, row: number) => ({ oc: col, or: row }),
       canPlant: () => true, isRipe: () => true, ripeZombieAt: () => false,

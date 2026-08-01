@@ -91,7 +91,9 @@ STAGE_FAMILY = {
 # fightBGM, exactly as the original game does. Filenames resolve under assets/audio/.
 RAID_MUSIC = {
     1: "farmStageBGM.mp3",     # Old McDonnell's Farm
-    3: "pirateStageBGM.mp3",   # Zombies vs Pirates
+    # This 4.7-second loop stays PCM: compressed-media restart padding produced an
+    # audible gap every pass in browsers, while WAV loops at the exact sample edge.
+    3: "audio/pirateStageBGM.wav",  # Zombies vs Pirates
     4: "ninjaStageBGM.mp3",    # Zombies vs Ninjas
     5: "robotStageBGM.mp3",    # Zombies vs Robots
     6: "alienStageBGM.mp3",    # Zombies vs Aliens

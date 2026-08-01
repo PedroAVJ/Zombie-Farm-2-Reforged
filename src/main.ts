@@ -3907,7 +3907,17 @@ async function main() {
     touchGestureTiles.length = 0;
   };
   app.stage.on("pointerup", onPointerUp);
-  app.stage.on("pointerupoutside", onPointerUp);
+  app.stage.on("pointerupoutside", (e: FederatedPointerEvent) => {
+    // Releasing a Plow drag over the DOM toolbar used to commit its entire
+    // rectangle just before the clicked tool activated. Those jobs then looked
+    // like a stuck selection because queued Plow diamonds intentionally remain
+    // green. An outside release is cancellation, never confirmation.
+    if (dragging && hud.mode === "till" && plowPreview) {
+      cancelPointerGesture();
+      return;
+    }
+    onPointerUp(e);
+  });
   // Some Android browsers emit the native release but lose Pixi's federated
   // pointer-up when collapsing the HUD changes the DOM beneath the finger. Wait
   // until native propagation is complete, then finish any touch gesture Pixi did
@@ -4024,6 +4034,13 @@ async function main() {
       advanceFarmJobsToNow();
       zombies.setInvasionReady(false);
       return;
+    }
+
+    // Input cancellation is best-effort across browser/OS pointer edge cases.
+    // Keep the visible tool and preview state consistent even if a release or DOM
+    // tool-change event was lost: Select can never retain a Plow rectangle.
+    if (hud.mode !== "till" && (plowPreview || field.tillSelectionLayer.visible)) {
+      clearPlowPreview();
     }
 
     const modalOpen = !!hud.el.querySelector(".panelbg, .mkt-bg, .st-bg, .pm-bg");

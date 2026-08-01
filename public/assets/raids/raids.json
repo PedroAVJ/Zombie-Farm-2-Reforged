@@ -239,7 +239,7 @@
   "goldReward": 2000,
   "bonusGold": 750,
   "throwSpeed": 8,
-  "music": "pirateStageBGM.mp3",
+  "music": "audio/pirateStageBGM.wav",
   "seasonal": false,
   "playable": true,
   "levelAssets": [

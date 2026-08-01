@@ -213,8 +213,14 @@ export class JobSystem {
       } else if (job.kind === "plant") {
         const crop = job.cropKey ? cropOf(job.cropKey) : undefined;
         if (crop) this.enqueue("plant", job.oc, job.or, crop);
-      } else if (job.kind === "till" || job.kind === "harvest") {
-        this.enqueue(job.kind, job.oc, job.or);
+      } else if (job.kind === "till") {
+        // A saved till stores the resolved 4x4 plot ORIGIN, while enqueue() accepts
+        // a picked tile and resolves that to an origin. Feeding the origin back as
+        // the picked tile subtracts half a plot again on every reload, shifting the
+        // entire restored Plow batch by two tiles in each direction.
+        this.enqueue("till", job.oc + PLOT / 2, job.or + PLOT / 2);
+      } else if (job.kind === "harvest") {
+        this.enqueue("harvest", job.oc, job.or);
       }
     }
     this.finishRestoredQueue();
