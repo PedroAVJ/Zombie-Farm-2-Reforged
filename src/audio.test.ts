@@ -32,6 +32,54 @@ class MockAudio extends EventTarget {
   }
 }
 
+class MockBufferSource {
+  buffer: { duration: number } | null = null;
+  loop = false;
+  connectCalls = 0;
+  startCalls: [number, number][] = [];
+  stopCalls = 0;
+
+  connect() { this.connectCalls++; }
+  disconnect() {}
+  start(when = 0, offset = 0) { this.startCalls.push([when, offset]); }
+  stop() { this.stopCalls++; }
+}
+
+class MockAudioContext {
+  static instances: MockAudioContext[] = [];
+  state = "suspended";
+  currentTime = 0;
+  destination = {};
+  sources: MockBufferSource[] = [];
+  gainValue = 1;
+  resumeCalls = 0;
+  suspendCalls = 0;
+  closeCalls = 0;
+
+  constructor() { MockAudioContext.instances.push(this); }
+
+  createGain() {
+    return {
+      gain: {
+        value: this.gainValue,
+        setValueAtTime: (value: number) => { this.gainValue = value; },
+      },
+      connect: () => undefined,
+    };
+  }
+
+  createBufferSource() {
+    const source = new MockBufferSource();
+    this.sources.push(source);
+    return source;
+  }
+
+  async decodeAudioData() { return { duration: 4.705873 }; }
+  async resume() { this.resumeCalls++; this.state = "running"; }
+  async suspend() { this.suspendCalls++; this.state = "suspended"; }
+  async close() { this.closeCalls++; this.state = "closed"; }
+}
+
 describe("AudioManager focus muting", () => {
   let focused: boolean;
   let hidden: boolean;
@@ -42,6 +90,7 @@ describe("AudioManager focus muting", () => {
     vi.useFakeTimers();
     MockAudio.instances = [];
     MockAudio.rejectPlay = false;
+    MockAudioContext.instances = [];
     focused = true;
     hidden = false;
     storage = new Map();
@@ -177,6 +226,43 @@ describe("AudioManager focus muting", () => {
     expect(ambience.paused).toBe(false);
     expect(music.playCalls).toBe(2);
     expect(ambience.playCalls).toBe(2);
+  });
+
+  it("keeps the Pirates theme inside a sample-accurate Web Audio loop", async () => {
+    vi.stubGlobal("AudioContext", MockAudioContext);
+    vi.stubGlobal("fetch", vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      arrayBuffer: async () => new ArrayBuffer(8),
+    })));
+    const audio = new AudioManager();
+
+    audio.enterRaid("audio/pirateStageBGM.wav");
+    await vi.waitFor(() => expect(MockAudioContext.instances[0]?.sources).toHaveLength(1));
+    const context = MockAudioContext.instances[0];
+    const first = context.sources[0];
+
+    expect(MockAudio.instances).toHaveLength(2); // farm music + ambience, no raid media element
+    expect(first.loop).toBe(true);
+    expect(first.startCalls).toEqual([[0, 0]]);
+
+    audio.setMusicVolume(0.5);
+    expect(context.gainValue).toBeCloseTo(0.2);
+
+    context.currentTime = 1.25;
+    hidden = true;
+    document.dispatchEvent(new Event("visibilitychange"));
+    expect(first.stopCalls).toBe(1);
+    expect(context.suspendCalls).toBe(1);
+
+    hidden = false;
+    document.dispatchEvent(new Event("visibilitychange"));
+    await vi.waitFor(() => expect(context.sources).toHaveLength(2));
+    expect(context.sources[1].loop).toBe(true);
+    expect(context.sources[1].startCalls[0][1]).toBeCloseTo(1.25);
+
+    audio.exitRaid();
+    expect(context.closeCalls).toBe(1);
   });
 
   it("uses the recovered zombie bite and authored enemy attack cues", () => {

@@ -6,6 +6,11 @@
 // once their channel is first enabled.
 import { SETTINGS_KEY } from "./save/schema";
 import { BASE } from "./base";
+import {
+  SampleAccurateLoop,
+  supportsSampleAccurateLooping,
+  type LoopingMusicTrack,
+} from "./gaplessLoop";
 
 export type Sfx =
   | "till" | "plant" | "harvest" | "harvestZombie" | "xp"
@@ -80,6 +85,7 @@ const AMBIENCE_BED = "SFXambience.mp3";
 const AMBIENCE_ONESHOTS = ["rooster.mp3", "crow.mp3", "birds.mp3"];
 const AMBIENCE_MIN_MS = 18_000;
 const AMBIENCE_MAX_MS = 42_000;
+const SAMPLE_ACCURATE_RAID_LOOPS = new Set(["audio/pirateStageBGM.wav"]);
 
 // A zombie's "Brains…" bark, chosen by its group (the game ships one clip per
 // group). The Regular group's cyborg/robot/robocop tiers use the robot bark.
@@ -132,7 +138,7 @@ export class AudioManager {
   // While a raid is up, its looping stage BGM replaces the farm bgm. `raidBgm`
   // holds the active raid track (and `raidFile` its filename); the farm bgm is
   // paused for the raid's duration.
-  private raidBgm: HTMLAudioElement | null = null;
+  private raidBgm: LoopingMusicTrack | null = null;
   private raidFile = "";
   private zombieBarkSource: (() => { group: string; key: string } | null) | null = null;
 
@@ -227,7 +233,7 @@ export class AudioManager {
   // --- music ---------------------------------------------------------------
   // The looping track that should be playing right now: the raid stage BGM while
   // a raid is up, otherwise the farm bgm.
-  private activeBgm(): HTMLAudioElement {
+  private activeBgm(): LoopingMusicTrack {
     return this.raidBgm ?? this.bgm;
   }
 
@@ -282,10 +288,15 @@ export class AudioManager {
     if (this.raidFile !== file) {
       this.exitRaid(true); // tear down any prior raid track without resuming farm
       this.bgm.pause();     // farm bed steps aside for the whole raid
-      const a = new Audio(A(file));
-      a.loop = true;
-      a.volume = 0.4 * this.musicVolume;
-      this.raidBgm = a;
+      if (SAMPLE_ACCURATE_RAID_LOOPS.has(file) && supportsSampleAccurateLooping()) {
+        this.raidBgm = new SampleAccurateLoop(A(file));
+      } else {
+        const element = new Audio(A(file));
+        element.loop = true;
+        element.preload = "auto";
+        this.raidBgm = element;
+      }
+      this.raidBgm.volume = 0.4 * this.musicVolume;
       this.raidFile = file;
     }
     if (this.musicOn && this.canPlay()) void this.raidBgm!.play().catch(() => this.arm());
@@ -295,8 +306,11 @@ export class AudioManager {
   // is used internally when immediately swapping to another raid track.
   exitRaid(keepFarmPaused = false) {
     if (this.raidBgm) {
-      this.raidBgm.pause();
-      this.raidBgm.src = "";
+      if (this.raidBgm.dispose) this.raidBgm.dispose();
+      else {
+        this.raidBgm.pause();
+        if (typeof this.raidBgm.src === "string") this.raidBgm.src = "";
+      }
       this.raidBgm = null;
       this.raidFile = "";
     }
