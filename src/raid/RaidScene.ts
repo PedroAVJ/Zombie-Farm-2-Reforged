@@ -87,9 +87,6 @@ export interface RaidSceneParams {
 const SMASH_KEYS = new Set(["bash", "bashV2"]);
 const SMASH_GROW = 0.4;
 const SMASH_SLAM_S = 0.18;
-// Keep the T3/T4 Regular-zombie laser combat active while its beam presentation
-// is temporarily hidden. Flip this back on when the visual is ready to ship.
-const SHOW_REGULAR_ZOMBIE_LASERS = false;
 const INTRO_MS = 700; // brief establishing hold before combat starts
 const END_PAUSE_MS = 650; // beat after the last blow before we move on
 // On a win, survivors stroll off to the right at a normal walking pace (not the old
@@ -1365,9 +1362,7 @@ export class RaidScene {
       if (u.laserFxSeq > tok.laserFxSeq) {
         tok.laserFxSeq = u.laserFxSeq;
         const target = u.laserTargetId ? this.tokens.get(u.laserTargetId) : null;
-        if (SHOW_REGULAR_ZOMBIE_LASERS && target) {
-          this.spawnLaserBeam(tok, target, u.abilities.includes("zomBeam"));
-        }
+        if (target) this.spawnLaserBeam(tok, target, u.abilities.includes("zomBeam"));
       }
       if (tok.healPose > 0) tok.healPose = Math.max(0, tok.healPose - dtSec);
 
