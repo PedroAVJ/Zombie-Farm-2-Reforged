@@ -429,7 +429,6 @@ export class RaidScene {
   private bubbleSprite = new Sprite();
   private bubbleTexButterfly: Texture | null = null;
   private bubbleTexBrain: Texture | null = null;
-  private bubbleUnitId: string | null = null;
 
   private phase: Phase = "intro";
   private phaseT = 0;
@@ -648,19 +647,23 @@ export class RaidScene {
     this.bubble.visible = false;
     this.bubble.eventMode = "static";
     this.bubble.cursor = "pointer";
-    this.bubble.on("pointertap", () => {
-      if (this.sim.finished) return;
-      const bubble = this.sim.chargingBubble();
-      if (this.bubbleUnitId && this.sim.popBubble(this.bubbleUnitId)) {
-        this.recordInput({ type: "bubble", unitId: this.bubbleUnitId });
-        if (bubble?.kind === "brain" && bubble.id === this.bubbleUnitId) {
-          const zombie = this.sim.units.find((unit) => unit.id === this.bubbleUnitId);
-          if (zombie) this.onBrainRelease?.(zombie.sourceKey);
-        }
-        this.bubble.scale.set(0.8); // tap feedback, eased back in layout
-      }
-    });
+    this.bubble.on("pointertap", () => { this.activateFocusBubble(); });
     this.container.addChild(this.bubble); // above tokens so it's tappable
+  }
+
+  /** Pop the active butterfly/brain focus bubble through the same replay-recorded
+   * action for pointer and keyboard input. Returns false when no bubble is active. */
+  activateFocusBubble(): boolean {
+    if (this.sim.finished) return false;
+    const bubble = this.sim.chargingBubble();
+    if (!bubble || !this.sim.popBubble(bubble.id)) return false;
+    this.recordInput({ type: "bubble", unitId: bubble.id });
+    if (bubble.kind === "brain") {
+      const zombie = this.sim.units.find((unit) => unit.id === bubble.id);
+      if (zombie) this.onBrainRelease?.(zombie.sourceKey);
+    }
+    this.bubble.scale.set(0.8); // input feedback, eased back in layout
+    return true;
   }
 
   /** Build the top-left ability strip from the army's abilities: one tappable cell
@@ -1541,7 +1544,6 @@ export class RaidScene {
     const bub = this.sim.chargingBubble();
     const bubTok = bub ? this.tokens.get(bub.id) : undefined;
     if (bub && bubTok) {
-      this.bubbleUnitId = bub.id;
       this.bubble.visible = true;
       const tex = bub.kind === "brain" ? this.bubbleTexBrain : this.bubbleTexButterfly;
       if (tex) this.bubbleSprite.texture = tex;
@@ -1557,7 +1559,6 @@ export class RaidScene {
     } else {
       this.bubble.visible = false;
       this.bubble.scale.set(1);
-      this.bubbleUnitId = null;
     }
 
     // Team bars, top corners.

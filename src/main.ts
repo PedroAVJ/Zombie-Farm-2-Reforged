@@ -2523,6 +2523,15 @@ async function main() {
   // `raidActive` gates farm input synchronously (the scene loads its textures async);
   // `raidScene` is the running scene once ready.
   let raidScene: RaidScene | null = null;
+  window.addEventListener("keydown", (event) => {
+    if (event.code !== "Space" || event.repeat || event.ctrlKey || event.metaKey ||
+        event.altKey || event.shiftKey) return;
+    const target = event.target instanceof HTMLElement ? event.target : null;
+    if (target?.isContentEditable ||
+        target?.closest("button, a, input, textarea, select, [role='button']")) return;
+    if (hud.el.querySelector(".game-confirm-bg")) return;
+    if (raidScene?.activateFocusBubble()) event.preventDefault();
+  });
   hud.onLaunchEpicBoss = async (partyIds, payment) => {
     if (raidActive || Date.now() < raidLaunchLockedUntil) return false;
     const def = selectEpicBoss(state.epicBossRun?.bossId);
