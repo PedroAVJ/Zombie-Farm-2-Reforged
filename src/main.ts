@@ -1555,6 +1555,8 @@ async function main() {
   let pressMaxDistance = 0;
   let touchSelectStartTile: { col: number; row: number } | null = null;
   let touchOutsideFarmPan = false;
+  let harvestDragGesture = false;
+  let harvestDragStartTile: { col: number; row: number } | null = null;
   let zombieLongPressTimer: ReturnType<typeof setTimeout> | null = null;
   let zombieLongPressActivated = false;
   // Plant tiles painted by the current finger gesture. Plowing uses the explicit
@@ -1590,6 +1592,8 @@ async function main() {
     lastPlot = "";
     pressPointerId = -1;
     touchOutsideFarmPan = false;
+    harvestDragGesture = false;
+    harvestDragStartTile = null;
     touchGestureTiles.length = 0;
     plowPreview = null;
     touchPlowGesture = null;
@@ -1622,6 +1626,8 @@ async function main() {
       // two fingers control the camera instead.
       touchGestureTiles.length = 0;
       lastPlot = "";
+      harvestDragGesture = false;
+      harvestDragStartTile = null;
       plowPreview = null;
       touchPlowGesture = null;
       touchPlowHandle = null;
@@ -1671,6 +1677,21 @@ async function main() {
     if (hud.mode === "plant" && hud.planting)
       return jobs.enqueue("plant", col, row, hud.planting);
     return false;
+  };
+
+  // Add one ripe plot to the active harvest stroke. Resolve the physical plot
+  // origin so crossing several of its 16 tiles still produces one queued job.
+  // Touch mirrors plant painting by committing on release; mouse queues live.
+  const collectHarvestTile = (col: number, row: number): boolean => {
+    if (!field.isRipe(col, row)) return false;
+    const origin = field.plotOriginAt(col, row);
+    if (!origin) return false;
+    const key = tileKey(origin.oc, origin.or);
+    if (key === lastPlot) return false;
+    if (isTouchPointer(pressPointerType)) touchGestureTiles.push({ col: origin.oc, row: origin.or });
+    else jobs.enqueue("harvest", origin.oc, origin.or);
+    lastPlot = key;
+    return true;
   };
 
   const originAtTile = (col: number, row: number): PlowOrigin => {
@@ -3422,6 +3443,8 @@ async function main() {
     pressMaxDistance = 0;
     touchSelectStartTile = null;
     touchOutsideFarmPan = false;
+    harvestDragGesture = false;
+    harvestDragStartTile = null;
     cancelZombieLongPress();
     zombieLongPressActivated = false;
     pressStart.copyFrom(e.global);
@@ -3515,6 +3538,19 @@ async function main() {
       dragging = false;
       return;
     }
+    if (hud.mode === "walk" && field.isRipe(col, row)) {
+      // A ripe plot turns Select's usual camera drag into a harvest-paint stroke.
+      // No work commits until movement clears the tap threshold, preserving the
+      // existing single-click behavior and touch queued-action toggle.
+      harvestDragGesture = true;
+      harvestDragStartTile = { col, row };
+      cancelZombieLongPress();
+      dragging = true;
+      moved = false;
+      last.copyFrom(e.global);
+      lastPlot = "";
+      return;
+    }
     if (!touch && hud.mode === "till") {
       const anchor = originAtTile(col, row);
       dragging = true;
@@ -3594,6 +3630,15 @@ async function main() {
         return;
       }
       field.setCursor(col, row, "grow"); // green over a growing crop, red otherwise
+      return;
+    }
+    if (dragging && harvestDragGesture) {
+      if (moved) {
+        if (harvestDragStartTile)
+          collectHarvestTile(harvestDragStartTile.col, harvestDragStartTile.row);
+        collectHarvestTile(col, row);
+      }
+      field.hideCursor();
       return;
     }
     if (dragging) {
@@ -3840,14 +3885,25 @@ async function main() {
       touchGestureTiles.length = 0;
       return;
     }
-    if (dragging && moved && !touchOutsideFarmPan && isTouchPointer(pressPointerType) &&
+    const completedHarvestDrag = dragging && moved && harvestDragGesture;
+    if (completedHarvestDrag && isTouchPointer(pressPointerType)) {
+      for (const tile of touchGestureTiles) jobs.enqueue("harvest", tile.col, tile.row);
+    } else if (dragging && moved && !touchOutsideFarmPan && isTouchPointer(pressPointerType) &&
         (hud.mode === "till" || hud.mode === "plant")) {
       for (const tile of touchGestureTiles) enqueueTool(tile.col, tile.row);
     }
-    endDrag(e);
+    // A completed stroke already owns this release. In particular, a short touch
+    // drag must not fall through to Select's forgiving tap path and un-queue the
+    // first harvest it just added.
+    if (completedHarvestDrag) {
+      dragging = false;
+      lastPlot = "";
+    } else endDrag(e);
     pressPointerId = -1;
     touchOutsideFarmPan = false;
     touchSelectStartTile = null;
+    harvestDragGesture = false;
+    harvestDragStartTile = null;
     touchGestureTiles.length = 0;
   };
   app.stage.on("pointerup", onPointerUp);
