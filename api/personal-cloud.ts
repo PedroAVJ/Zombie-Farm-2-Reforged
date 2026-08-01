@@ -1,9 +1,4 @@
-import {
-  BlobError,
-  BlobPreconditionFailedError,
-  get,
-  put,
-} from "@vercel/blob";
+import { Firestore } from "@google-cloud/firestore";
 import { createHash, randomBytes } from "node:crypto";
 
 type VercelRequest = {
@@ -18,9 +13,12 @@ type VercelResponse = {
   json(body: unknown): void;
 };
 
-const STATE_PATH = "personal-cloud/farm.json";
+const STATE_COLLECTION = "personal-cloud";
+const STATE_DOCUMENT = "farm";
 const LEASE_MS = 10 * 60 * 1000;
-const MAX_BODY_BYTES = 1_500_000;
+// Firestore documents are limited to 1 MiB. Leave room for the writer, access
+// keys, and Firestore's field/index overhead around the serialized game save.
+const MAX_BODY_BYTES = 900_000;
 const MAX_RETRIES = 6;
 const INSTALL_TICKET_MS = 30 * 60 * 1000;
 const MAX_ACCESS_KEYS = 12;
@@ -45,7 +43,47 @@ type CloudState = {
   installTicket?: { hash: string; expiresAt: number } | null;
 };
 
-type ReadState = { state: CloudState; etag: string };
+type ReadState = { state: CloudState; revision: number };
+
+class StateConflictError extends Error {
+  constructor() {
+    super("Personal Cloud state changed concurrently");
+    this.name = "StateConflictError";
+  }
+}
+
+let firestoreClient: Firestore | null = null;
+
+function firestore(): Firestore {
+  if (firestoreClient) return firestoreClient;
+  const projectId = process.env.GCP_PROJECT_ID?.trim();
+  const encodedCredentials = process.env.GCP_SERVICE_ACCOUNT_B64?.trim();
+  if (!projectId || !encodedCredentials) throw new Error("Google Cloud storage is not configured");
+
+  let credentials: { client_email?: unknown; private_key?: unknown };
+  try {
+    credentials = JSON.parse(Buffer.from(encodedCredentials, "base64").toString("utf8")) as typeof credentials;
+  } catch {
+    throw new Error("Google Cloud credentials are invalid");
+  }
+  if (typeof credentials.client_email !== "string" || typeof credentials.private_key !== "string") {
+    throw new Error("Google Cloud credentials are incomplete");
+  }
+
+  firestoreClient = new Firestore({
+    projectId,
+    credentials: {
+      client_email: credentials.client_email,
+      private_key: credentials.private_key,
+    },
+    ignoreUndefinedProperties: true,
+  });
+  return firestoreClient;
+}
+
+function stateDocument() {
+  return firestore().collection(STATE_COLLECTION).doc(STATE_DOCUMENT);
+}
 
 const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
 
@@ -102,35 +140,26 @@ function validState(value: unknown): value is CloudState {
 }
 
 async function readState(): Promise<ReadState | null> {
-  const result = await get(STATE_PATH, { access: "private", useCache: false });
-  if (!result || result.statusCode !== 200 || !result.stream) return null;
-  const decoded = await new Response(result.stream).json() as unknown;
+  const snapshot = await stateDocument().get();
+  if (!snapshot.exists) return null;
+  const decoded = snapshot.data() as unknown;
   if (!validState(decoded)) throw new Error("Personal Cloud state is invalid");
-  // Private origin reads currently expose the same entity tag as a weak HTTP
-  // validator (`W/"..."`), while Blob's conditional write endpoint expects the
-  // underlying strong tag (`"..."`). They identify the same stored revision.
-  return { state: decoded, etag: result.blob.etag.replace(/^W\//, "") };
+  return { state: decoded, revision: decoded.revision };
 }
 
-async function writeState(state: CloudState, etag: string | null): Promise<void> {
-  const body = JSON.stringify(state);
-  if (etag) {
-    await put(STATE_PATH, body, {
-      access: "private",
-      allowOverwrite: true,
-      addRandomSuffix: false,
-      cacheControlMaxAge: 60,
-      contentType: "application/json",
-      ifMatch: etag,
-    });
-    return;
-  }
-  await put(STATE_PATH, body, {
-    access: "private",
-    allowOverwrite: false,
-    addRandomSuffix: false,
-    cacheControlMaxAge: 60,
-    contentType: "application/json",
+async function writeState(state: CloudState, expectedRevision: number | null): Promise<void> {
+  const document = stateDocument();
+  await firestore().runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(document);
+    if (expectedRevision === null) {
+      if (snapshot.exists) throw new StateConflictError();
+    } else {
+      const current = snapshot.data() as unknown;
+      if (!snapshot.exists || !validState(current) || current.revision !== expectedRevision) {
+        throw new StateConflictError();
+      }
+    }
+    transaction.set(document, state);
   });
 }
 
@@ -172,7 +201,10 @@ function json(res: VercelResponse, status: number, body: unknown): void {
 }
 
 function retryable(error: unknown): boolean {
-  return error instanceof BlobPreconditionFailedError || error instanceof BlobError;
+  if (error instanceof StateConflictError) return true;
+  if (!object(error)) return false;
+  return error.code === 4 || error.code === 10 || error.code === 14 ||
+    error.code === "deadline-exceeded" || error.code === "aborted" || error.code === "unavailable";
 }
 
 async function retryDelay(attempt: number): Promise<void> {
@@ -218,7 +250,7 @@ async function openFarm(body: Record<string, unknown>, res: VercelResponse): Pro
       writer,
     };
     try {
-      await writeState(next, current?.etag ?? null);
+      await writeState(next, current?.revision ?? null);
       return json(res, 200, {
         status: "writer",
         revision: next.revision,
@@ -258,7 +290,7 @@ async function saveFarm(body: Record<string, unknown>, res: VercelResponse): Pro
       writer,
     };
     try {
-      await writeState(next, current.etag);
+      await writeState(next, current.revision);
       return json(res, 200, {
         ok: true,
         revision: next.revision,
@@ -283,7 +315,7 @@ async function heartbeat(body: Record<string, unknown>, res: VercelResponse): Pr
     const writer = { ...current.state.writer!, lastActivityAt: now, leaseUntil: now + LEASE_MS };
     const next = { ...current.state, revision: current.state.revision + 1, updatedAt: now, writer };
     try {
-      await writeState(next, current.etag);
+      await writeState(next, current.revision);
       return json(res, 200, { ok: true, revision: next.revision, leaseUntil: writer.leaseUntil });
     } catch (error) {
       if (!retryable(error) || attempt === MAX_RETRIES - 1) throw error;
@@ -317,7 +349,7 @@ async function release(body: Record<string, unknown>, res: VercelResponse): Prom
       writer: null,
     };
     try {
-      await writeState(next, current.etag);
+      await writeState(next, current.revision);
       return json(res, 200, { ok: true, revision: next.revision });
     } catch (error) {
       if (!retryable(error) || attempt === MAX_RETRIES - 1) throw error;
@@ -339,7 +371,7 @@ async function issueInstallTicket(res: VercelResponse): Promise<void> {
       installTicket: { hash: sha256(ticket), expiresAt: now + INSTALL_TICKET_MS },
     };
     try {
-      await writeState(next, current?.etag ?? null);
+      await writeState(next, current?.revision ?? null);
       return json(res, 200, { ok: true, ticket, expiresAt: now + INSTALL_TICKET_MS });
     } catch (error) {
       if (!retryable(error) || attempt === MAX_RETRIES - 1) throw error;
@@ -374,7 +406,7 @@ async function exchangeInstallTicket(body: Record<string, unknown>, res: VercelR
       installTicket: null,
     };
     try {
-      await writeState(next, current.etag);
+      await writeState(next, current.revision);
       return json(res, 200, { ok: true, accessToken });
     } catch (error) {
       if (!retryable(error) || attempt === MAX_RETRIES - 1) throw error;
@@ -399,7 +431,7 @@ async function revokeAccess(req: VercelRequest, res: VercelResponse): Promise<vo
       accessKeys,
     };
     try {
-      await writeState(next, current.etag);
+      await writeState(next, current.revision);
       return json(res, 200, { ok: true });
     } catch (error) {
       if (!retryable(error) || attempt === MAX_RETRIES - 1) throw error;
@@ -410,7 +442,7 @@ async function revokeAccess(req: VercelRequest, res: VercelResponse): Promise<vo
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   if (req.method !== "POST") return json(res, 405, { code: "method_not_allowed" });
-  if (!process.env.BLOB_READ_WRITE_TOKEN && !process.env.VERCEL_OIDC_TOKEN) {
+  if (!process.env.GCP_PROJECT_ID || !process.env.GCP_SERVICE_ACCOUNT_B64) {
     return json(res, 503, { code: "cloud_not_configured" });
   }
   if (!process.env.PERSONAL_CLOUD_KEY_HASH) return json(res, 503, { code: "cloud_auth_not_configured" });
