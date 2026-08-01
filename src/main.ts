@@ -74,9 +74,12 @@ import {
   capturePersonalCloudHomeScreenTicket,
   capturePersonalCloudPairingLink,
   disconnectPersonalCloudLocally,
+  reconnectPersonalCloudFromText,
   personalCloudConnectionStatus,
   personalCloudForActiveProfile,
   personalCloudPairingUrl,
+  PersonalCloudError,
+  showPersonalCloudReconnectGate,
   showPersonalCloudWriterGate,
   type PersonalCloudOpen,
 } from "./cloud/personalCloud";
@@ -136,8 +139,19 @@ async function main() {
       if (personalCloudOpen && pairedFromLink) await startupCloud.prepareHomeScreenInstall();
     } catch (error) {
       console.warn("[personal-cloud] startup unavailable", error);
-      personalCloudMessage = "Personal Cloud couldn't connect. This device is continuing from its Local Farm save.";
       startupCloud.pause();
+      if (error instanceof PersonalCloudError && error.status === 401 && error.code === "bad_cloud_key") {
+        const choice = await showPersonalCloudReconnectGate(reconnectPersonalCloudFromText);
+        if (choice === "reconnected") {
+          location.reload();
+          return;
+        }
+        disconnectPersonalCloudLocally();
+        personalCloud = null;
+        personalCloudMessage = "Personal Cloud disconnected. This browser is keeping its independent Local Farm.";
+      } else {
+        personalCloudMessage = "Personal Cloud couldn't connect. This device is continuing from its Local Farm save.";
+      }
     }
   }
   if (onlineFarm) {

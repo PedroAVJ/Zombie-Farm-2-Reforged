@@ -374,7 +374,7 @@ export function openSettings(hud: Hud): void {
       localStorageControls.push(
         cloudRow,
         noteEl(cloud.message ?? (cloud.linked
-          ? "Your active Local Farm syncs to a private Vercel store. One device writes at a time; another device can explicitly take over after opening your private link."
+          ? "Your active Local Farm syncs to your private cloud save. One device writes at a time; another device can explicitly take over after opening your private link."
           : "Open your private Personal Cloud pairing link on this device to connect its active Local Farm.")),
       );
     }

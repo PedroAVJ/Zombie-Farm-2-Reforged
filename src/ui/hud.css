@@ -437,6 +437,13 @@
 .personal-cloud-gate-panel h2 { margin: 0 0 12px; font-size: 23px; }
 .personal-cloud-gate-panel p { margin: 8px 0; line-height: 1.4; }
 .personal-cloud-gate-status { min-height: 20px; color: #ffd2a5; font-size: 13px; }
+.personal-cloud-reconnect-label { display: block; margin: 16px 0 6px; text-align: left;
+  color: #ffe7af; font-size: 13px; font-weight: 700; }
+.personal-cloud-reconnect-input { display: block; width: 100%; box-sizing: border-box;
+  padding: 10px 11px; border: 2px solid #241506; border-radius: 9px;
+  background: #2a1c0c; color: #fff4cf; font: 600 14px/1.2 system-ui, sans-serif;
+  outline: none; }
+.personal-cloud-reconnect-input:focus { border-color: #f1b545; }
 .personal-cloud-gate-buttons { display: flex; flex-wrap: wrap; justify-content: center;
   gap: 10px; margin-top: 14px; }
 .personal-cloud-gate-buttons button { min-width: 165px; padding: 10px 14px;

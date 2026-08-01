@@ -126,6 +126,26 @@ export function validPairingToken(value: string): boolean {
   return /^zfpc_[A-Za-z0-9_-]{32,128}$/.test(value);
 }
 
+export function personalCloudTokenFromText(value: string, base = location.href): string | null {
+  const trimmed = value.trim();
+  if (validPairingToken(trimmed)) return trimmed;
+  try {
+    const link = new URL(trimmed, base);
+    const params = new URLSearchParams(link.hash.replace(/^#/, ""));
+    const token = params.get(PAIRING_PARAM) ?? "";
+    return validPairingToken(token) ? token : null;
+  } catch { return null; }
+}
+
+export function reconnectPersonalCloudFromText(value: string): boolean {
+  const token = personalCloudTokenFromText(value);
+  if (!token) return false;
+  const profile = activeProfile();
+  storageSet(localStorage, CONNECTION_KEY, { token, profileId: profile.id } satisfies Connection);
+  try { sessionStorage.removeItem(WRITER_KEY); } catch { /* ignore */ }
+  return true;
+}
+
 /** A fragment is never sent in the HTTP request. Capture it locally, bind this
  * device's currently-active profile, then erase it from the address bar. */
 export function capturePersonalCloudPairingLink(): boolean {
@@ -463,5 +483,74 @@ export function showPersonalCloudWriterGate(
     panel.append(title, copy, status, buttons);
     bg.append(panel);
     document.body.append(bg);
+  });
+}
+
+/** An install-only access key can become invalid after server-side credential
+ * migration. Never silently open an unrelated Local Farm in that case: stop
+ * boot and let the player deliberately reconnect or deliberately go local. */
+export function showPersonalCloudReconnectGate(
+  reconnect: (value: string) => Promise<boolean> | boolean,
+): Promise<"reconnected" | "local"> {
+  return new Promise((resolve) => {
+    const bg = document.createElement("div");
+    bg.className = "personal-cloud-gate personal-cloud-reconnect-gate";
+    const panel = document.createElement("div");
+    panel.className = "personal-cloud-gate-panel";
+    const title = document.createElement("h2");
+    title.textContent = "Personal Cloud needs to reconnect";
+    const copy = document.createElement("p");
+    copy.textContent = "Your phone's old device key expired when Personal Cloud storage was migrated. Your cloud farm and this phone's Local Farm are both still safe.";
+    const instructions = document.createElement("p");
+    instructions.textContent = "On your Mac, open Settings, choose Copy iPhone Link, then paste that private link below.";
+    const label = document.createElement("label");
+    label.className = "personal-cloud-reconnect-label";
+    label.htmlFor = "personal-cloud-reconnect-input";
+    label.textContent = "Private Personal Cloud link";
+    const input = document.createElement("input");
+    input.id = "personal-cloud-reconnect-input";
+    input.className = "personal-cloud-reconnect-input";
+    input.type = "text";
+    input.autocomplete = "off";
+    input.autocapitalize = "none";
+    input.spellcheck = false;
+    input.placeholder = "Paste the private link here";
+    const status = document.createElement("p");
+    status.className = "personal-cloud-gate-status";
+    const buttons = document.createElement("div");
+    buttons.className = "personal-cloud-gate-buttons";
+    const local = document.createElement("button");
+    local.textContent = "Keep This Device Local";
+    local.onclick = () => { bg.remove(); resolve("local"); };
+    const repair = document.createElement("button");
+    repair.textContent = "Reconnect This Device";
+    const submit = async () => {
+      local.disabled = true;
+      repair.disabled = true;
+      repair.textContent = "Reconnecting…";
+      status.textContent = "";
+      if (await Promise.resolve(reconnect(input.value)).catch(() => false)) {
+        bg.remove();
+        resolve("reconnected");
+        return;
+      }
+      local.disabled = false;
+      repair.disabled = false;
+      repair.textContent = "Reconnect This Device";
+      status.textContent = "That isn't a valid private Personal Cloud link. Copy it again from Settings on your Mac.";
+      input.focus();
+      input.select();
+    };
+    repair.onclick = () => void submit();
+    input.onkeydown = (event) => {
+      if (event.key !== "Enter") return;
+      event.preventDefault();
+      void submit();
+    };
+    buttons.append(local, repair);
+    panel.append(title, copy, instructions, label, input, status, buttons);
+    bg.append(panel);
+    document.body.append(bg);
+    input.focus();
   });
 }
