@@ -8,7 +8,11 @@ import type { RaidOutcome } from "../../../src/raid/types";
 import raidRows from "../../../public/assets/raids/raids.json";
 import { farmerCooldownMs } from "../../../src/farmer";
 import { buildPinnedV3Raid, verifyRaid, RAID_RULESET_VERSION, type PinnedRaidConfig, type RaidReplayInput } from "../raidVerifier";
-import { rollBrainDrop } from "../../../src/raid/brainDrops";
+import {
+  rollBrainDrop,
+  rollProtectedBrainDrop,
+  successfulInvasionCount,
+} from "../../../src/raid/brainDrops";
 import { dropsOldMcZombie, OLD_MC_ZOMBIE_KEY, OLD_MC_ZOMBIE_NAME } from "../../../src/raid/zombieDrops";
 import objectRows from "../../../public/assets/placeables.json";
 import { shouldStoreEpicReward } from "../../../src/epicBoss/rewards";
@@ -72,8 +76,14 @@ const objectArmyCapacity = new Map(
  *  It used to be DERIVED from the session id instead of stored, which made the amount a
  *  pure function of a value handed to the client at /raid/start: a player could compute
  *  the pending roll before choosing to fight. The pin costs a field and closes that. */
-function rollPinnedBrainDrop(recommendedLevel: number, hasBoss: boolean): number {
-  return hasBoss ? rollBrainDrop(recommendedLevel) : 0;
+function rollPinnedBrainDrop(
+  recommendedLevel: number,
+  hasBoss: boolean,
+  priorSuccessfulInvasions: number,
+): number {
+  return hasBoss
+    ? rollProtectedBrainDrop(recommendedLevel, priorSuccessfulInvasions)
+    : 0;
 }
 
 /** Brain drop for a session opened BEFORE the amount was pinned (legacy derivation, kept
@@ -154,7 +164,11 @@ export async function startRaid(
   if (dice) core.inventory[DICE_KEY] -= dice;
   if (concentration) core.inventory[CONCENTRATION_KEY]--;
   const sessionId = crypto.randomUUID();
-  const brainDrop = rollPinnedBrainDrop(econ.recLevel, pinned.config.enemyUnits.some((unit) => unit.isBoss));
+  const brainDrop = rollPinnedBrainDrop(
+    econ.recLevel,
+    pinned.config.enemyUnits.some((unit) => unit.isBoss),
+    successfulInvasionCount(parse<Record<string, number>>(raidState.progress_json, {})),
+  );
   const expiresAt = now + RAID_TTL_MS;
   const earliestFinishAt = now + EARLIEST_FINISH_MS;
   const statements: D1PreparedStatement[] = [

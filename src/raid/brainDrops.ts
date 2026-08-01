@@ -3,6 +3,9 @@
  * can award at most one stack. */
 export const BRAIN_DROP_RATE_MULTIPLIER = 2;
 export const BRAIN_OPTIMAL_LEVEL = 20;
+export const BRAIN_DROP_PROTECTION_CYCLE = 4;
+
+const PROTECTION_RATE_MULTIPLIERS = [1, 1.5, 2, 2] as const;
 
 // Post-brainflation revert: amounts are 1/10 of the old 50/30/10 stacks (a brain is now
 // ~10x more valuable). Drop CHANCES are unchanged — only the stack sizes shrank.
@@ -25,4 +28,41 @@ export function rollBrainDrop(recommendedLevel: number, random: () => number = M
     if (random() < tier.chance) return tier.amount;
   }
   return 0;
+}
+
+function normalizedSuccessfulInvasions(value: number): number {
+  return Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
+}
+
+/** Total successful invasions across the farm's per-mission progress counters. */
+export function successfulInvasionCount(progress: Readonly<Record<string, number>>): number {
+  return Object.values(progress).reduce(
+    (total, wins) => total + normalizedSuccessfulInvasions(wins),
+    0,
+  );
+}
+
+/** Odds escalate across each four-successful-invasion reward cycle. */
+export function brainDropProtectionMultiplier(priorSuccessfulInvasions: number): number {
+  return PROTECTION_RATE_MULTIPLIERS[
+    normalizedSuccessfulInvasions(priorSuccessfulInvasions) % BRAIN_DROP_PROTECTION_CYCLE
+  ];
+}
+
+/**
+ * Brain roll with drought protection. The recovered 5/3/1 tiers still roll
+ * rarest-first, at escalating odds. If all tiers miss on the fourth successful
+ * invasion in a cycle, one brain is awarded as a floor.
+ */
+export function rollProtectedBrainDrop(
+  recommendedLevel: number,
+  priorSuccessfulInvasions: number,
+  random: () => number = Math.random,
+): number {
+  const prior = normalizedSuccessfulInvasions(priorSuccessfulInvasions);
+  const multiplier = brainDropProtectionMultiplier(prior);
+  for (const tier of brainDropTable(recommendedLevel)) {
+    if (random() < Math.min(1, tier.chance * multiplier)) return tier.amount;
+  }
+  return prior % BRAIN_DROP_PROTECTION_CYCLE === BRAIN_DROP_PROTECTION_CYCLE - 1 ? 1 : 0;
 }
