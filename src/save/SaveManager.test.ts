@@ -121,6 +121,26 @@ describe("SaveManager mode isolation", () => {
     expect(JSON.parse(localStorage.getItem(primary!) ?? "null").farm.plots[0].crop.plantedAt).toBe(6_000);
   });
 
+  it("can prepare an aged snapshot without changing the current Local Farm", () => {
+    vi.stubGlobal("localStorage", memoryStorage());
+    const manager = new SaveManager(
+      {} as never, {} as never, {} as never, {} as never, {} as never,
+      new Map(), new Map(), async () => undefined, "local",
+    );
+    vi.spyOn(manager, "serialize").mockReturnValue({
+      version: 1,
+      savedAt: 20_000,
+      player: {},
+      farm: { plots: [{ crop: { plantedAt: 10_000 } }] },
+    } as never);
+
+    const storageEntriesBefore = localStorage.length;
+    const advanced = manager.prepareLocalTimeAdvance(4_000);
+
+    expect(advanced?.farm.plots[0].crop?.plantedAt).toBe(6_000);
+    expect(localStorage.length).toBe(storageEntriesBefore);
+  });
+
   it("never falls back to a Local Farm write from Online Farm", () => {
     vi.stubGlobal("localStorage", memoryStorage());
     vi.spyOn(api, "isConfigured").mockReturnValue(false);

@@ -195,11 +195,20 @@ export class SaveManager {
   }
 
   flush(): void { this.autoFlush ? this.autoFlush() : this.save(); }
+  /** Build, but do not persist, an advanced Local Farm snapshot. Personal Cloud
+   * uses this to commit the exact same snapshot remotely before local reload. */
+  prepareLocalTimeAdvance(deltaMs: number): SaveGame | null {
+    if (this.mode !== "local" || !Number.isFinite(deltaMs) || deltaMs <= 0) return null;
+    return advanceLocalSaveTime(this.serialize(), deltaMs);
+  }
+  /** Commit a prepared Local Farm snapshot through the normal crash-safe writer. */
+  persistLocalSnapshot(save: SaveGame): boolean {
+    return this.mode === "local" && this.writeLocal(save);
+  }
   /** Advance only a Local Farm's persisted gameplay timers. Online Farm is never eligible. */
   advanceLocalTime(deltaMs: number): boolean {
-    if (this.mode !== "local" || !Number.isFinite(deltaMs) || deltaMs <= 0) return false;
-    this.writeLocal(advanceLocalSaveTime(this.serialize(), deltaMs));
-    return true;
+    const advanced = this.prepareLocalTimeAdvance(deltaMs);
+    return advanced !== null && this.persistLocalSnapshot(advanced);
   }
   /** Persist state that must survive an immediate reload (currently Zombie Pot jobs). */
   flushCritical(): void {
@@ -246,7 +255,7 @@ export class SaveManager {
     void this.push(data);
   }
 
-  private writeLocal(blob: SaveGame): void {
+  private writeLocal(blob: SaveGame): boolean {
     const key = this.cacheKey();
     const temporary = `${key}.tmp`;
     const backup = `${key}.backup`;
@@ -260,9 +269,11 @@ export class SaveManager {
       localStorage.removeItem(temporary);
       try { this.onLocalSave?.(blob); }
       catch (error) { console.warn("[personal-cloud] local mirror callback failed", error); }
+      return true;
     } catch (error) {
       console.warn("[save] local write failed", error);
       this.onStorageError?.("Local Farm could not be saved. Check browser storage or export a backup.");
+      return false;
     }
   }
 

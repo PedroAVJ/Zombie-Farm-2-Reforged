@@ -80,6 +80,7 @@ import {
   showPersonalCloudWriterGate,
   type PersonalCloudOpen,
 } from "./cloud/personalCloud";
+import { commitTimeWarp } from "./save/timeWarpFlow";
 
 // The boot / start screen lives in index.html and paints on the first frame (no
 // empty-farm flash). We report load milestones to it and, once the game is fully
@@ -2230,13 +2231,32 @@ async function main() {
     saveManager.clear();
     location.reload();
   } : null;
-  hud.onAdvanceLocalTime = playMode === "local" ? (deltaMs) => {
-    if (!saveManager.advanceLocalTime(deltaMs)) {
+  let timeWarping = false;
+  hud.onAdvanceLocalTime = playMode === "local" ? async (deltaMs) => {
+    if (timeWarping) return;
+    const advanced = saveManager.prepareLocalTimeAdvance(deltaMs);
+    if (!advanced) {
       hud.showToast("Local Farm time could not be advanced.");
       return;
     }
-    // Prevent pagehide/autosave from overwriting the already-aged save with the
-    // current in-memory timestamps while this page reloads.
+    timeWarping = true;
+    const result = await commitTimeWarp(
+      advanced,
+      personalCloud && personalCloudOpen ? (save) => personalCloud!.saveNow(save) : null,
+      (save) => saveManager.persistLocalSnapshot(save),
+    );
+    if (result === "cloud-unavailable") {
+      timeWarping = false;
+      hud.showToast("Time Warp could not sync Personal Cloud. Nothing was changed; try again.", 7000);
+      return;
+    }
+    if (result === "local-unavailable") {
+      timeWarping = false;
+      hud.showToast("Time Warp could not save this Local Farm.", 7000);
+      return;
+    }
+    // Prevent pagehide/autosave from rewriting the now-advanced local snapshot
+    // with the current page's pre-warp in-memory timestamps during reload.
     saveManager.suspend();
     location.reload();
   } : null;
@@ -3928,8 +3948,21 @@ async function main() {
 
   app.ticker.add((ticker) => {
     const dt = Math.min(ticker.deltaMS / 1000, 0.05);
+
+    // The farm is completely hidden while an invasion owns the stage. Keep the
+    // wall-clock job pipeline current, but do not animate wandering zombies, pets,
+    // crops, lighting, or re-run the farm's O(n²) isometric depth sort behind the
+    // battle. On mobile that invisible work was the largest CPU cost in a raid and
+    // simultaneous bite animation was enough to push the combined frame over budget.
+    if (raidActive) {
+      raidScene?.update(dt);
+      advanceFarmJobsToNow();
+      zombies.setInvasionReady(false);
+      return;
+    }
+
     const modalOpen = !!hud.el.querySelector(".panelbg, .mkt-bg, .st-bg, .pm-bg");
-    if (!raidActive && !modalOpen && cameraKeys.size) {
+    if (!modalOpen && cameraKeys.size) {
       const speed = 520 * dt;
       const dx = (cameraKeys.has("a") ? speed : 0) - (cameraKeys.has("d") ? speed : 0);
       const dy = (cameraKeys.has("w") ? speed : 0) - (cameraKeys.has("s") ? speed : 0);
@@ -3964,7 +3997,6 @@ async function main() {
       fx.view.destroy({ children: true });
       bossTokenFx.splice(i, 1);
     }
-    if (raidScene) raidScene.update(dt); // live battle drives itself; farm still ticks behind
     advanceFarmJobsToNow(); // wall-clock-safe queued work + farmer movement
     petActor?.update(dt, actor.container.x, actor.container.y);
     const penBounds = field.petPenBounds();

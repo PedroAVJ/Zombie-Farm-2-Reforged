@@ -27,6 +27,7 @@ import {
 } from "./renderInterpolation";
 import { zombieRaidHeightScale } from "../zombie/displayScale";
 import { zombieBasicAttackName } from "./zombieAttackPresentation";
+import { budgetImpactBursts } from "./impactBurstBudget";
 
 type RaidInputDraft =
   | { type: "bubble"; unitId: string }
@@ -2030,6 +2031,7 @@ export class RaidScene {
         // flipping the attack-arm parity every display frame.
         if (stepped) {
           let strike: { unit: SimUnit; attackName: string } | null = null;
+          const meleeImpacts: { x: number; y: number }[] = [];
           for (const u of this.sim.units) {
             if (u.struckThisTick) {
               const t = this.tokens.get(u.id);
@@ -2047,11 +2049,18 @@ export class RaidScene {
               if (t) {
                 t.pulse = 1;
                 t.atkCount++; // next basic swing uses the other animation and cue
-                // A small dust burst at the point of impact (victim's mid-body).
+                // Collect impact positions first. A full army often lands on the
+                // same fixed tick; emitting one Pixi burst per zombie caused a
+                // visible allocation/render spike on mobile.
                 if (this.bashCfg && u.alive) {
-                  this.particles.burst(this.bashCfg, t.root.x, t.root.y + t.topY * 0.5, 0.28);
+                  meleeImpacts.push({ x: t.root.x, y: t.root.y + t.topY * 0.5 });
                 }
               }
+            }
+          }
+          if (this.bashCfg) {
+            for (const impact of budgetImpactBursts(meleeImpacts)) {
+              this.particles.burst(this.bashCfg, impact.x, impact.y, 0.28);
             }
           }
           // Collapse simultaneous hits to one cue so a large army does not stack
