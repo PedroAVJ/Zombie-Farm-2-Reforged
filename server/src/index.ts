@@ -666,6 +666,9 @@ const validGameplayCommand = (value: unknown): value is GameplayCommand => {
         commandInt(command.quantity);
     case "roster.sell": return commandString(command.unitId);
     case "roster.status": return commandString(command.unitId) && typeof command.stored === "boolean";
+    case "roster.swap":
+      return commandString(command.deployedUnitId) && commandString(command.storedUnitId) &&
+        command.deployedUnitId !== command.storedUnitId;
     case "roster.combine_start":
       return commandString(command.potId) && commandString(command.parentAId) &&
         commandString(command.parentBId) &&

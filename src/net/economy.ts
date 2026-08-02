@@ -355,6 +355,14 @@ export class EconomyClient {
     this.enqueue({ type: "roster.status", unitId: this.authoritativeUnitId(unitId), stored });
   }
 
+  submitRosterSwap(deployedUnitId: string, storedUnitId: string): void {
+    this.enqueue({
+      type: "roster.swap",
+      deployedUnitId: this.authoritativeUnitId(deployedUnitId),
+      storedUnitId: this.authoritativeUnitId(storedUnitId),
+    });
+  }
+
   restoreCombineParents(parentAId: string, parentBId: string): void;
   restoreCombineParents(potId: string, parentAId: string, parentBId: string, playerLevel?: number): void;
   restoreCombineParents(a: string, b: string, c?: string, playerLevel?: number): void {

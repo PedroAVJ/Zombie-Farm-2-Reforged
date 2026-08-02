@@ -653,6 +653,21 @@ describe("v3 raid dependency ids", () => {
     });
   });
 
+  it("translates both zombie ids for an atomic Mausoleum swap", () => {
+    const economy = new EconomyClient(new GameState(), "roster-swap-account");
+    (economy as any).authoritativeUnitIds.set("local-farm", "server-farm");
+    (economy as any).authoritativeUnitIds.set("local-stored", "server-stored");
+    const enqueue = vi.spyOn((economy as any).queue, "enqueue").mockReturnValueOnce(1);
+
+    economy.submitRosterSwap("local-farm", "local-stored");
+
+    expect(enqueue).toHaveBeenCalledWith({
+      type: "roster.swap",
+      deployedUnitId: "server-farm",
+      storedUnitId: "server-stored",
+    });
+  });
+
   it("keeps concurrent Zombie Pot parent pairs independent", () => {
     const economy = new EconomyClient(new GameState(), "multi-pot-account");
     const enqueue = vi.spyOn((economy as any).queue, "enqueue")

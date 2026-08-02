@@ -250,6 +250,32 @@ export class ZombieField {
     return true;
   }
 
+  /** Exchange one deployed zombie with one stored zombie without requiring a free
+   * army or Mausoleum slot. The incoming zombie takes the outgoing zombie's live
+   * farm tile, so changing between a garden crew and an invasion army does not
+   * reshuffle the farm. */
+  swap(deployedId: string, storedId: string): boolean {
+    const deployedIndex = this.units.findIndex((unit) => unit.id === deployedId);
+    const storedIndex = this.stored.findIndex((unit) => unit.id === storedId);
+    if (deployedIndex < 0 || storedIndex < 0) return false;
+
+    const outgoingUnit = this.units[deployedIndex];
+    const outgoing = { ...outgoingUnit.getData() };
+    const incoming = {
+      ...this.stored[storedIndex],
+      col: outgoing.col,
+      row: outgoing.row,
+    };
+
+    if (this.selected === outgoingUnit) this.selected = null;
+    this.stored[storedIndex] = outgoing;
+    outgoingUnit.destroy();
+    this.units.splice(deployedIndex, 1);
+    this.addUnit(incoming);
+    this.syncCount();
+    return true;
+  }
+
   // Permanently sell an owned zombie (deployed or stored) by id, returning its
   // data (or null if not found). The caller credits the gold; the unit leaves the
   // roster for good. Reuses takeOwned, so it also clears the selection/frees the

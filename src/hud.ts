@@ -1122,6 +1122,8 @@ export class Hud {
   onZombieRename: ((id: string, name: string) => string | null) | null = null;
   /** Put a stored zombie back on the farm. */
   onZombieDeploy: ((id: string) => void | Promise<void>) | null = null;
+  /** Atomically exchange one deployed zombie with one stored zombie. */
+  onZombieSwap: ((deployedId: string, storedId: string) => boolean | Promise<boolean>) | null = null;
   /** Whether a Mausoleum exists to store zombies in (gates the Store action). */
   canStoreZombies: (() => boolean) | null = null;
   /** Mausoleum storage-slot capacity (shown as fixed slots; default 15). */
@@ -3526,87 +3528,247 @@ export class Hud {
     }
   }
 
-  // The Mausoleum (tap the building): a fixed set of storage slots. Filled slots
-  // hold stored zombies (tap to inspect / deploy back); empty slots are tapped to
-  // move a zombie in off the farm. On-farm zombies do NOT appear here.
+  // The Mausoleum (tap the building): both rosters on one screen — the deployed
+  // On Farm crew above and the zombies In Mausoleum below. Tapping one zombie on
+  // each side arms Swap Zombies, which exchanges them in place even when the farm
+  // AND the Mausoleum are both full (the whole point: no free slot is needed).
+  // The one-way Store / Deploy moves and each zombie's full detail card remain
+  // reachable from this same screen.
   openMausoleum() {
-    const { panel } = openModal({ host: this.el, bgClass: "zr-bg", replaceSelector: ".zr-bg" });
+    const { panel } = openModal({
+      host: this.el, bgClass: "zr-bg", panelClass: "msw-panel", replaceSelector: ".zr-bg",
+    });
 
-    const wrap = document.createElement("div");
-    wrap.className = "zroster";
+    // At most one selection per side; both together arm Swap Zombies.
+    let farmSel: string | null = null;
+    let storedSel: string | null = null;
+
     const head = document.createElement("div");
     head.className = "zr-head";
-    const grid = document.createElement("div");
-    grid.className = "zr-grid";
-    wrap.append(head, grid);
-    panel.append(wrap);
+    const title = document.createElement("h2");
+    title.textContent = "Mausoleum";
+    const total = document.createElement("span");
+    total.className = "zr-total";
+    head.append(title, total);
+
+    const body = document.createElement("div");
+    body.className = "msw-body";
+    const foot = document.createElement("div");
+    foot.className = "msw-foot";
+    panel.append(head, body, foot);
+
+    const section = (label: string) => {
+      const sec = document.createElement("section");
+      sec.className = "msw-sec";
+      sec.setAttribute("aria-label", label);
+      const h = document.createElement("h3");
+      h.className = "msw-sec-h";
+      const name = document.createElement("span");
+      name.textContent = label;
+      const count = document.createElement("span");
+      count.className = "msw-ct";
+      h.append(name, count);
+      const grid = document.createElement("div");
+      grid.className = "zr-grid msw-grid";
+      sec.append(h, grid);
+      body.appendChild(sec);
+      return { count, grid };
+    };
+    const farmSec = section("On Farm");
+    const storedSec = section("In Mausoleum");
+
+    // Swap tray: the picked pair side by side, mirroring the sections above
+    // (farm on the left, Mausoleum on the right). A filled slot opens that
+    // zombie's full detail card (stats / rename / Locate / Sell live there).
+    const tray = document.createElement("div");
+    tray.className = "msw-tray";
+    const traySlot = () => {
+      const slot = document.createElement("button");
+      slot.type = "button";
+      slot.className = "msw-slot";
+      return slot;
+    };
+    const farmSlot = traySlot();
+    const arrows = document.createElement("span");
+    arrows.className = "msw-arrows";
+    arrows.textContent = "⇄";
+    arrows.setAttribute("aria-hidden", "true");
+    const storedSlot = traySlot();
+    tray.append(farmSlot, arrows, storedSlot);
+
+    const actions = document.createElement("div");
+    actions.className = "msw-actions";
+    const storeBtn = document.createElement("button");
+    storeBtn.type = "button";
+    storeBtn.className = "zbtn msw-oneway";
+    storeBtn.textContent = "Store";
+    const swapBtn = document.createElement("button");
+    swapBtn.type = "button";
+    swapBtn.className = "msw-swap";
+    swapBtn.textContent = "Swap Zombies";
+    const deployBtn = document.createElement("button");
+    deployBtn.type = "button";
+    deployBtn.className = "zbtn msw-oneway";
+    deployBtn.textContent = "Deploy";
+    actions.append(storeBtn, swapBtn, deployBtn);
+    foot.append(tray, actions);
+
+    const rosterNow = () => (this.getRoster ? this.getRoster() : []);
+
+    const doStore = async () => {
+      if (!farmSel) return;
+      storeBtn.disabled = true;
+      await this.onZombieStore?.(farmSel);
+      farmSel = null;
+      render();
+    };
+    const doDeploy = async () => {
+      if (!storedSel) return;
+      deployBtn.disabled = true;
+      await this.onZombieDeploy?.(storedSel);
+      storedSel = null;
+      render();
+    };
+    const doSwap = async () => {
+      if (!farmSel || !storedSel) return;
+      const all = rosterNow();
+      const outgoing = all.find((z) => z.id === farmSel);
+      const incoming = all.find((z) => z.id === storedSel);
+      swapBtn.disabled = true;
+      swapBtn.textContent = "Swapping…";
+      const ok = await this.onZombieSwap?.(farmSel, storedSel);
+      swapBtn.textContent = "Swap Zombies";
+      if (ok) {
+        this.audio.play("menuClick");
+        if (outgoing && incoming)
+          this.showToast(`${incoming.name} deployed — ${outgoing.name} stored`);
+        farmSel = null;
+        storedSel = null;
+      } else if (ok === false) {
+        this.showToast("Couldn't swap those zombies.");
+      }
+      render();
+    };
+    storeBtn.onclick = doStore;
+    deployBtn.onclick = doDeploy;
+    swapBtn.onclick = doSwap;
+
+    const fillSlot = (
+      slot: HTMLButtonElement, z: RosterEntry | undefined, side: string, hint: string,
+    ) => {
+      slot.replaceChildren();
+      slot.classList.toggle("filled", !!z);
+      slot.disabled = !z;
+      if (!z) {
+        const h = document.createElement("span");
+        h.className = "msw-slot-hint";
+        h.textContent = hint;
+        slot.appendChild(h);
+        slot.setAttribute("aria-label", hint);
+        slot.onclick = null;
+        return;
+      }
+      const por = document.createElement("span");
+      por.className = "msw-slot-por";
+      const portrait = this.zombiePortraitOf ? this.zombiePortraitOf(z.key) : "";
+      if (portrait) por.style.backgroundImage = `url(${portrait})`;
+      const txt = document.createElement("span");
+      txt.className = "msw-slot-txt";
+      const nm = document.createElement("span");
+      nm.className = "msw-slot-name";
+      nm.textContent = z.name;
+      const sub = document.createElement("span");
+      sub.className = "msw-slot-sub";
+      sub.textContent = `${z.typeName} · Details`;
+      txt.append(nm, sub);
+      slot.append(por, txt);
+      slot.title = `${z.name} — view details`;
+      slot.setAttribute("aria-label", `Selected ${side}: ${z.name}, ${z.typeName}. View details.`);
+      slot.onclick = () => this.openZombieInfo(this.rosterInfo(z), render);
+    };
 
     const render = () => {
-      const roster = this.getRoster ? this.getRoster() : [];
-      const stored = roster.filter((r) => r.stored);
-      const cap = this.mausoleumCap;
-      head.innerHTML = "";
-      const title = document.createElement("h2");
-      title.textContent = "Mausoleum";
-      const cnt = document.createElement("span");
-      cnt.className = "zr-total";
-      cnt.textContent = `${stored.length} / ${cap} stored`;
-      head.append(title, cnt);
+      const all = rosterNow();
+      const onFarm = all.filter((z) => !z.stored);
+      const inMaus = all.filter((z) => z.stored);
+      // A selected zombie may have changed sides (or been sold) via the detail
+      // card or a one-way move; drop any selection that no longer matches.
+      if (farmSel && !onFarm.some((z) => z.id === farmSel)) farmSel = null;
+      if (storedSel && !inMaus.some((z) => z.id === storedSel)) storedSel = null;
 
-      grid.innerHTML = "";
-      // Reward grants are never discarded. If a full Mausoleum receives an Epic
-      // reward, expose the protected overflow slot instead of hiding the zombie.
-      for (let i = 0; i < Math.max(cap, stored.length); i++) {
-        const z = stored[i];
-        if (z) {
-          grid.appendChild(this.buildRosterCard(z, () => this.openZombieInfo(this.rosterInfo(z), render)));
-        } else {
-          const slot = document.createElement("div");
-          slot.className = "zr-card zr-slot-empty";
-          slot.innerHTML =
-            `<div class="zr-por zr-por-empty"><span class="zr-plus">+</span></div>` +
-            `<div class="zr-name">Empty</div>`;
-          slot.title = "Store a zombie from the farm";
-          slot.onclick = () => this.pickZombieToStore(render);
-          grid.appendChild(slot);
-        }
+      total.textContent = `${all.length} zombie${all.length === 1 ? "" : "s"}`;
+      const farmCap = this.state.zombieMax;
+      farmSec.count.textContent = `${onFarm.length} / ${farmCap} deployed`;
+      farmSec.count.classList.toggle("full", onFarm.length >= farmCap);
+      const cap = this.mausoleumCap;
+      storedSec.count.textContent = `${inMaus.length} / ${cap} stored`;
+      storedSec.count.classList.toggle("full", inMaus.length >= cap);
+
+      farmSec.grid.replaceChildren();
+      if (!onFarm.length) {
+        const e = document.createElement("div");
+        e.className = "zr-empty";
+        e.textContent = "No zombies on the farm.";
+        farmSec.grid.appendChild(e);
       }
+      for (const z of onFarm) {
+        farmSec.grid.appendChild(this.buildRosterCard(z, () => {
+          farmSel = farmSel === z.id ? null : z.id;
+          this.audio.play("menuClick");
+          render();
+        }, farmSel === z.id));
+      }
+
+      storedSec.grid.replaceChildren();
+      // Reward grants are never discarded. If a full Mausoleum receives an Epic
+      // reward, render the protected overflow entry instead of hiding the zombie.
+      for (const z of inMaus) {
+        storedSec.grid.appendChild(this.buildRosterCard(z, () => {
+          storedSel = storedSel === z.id ? null : z.id;
+          this.audio.play("menuClick");
+          render();
+        }, storedSel === z.id));
+      }
+      for (let i = inMaus.length; i < cap; i++) {
+        const slot = document.createElement("button");
+        slot.type = "button";
+        slot.className = "zr-card zr-slot-empty";
+        slot.innerHTML =
+          `<span class="zr-por zr-por-empty"><span class="zr-plus">+</span></span>` +
+          `<span class="zr-name">Empty</span>`;
+        slot.title = "Free Mausoleum slot";
+        slot.setAttribute("aria-label", "Empty Mausoleum slot. Select a zombie on the farm, then Store.");
+        slot.onclick = () => {
+          if (farmSel) void doStore();
+          else this.showToast("Tap a zombie On Farm first, then Store.");
+        };
+        storedSec.grid.appendChild(slot);
+      }
+
+      const farmZ = onFarm.find((z) => z.id === farmSel);
+      const storedZ = inMaus.find((z) => z.id === storedSel);
+      fillSlot(farmSlot, farmZ, "on the farm", "Pick one On Farm");
+      fillSlot(storedSlot, storedZ, "in the Mausoleum", "Pick one In Mausoleum");
+
+      const canStore = this.canStoreZombies ? this.canStoreZombies() : true;
+      storeBtn.disabled = !farmZ || !canStore;
+      storeBtn.title = !farmZ ? "Select a zombie On Farm first"
+        : canStore ? `Store ${farmZ.name} in the Mausoleum`
+        : "Mausoleum full — use Swap Zombies instead";
+      storeBtn.setAttribute("aria-label", `Store: move the selected farm zombie into the Mausoleum. ${storeBtn.title}.`);
+      const canDeploy = this.canDeployZombie ? this.canDeployZombie() : true;
+      deployBtn.disabled = !storedZ || !canDeploy;
+      deployBtn.title = !storedZ ? "Select a zombie In Mausoleum first"
+        : canDeploy ? `Deploy ${storedZ.name} to the farm`
+        : "Farm full — use Swap Zombies instead";
+      deployBtn.setAttribute("aria-label", `Deploy: move the selected stored zombie onto the farm. ${deployBtn.title}.`);
+      swapBtn.disabled = !farmZ || !storedZ;
+      swapBtn.title = farmZ && storedZ
+        ? `Swap ${farmZ.name} with ${storedZ.name}`
+        : "Select one zombie on each side to swap";
+      swapBtn.setAttribute("aria-label", `Swap Zombies. ${swapBtn.title}.`);
     };
     render();
-  }
-
-  // Empty-slot picker: choose an on-farm zombie to move into the Mausoleum.
-  private pickZombieToStore(afterStore: () => void) {
-    const roster = this.getRoster ? this.getRoster() : [];
-    const onFarm = roster.filter((r) => !r.stored);
-    const { panel, close } = openModal({ host: this.el, bgClass: "zpick-bg", replaceSelector: ".zpick-bg" });
-
-    const wrap = document.createElement("div");
-    wrap.className = "zroster";
-    const head = document.createElement("div");
-    head.className = "zr-head";
-    head.innerHTML = `<h2>Store a Zombie</h2><span class="zr-total">Tap one to store</span>`;
-    const grid = document.createElement("div");
-    grid.className = "zr-grid";
-    wrap.append(head, grid);
-    panel.append(wrap);
-
-    if (!onFarm.length) {
-      const e = document.createElement("div");
-      e.className = "zr-empty";
-      e.textContent = "No zombies on the farm to store.";
-      grid.appendChild(e);
-      return;
-    }
-    for (const z of onFarm) {
-      grid.appendChild(
-        this.buildRosterCard(z, async () => {
-          await this.onZombieStore?.(z.id);
-          close();
-          afterStore();
-        })
-      );
-    }
   }
 
   // ---- Zombie Pot: combine two zombies (tap the placed Zombie Pot) ----
@@ -3831,17 +3993,21 @@ export class Hud {
   }
 
   /** A framed zombie tile (storage-shed slot style). `onClick` is the tap action. */
-  private buildRosterCard(z: RosterEntry, onClick: () => void): HTMLElement {
-    const card = document.createElement("div");
-    card.className = "zr-card";
-    const por = document.createElement("div");
+  // One tappable roster tile (Mausoleum swap screen). Tapping toggles selection,
+  // so the tile is a real toggle button (aria-pressed) rather than a clickable div.
+  private buildRosterCard(z: RosterEntry, onClick: () => void, selected = false): HTMLElement {
+    const card = document.createElement("button");
+    card.type = "button";
+    card.className = "zr-card" + (selected ? " sel" : "");
+    const por = document.createElement("span");
     por.className = "zr-por"; // framed slot (matches the storage-shed item tiles)
     const portrait = this.zombiePortraitOf ? this.zombiePortraitOf(z.key) : "";
     const pim = document.createElement("img");
     pim.className = "zr-por-img";
+    pim.alt = "";
     if (portrait) pim.src = portrait;
     por.appendChild(pim);
-    const name = document.createElement("div");
+    const name = document.createElement("span");
     name.className = "zr-name";
     name.textContent = z.name;
     const cls = document.createElement("span");
@@ -3849,6 +4015,15 @@ export class Hud {
     cls.textContent = z.className;
     cls.style.background = z.classColor;
     card.append(por, name, cls);
+    if (selected) {
+      const mark = document.createElement("span");
+      mark.className = "zr-sel";
+      mark.textContent = "✓";
+      mark.setAttribute("aria-hidden", "true");
+      card.appendChild(mark);
+    }
+    card.setAttribute("aria-pressed", String(selected));
+    card.setAttribute("aria-label", `${z.name}, ${z.typeName}, ${z.className} class`);
     card.onclick = onClick;
     return card;
   }

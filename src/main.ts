@@ -1922,6 +1922,19 @@ async function main() {
     catch { hud.showToast("Could not confirm that zombie. Please reconnect."); return; }
     if (zombies.deploy(id)) economy?.submitRosterStatus(id, false);
   };
+  hud.onZombieSwap = async (deployedId, storedId) => {
+    if (onlineGameplayBlocked()) return false;
+    try {
+      if (economy) [deployedId, storedId] = await economy.settleUnitIds([deployedId, storedId]);
+    } catch {
+      hud.showToast("Could not confirm those zombies. Please reconnect.");
+      return false;
+    }
+    if (!zombies.swap(deployedId, storedId)) return false;
+    economy?.submitRosterSwap(deployedId, storedId);
+    saveManager.flushCritical();
+    return true;
+  };
   hud.onZombieLocate = (id) => {
     const p = zombies.selectById(id);
     if (p) centerOn(p.x, p.y);

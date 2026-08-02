@@ -794,6 +794,32 @@ describe("protocol v3 command engine", () => {
     expect(result.state.balance.brains).toBe(100);
   });
 
+  it("swaps a deployed and stored zombie even when both rosters are full", () => {
+    const state = freshGameplayState();
+    state.zombieMax = 1;
+    state.objects.objects.push({
+      instanceId: "mausoleum",
+      catalogKey: "mausoleum3",
+      status: "placed",
+    });
+    state.roster = [
+      { id: "garden", key: "ZombieActorGardenTier1", mutation: 0, invasions: 0, stored: false },
+      { id: "army", key: "ZombieActorRegularTier1", mutation: 0, invasions: 0, stored: true },
+    ];
+
+    const result = applyCommandBatch(state, commands({
+      type: "roster.swap",
+      deployedUnitId: "garden",
+      storedUnitId: "army",
+    }), { now: 100 });
+
+    expect(result.results[0]).toMatchObject({ status: "applied" });
+    expect(result.state.roster).toEqual([
+      expect.objectContaining({ id: "garden", stored: true }),
+      expect.objectContaining({ id: "army", stored: false }),
+    ]);
+  });
+
   it("advances the Apple Harvest quest for a harvested Apple Tree", () => {
     const state = freshGameplayState();
     state.quests.completed = ["62"];

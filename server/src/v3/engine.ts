@@ -608,6 +608,17 @@ function applyOne(
       unit.stored = command.stored;
       return { sequence, status: "applied" };
     }
+    case "roster.swap": {
+      const deployed = state.roster.find((candidate) =>
+        candidate.id === command.deployedUnitId && !candidate.lockedByRaid);
+      const stored = state.roster.find((candidate) =>
+        candidate.id === command.storedUnitId && !candidate.lockedByRaid);
+      if (!deployed || !stored) return reject(sequence, "not_owned");
+      if (deployed.stored || !stored.stored) return reject(sequence, "wrong_status");
+      deployed.stored = true;
+      stored.stored = false;
+      return { sequence, status: "applied" };
+    }
     case "roster.combine_start": {
       if (command.parentAId === command.parentBId) return reject(sequence, "same_parent");
       const marker = `pot:${command.potId}`;
@@ -803,6 +814,9 @@ export function applyCommandBatch(
     if (command.type === "object.refund" || command.type === "object.status" || command.type === "object.upgrade") return [`object:${command.instanceId}`];
     if (command.type === "object.harvest_trees") return command.instanceIds.map((id) => `object:${id}`);
     if (command.type === "roster.sell" || command.type === "roster.status") return [`unit:${command.unitId}`];
+    if (command.type === "roster.swap") {
+      return [`unit:${command.deployedUnitId}`, `unit:${command.storedUnitId}`];
+    }
     if (command.type === "roster.combine_start" || command.type === "roster.combine") {
       return [`unit:${command.parentAId}`, `unit:${command.parentBId}`];
     }
