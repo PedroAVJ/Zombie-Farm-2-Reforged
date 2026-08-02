@@ -105,7 +105,7 @@ export const FARMERS_GUIDE_PAGES: GuidePage[] = [
     sections: [
       {
         title: "Raids",
-        body: "Choose an invasion and assemble an army for the fight. Tougher stages bring stronger enemies and better rewards. Fallen zombies are permanently lost, though they may be revived immediately after the battle for the cost of 1 brain.",
+        body: "Choose an invasion and assemble an army for the fight. Tougher stages bring stronger enemies and better rewards. Fallen zombies are permanently lost, though they may be revived immediately after the battle for the cost of 10 brains.",
       },
       {
         title: "Epic Bosses",
@@ -121,7 +121,7 @@ export const FARMERS_GUIDE_PAGES: GuidePage[] = [
     sections: [
       {
         title: "Friends",
-        body: "Share your friend code with another player to become friends with them. Friends can visit each other’s farms and gift each other brains. A limit of two brains can be gifted per day at no cost to the sender.",
+        body: "Share your friend code with another player to become friends with them. Friends can visit each other’s farms and gift each other brains. A limit of 20 brains can be gifted per day at no cost to the sender.",
       },
       {
         title: "The Black Market",

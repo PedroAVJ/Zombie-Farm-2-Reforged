@@ -2130,6 +2130,11 @@ export class BattleSim {
     return this.grabbers.find((g) => g.state === "carry") ?? null;
   }
 
+  /** The live boss-summoned wall the player can chip with a pointer or key. */
+  activeWall(): SimUnit | null {
+    return this.enemies.find((unit) => unit.isWall && unit.alive) ?? null;
+  }
+
   /** Player tapped a boss-summoned wall: chip it (ground truth ZFFightWall ccTouchEnded →
    *  damage: ≈ maxHp/20). Returns true if a wall took the tap. */
   tapWall(id: string): boolean {

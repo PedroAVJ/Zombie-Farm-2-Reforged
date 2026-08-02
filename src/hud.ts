@@ -8,6 +8,7 @@ import { zombieSellValue } from "./economy";
 import { PlaceableDef, BoostDef, FarmSizeUpgrade, ClimateUpgrade, upgradeIcon, placeablePurchaseLimit } from "./assets";
 import type { FarmerBodyDef, FarmerCatalog, FarmerHeadDef, PetCatalog, PetDef } from "./assets";
 import { EPIC_BOSS_FIGHT_BRAIN_COST, type EpicBossPayment } from "./epicBoss/tokens";
+import { displayBrains, displayBrainText, parseDisplayedBrains } from "./brainDisplay";
 import { AudioManager } from "./audio";
 import { MAX_ZOMBIE_NAME_LENGTH, RosterEntry } from "./zombie/types";
 import { ALL_BITS, MUTATIONS, mutationLabel, mutationBonus } from "./zombie/mutations";
@@ -133,8 +134,6 @@ function functionalDescription(def: PlaceableDef): string | undefined {
 }
 
 const UI = (n: string) => `${BASE}assets/ui/${n}`;
-
-
 
 export class Hud {
   mode: Mode = "walk";
@@ -1395,7 +1394,7 @@ export class Hud {
     cur.className = "mkt-cur";
     cur.innerHTML =
       `<span><img src="${UI("topbar_money_icon.png")}">${this.state.gold}</span>` +
-      `<span><img src="${UI("topbar_brain_icon.png")}">${this.state.brains}</span>`;
+      `<span><img src="${UI("topbar_brain_icon.png")}">${displayBrains(this.state.brains)}</span>`;
 
     const tabsEl = document.createElement("div");
     tabsEl.className = "mkt-tabs";
@@ -1581,7 +1580,7 @@ export class Hud {
     const refreshCur = () => {
       cur.innerHTML =
         `<span><img src="${UI("topbar_money_icon.png")}">${this.state.gold}</span>` +
-        `<span><img src="${UI("topbar_brain_icon.png")}">${this.state.brains}</span>`;
+        `<span><img src="${UI("topbar_brain_icon.png")}">${displayBrains(this.state.brains)}</span>`;
     };
 
     // Search + pagination apply only to the card-list tabs; Upgrade and Epic Boss
@@ -1775,18 +1774,18 @@ export class Hud {
     const action = document.createElement("button");
     action.className = "raid-go epic-market-action";
     if (view.active) {
-      action.textContent = `Fight · 1 Token or ${EPIC_BOSS_FIGHT_BRAIN_COST} Brains`;
+      action.textContent = `Fight · 1 Token or ${displayBrains(EPIC_BOSS_FIGHT_BRAIN_COST)} Brains`;
       action.disabled = !(run?.tokenCount) && this.state.brains < EPIC_BOSS_FIGHT_BRAIN_COST;
       action.onclick = () => this.openEpicBossArmy();
     } else {
       action.innerHTML = view.blocked ? "Another boss event is active" :
         view.levelLocked ? `Requires Level ${view.unlockLevel}` :
-        `Start Event · ${view.costBrains} <img src="${UI("topbar_brain_icon.png")}" alt="brains">`;
+        `Start Event · ${displayBrains(view.costBrains)} <img src="${UI("topbar_brain_icon.png")}" alt="brains">`;
       action.disabled = view.blocked || view.levelLocked || this.state.brains < view.costBrains;
       action.onclick = async () => {
         if (!await this.confirmInGame(
           `Start ${view.name}?`,
-          `Spend ${view.costBrains} brains to start ${view.name} for 14 days?`,
+          `Spend ${displayBrains(view.costBrains)} brains to start ${view.name} for 14 days?`,
           "Start Event"
         )) return;
         if (await this.onActivateEpicBoss?.(view.id)) { refreshCur(); rerender(); }
@@ -1838,7 +1837,7 @@ export class Hud {
       const bossName = this.getEpicBossView?.().find((view) => view.active)?.name ?? "Epic Boss";
       const tokens = this.getEpicBossView?.().find((view) => view.active)?.run?.tokenCount ?? 0;
       pay.innerHTML = `<option value="token"${tokens < 1 ? " disabled" : ""}>Use Boss Token (${tokens})</option>` +
-        `<option value="brains"${this.state.brains < EPIC_BOSS_FIGHT_BRAIN_COST ? " disabled" : ""}>Use ${EPIC_BOSS_FIGHT_BRAIN_COST} Brains (${this.state.brains})</option>`;
+        `<option value="brains"${this.state.brains < EPIC_BOSS_FIGHT_BRAIN_COST ? " disabled" : ""}>Use ${displayBrains(EPIC_BOSS_FIGHT_BRAIN_COST)} Brains (${displayBrains(this.state.brains)})</option>`;
       if (payment === "token" && tokens < 1) payment = "brains";
       if (payment === "brains" && this.state.brains < EPIC_BOSS_FIGHT_BRAIN_COST && tokens > 0) payment = "token";
       pay.value = payment;
@@ -1938,7 +1937,7 @@ export class Hud {
         ? `🔒 ${en.graveNeeded} Grave`
         : limitLock
           ? `✓ Owned`
-          : `${en.cost}<img src="${UI(coin)}">`;
+          : `${en.brains ? displayBrains(en.cost) : en.cost}<img src="${UI(coin)}">`;
     body.appendChild(cost);
 
     card.append(hd, body);
@@ -2053,7 +2052,8 @@ export class Hud {
     } else if (!isNext) {
       cost.innerHTML = `🔒 Get ${next?.info ?? "previous"} first`;
     } else {
-      cost.innerHTML = `${price.toLocaleString()}<img src="${UI(coin)}">`;
+      const shownPrice = currency === "brains" ? displayBrains(price) : price;
+      cost.innerHTML = `${shownPrice.toLocaleString()}<img src="${UI(coin)}">`;
     }
     body.appendChild(cost);
 
@@ -2287,7 +2287,7 @@ export class Hud {
       ? `<span class="pm-lock">🔒 Lvl ${c.level}</span>`
       : graveLock
         ? `<span class="pm-lock">🔒 ${c.cfg.unlockGrave} Grave</span>`
-        : `${c.cost}<img src="${UI(c.brains ? "topbar_brain_icon.png" : "topbar_money_icon.png")}">`;
+        : `${c.brains ? displayBrains(c.cost) : c.cost}<img src="${UI(c.brains ? "topbar_brain_icon.png" : "topbar_money_icon.png")}">`;
 
     card.append(name, port, right, cost);
     if (!locked) card.onclick = () => onPick(c);
@@ -2431,7 +2431,7 @@ export class Hud {
     const balance = document.createElement("div");
     balance.className = "mkt-cur";
     const refreshBalance = () => {
-      balance.innerHTML = `<span><img src="${UI("topbar_brain_icon.png")}">${this.state.brains}</span>`;
+      balance.innerHTML = `<span><img src="${UI("topbar_brain_icon.png")}">${displayBrains(this.state.brains)}</span>`;
     };
     refreshBalance();
 
@@ -2505,9 +2505,9 @@ export class Hud {
     });
     mutationLabelEl.append(mutationMode, mutationChoices);
     const priceLabel = document.createElement("label");
-    priceLabel.append("Price in brains");
+    priceLabel.append("Price in brains (multiples of 10)");
     const price = document.createElement("input");
-    price.type = "number"; price.min = "1"; price.max = "1000000"; price.step = "1";
+    price.type = "number"; price.min = "10"; price.max = "10000000"; price.step = "10";
     priceLabel.appendChild(price);
     const escrowNote = document.createElement("div");
     escrowNote.className = "bm-meta";
@@ -2611,7 +2611,7 @@ export class Hud {
               : "No"}${order.invasions ? ` · ${veterancy(order.invasions)}` : ""}`;
           meta.textContent = `${mutationText}\n${order.mine ? "Your post" : order.creatorName}`;
           const cost = document.createElement("div"); cost.className = "bm-price";
-          cost.append(String(order.priceBrains));
+          cost.append(String(displayBrains(order.priceBrains)));
           const brain = document.createElement("img"); brain.src = UI("topbar_brain_icon.png"); cost.appendChild(brain);
           body.append(name, meta, cost); marketCard.append(portrait, body);
           const action = document.createElement("button");
@@ -2638,12 +2638,12 @@ export class Hud {
             action.onclick = async () => {
               if (purchaseLock) { this.showToast(purchaseLock.label); return; }
               let unitId: string | undefined;
-              let detail = `Spend ${order.priceBrains} brains for this zombie?`;
+              let detail = `Spend ${displayBrains(order.priceBrains)} brains for this zombie?`;
               if (order.kind === "BUY_ZOMBIE") {
                 const match = (this.getRoster?.() ?? []).find((zombie) => zombie.key === order.zombieKey &&
                   matchesBlackMarketMutation(zombie.mutation, order.mutated, order.mutationRequired));
                 if (!match) { this.showToast("You do not own a matching available zombie."); return; }
-                unitId = match.id; detail = `Trade ${match.name} for ${order.priceBrains} brains?`;
+                unitId = match.id; detail = `Trade ${match.name} for ${displayBrains(order.priceBrains)} brains?`;
               }
               if (!await this.confirmInGame("Complete this trade?", detail, "Trade")) return;
               action.disabled = true;
@@ -2651,7 +2651,7 @@ export class Hud {
               catch (error) {
                 const code = error instanceof Error ? error.message : "";
                 if (code.startsWith("insufficient_brains"))
-                  this.showToast(`You need ${order.priceBrains} brains to buy this zombie.`);
+                  this.showToast(`You need ${displayBrains(order.priceBrains)} brains to buy this zombie.`);
                 else if (code.startsWith("black_market_level_locked"))
                   this.showToast("Special zombies can be purchased at level 20.");
                 else if (code.startsWith("black_market_grave_required"))
@@ -2679,16 +2679,17 @@ export class Hud {
     mutationMode.onchange = refreshComposeStatus;
     for (const input of mutationChecks) input.onchange = refreshComposeStatus;
     submit.onclick = async () => {
-      const priceBrains = Number(price.value);
-      if (!Number.isSafeInteger(priceBrains) || priceBrains < 1 || priceBrains > 1_000_000) {
-        this.showToast("Enter a whole brain price between 1 and 1,000,000."); return;
+      // The player types the classic on-screen amount; posts store the internal scale.
+      const priceBrains = parseDisplayedBrains(Number(price.value));
+      if (priceBrains === null || priceBrains < 1 || priceBrains > 1_000_000) {
+        this.showToast("Enter a brain price between 10 and 10,000,000, in multiples of 10."); return;
       }
       const selling = composeKind.value === "SELL_ZOMBIE";
       if (!selling) {
         const purchaseLock = purchaseLockFor(asset.value);
         if (purchaseLock) { this.showToast(purchaseLock.label); return; }
       }
-      const warning = selling ? "The selected zombie will be held in escrow." : `${priceBrains} brains will be held in escrow.`;
+      const warning = selling ? "The selected zombie will be held in escrow." : `${displayBrains(priceBrains)} brains will be held in escrow.`;
       if (!await this.confirmInGame("Create Black Market post?", warning, "Create Post")) return;
       submit.disabled = true;
       try {
@@ -2848,7 +2849,7 @@ export class Hud {
         row.className = "prof-row fr-inbox-row";
         const nm = document.createElement("div");
         nm.className = "prof-name";
-        nm.append("🧠 Brain from ");
+        nm.append(`🧠 ${displayBrains(1)} Brains from `);
         const bfrom = document.createElement("b");
         bfrom.textContent = g.fromName; // textContent: no markup from account strings
         nm.appendChild(bfrom);
@@ -2859,7 +2860,7 @@ export class Hud {
           claim.disabled = true;
           const result = await (this.onClaimGift?.(g.id) ?? Promise.resolve("Couldn't claim that gift."));
           if (result === true) {
-            this.showToast(`Claimed a brain from ${g.fromName}! 🧠`);
+            this.showToast(`Claimed ${displayBrains(1)} brains from ${g.fromName}! 🧠`);
             await refresh();
           } else {
             this.showToast(result);
@@ -2931,8 +2932,8 @@ export class Hud {
         if (!online() && f.giftsSent > 0) {
           const b = document.createElement("span");
           b.className = "prof-badge fr-gifts";
-          b.textContent = `🧠 ${f.giftsSent}`;
-          b.title = `${f.giftsSent} brain${f.giftsSent === 1 ? "" : "s"} gifted`;
+          b.textContent = `🧠 ${displayBrains(f.giftsSent)}`;
+          b.title = `${displayBrains(f.giftsSent)} brains gifted`;
           nm.appendChild(b);
         }
         const acts = document.createElement("div");
@@ -2946,7 +2947,7 @@ export class Hud {
         gift.textContent = giftCoolingDown ? "Gifted 🧠" : "Gift 🧠";
         gift.title = giftCoolingDown
           ? "You already gifted this friend during the current cooldown."
-          : "Send this friend a brain";
+          : `Send this friend ${displayBrains(1)} brains`;
         gift.onclick = async () => {
           if (online()) {
             gift.disabled = true;
@@ -2954,12 +2955,12 @@ export class Hud {
             if (err) { this.showToast(err); gift.disabled = false; }
             else {
               f.giftOnCooldown = true;
-              this.showToast(`Sent a brain to ${f.name}! +5 XP`);
+              this.showToast(`Sent ${displayBrains(1)} brains to ${f.name}! +5 XP`);
               renderList();
             }
           } else {
             if (this.onGiftBrain?.(f.id)) {
-              this.showToast(`Sent a brain to ${f.name}! 🧠`);
+              this.showToast(`Sent ${displayBrains(1)} brains to ${f.name}! 🧠`);
               renderList();
             }
           }
@@ -3043,9 +3044,9 @@ export class Hud {
 
     const renderNote = () => {
       note.textContent = !canOnline
-        ? "Send a friend a brain each day. (Local list — sign-in isn't set up on this build.)"
+        ? `Send a friend ${displayBrains(1)} brains each day. (Local list — sign-in isn't set up on this build.)`
         : online()
-          ? "Share your code so friends can add you, then send each friend a brain a day."
+          ? `Share your code so friends can add you, then send each friend ${displayBrains(1)} brains a day.`
           : "Sign in to connect with friends online. You can still keep a local list below.";
     };
 
@@ -4453,7 +4454,7 @@ export class Hud {
       ["Enemies Beaten", String(view.enemiesBeaten), ""],
       ["Zombies Lost", String(view.zombiesLost), ""],
       ["Gold Plundered", String(view.gold), GOLD_ICON],
-      ["Brains Plundered", String(view.brains), BRAIN_ICON],
+      ["Brains Plundered", String(displayBrains(view.brains)), BRAIN_ICON],
     ];
     // First-time XP bonus ("You earned Nxp for beating this enemy for the first
     // time.") — only shown when it was actually granted (first clear of this raid).
@@ -4471,8 +4472,8 @@ export class Hud {
         ? `<div class="rr-loot-items">${view.loot
             .map((l) =>
               l.icon
-                ? `<span class="rr-loot-i" title="${l.name}"><img src="${l.icon}"><span>${l.name}</span></span>`
-                : `<span class="rr-loot-i rr-loot-noimg">${l.name}</span>`
+                ? `<span class="rr-loot-i" title="${displayBrainText(l.name)}"><img src="${l.icon}"><span>${displayBrainText(l.name)}</span></span>`
+                : `<span class="rr-loot-i rr-loot-noimg">${displayBrainText(l.name)}</span>`
             )
             .join("")}</div>`
         : `<div class="rr-loot-none">—</div>`);
@@ -4509,7 +4510,7 @@ export class Hud {
     panel.innerHTML =
       `<div class="revive-title">Revive Your Zombies</div>` +
       `<div class="revive-warning">Warning: zombies you do not revive will be permanently lost.</div>` +
-      `<div class="revive-balance">Available: ${brains} <img src="${UI("topbar_brain_icon.png")}" alt="brains"> · Each revival costs 1 brain.</div>`;
+      `<div class="revive-balance">Available: ${displayBrains(brains)} <img src="${UI("topbar_brain_icon.png")}" alt="brains"> · Each revival costs ${displayBrains(1)} brains.</div>`;
     const selected = new Set<string>();
     const list = document.createElement("div");
     list.className = "revive-list";
@@ -4521,11 +4522,11 @@ export class Hud {
         rows.get(zombie.id)?.classList.toggle("selected", chosen);
         const button = buttons.get(zombie.id)!;
         button.classList.toggle("selected", chosen);
-        button.textContent = chosen ? "Undo" : "Revive · 1";
+        button.textContent = chosen ? "Undo" : `Revive · ${displayBrains(1)}`;
         button.disabled = !chosen && selected.size >= brains;
       }
       confirm.textContent = selected.size
-        ? `Revive ${selected.size} · Spend ${selected.size} Brain${selected.size === 1 ? "" : "s"}`
+        ? `Revive ${selected.size} · Spend ${displayBrains(selected.size)} Brains`
         : `Leave All ${zombies.length} Behind`;
     };
     for (const zombie of zombies) {
@@ -4597,8 +4598,8 @@ export class Hud {
     const html = loot
       .map((l) =>
         l.icon
-          ? `<span class="rr-loot-i" title="${l.name}"><img src="${l.icon}"><span>${l.name}</span></span>`
-          : `<span class="rr-loot-i rr-loot-noimg">${l.name}</span>`
+          ? `<span class="rr-loot-i" title="${displayBrainText(l.name)}"><img src="${l.icon}"><span>${displayBrainText(l.name)}</span></span>`
+          : `<span class="rr-loot-i rr-loot-noimg">${displayBrainText(l.name)}</span>`
       )
       .join("");
     if (items) items.innerHTML = html;
@@ -4617,7 +4618,7 @@ export class Hud {
     const brainRow = panel.querySelectorAll(".rr-row")[3]?.querySelector(".rr-v");
     if (brainRow) {
       brainRow.innerHTML =
-        `${brains}<img class="rr-i" src="${UI("topbar_brain_icon.png")}">`;
+        `${displayBrains(brains)}<img class="rr-i" src="${UI("topbar_brain_icon.png")}">`;
     }
   }
 
@@ -4758,7 +4759,7 @@ export class Hud {
 
   update() {
     this.goldEl.textContent = String(this.state.gold);
-    this.brainsEl.textContent = String(this.state.brains);
+    this.brainsEl.textContent = String(displayBrains(this.state.brains));
     this.zombiesEl.textContent = `${this.state.zombieCount}/${this.state.zombieMax}`;
     this.levelEl.textContent = String(this.state.level);
     this.xpFill.style.width = `${Math.round(this.state.levelProgress * 100)}%`;

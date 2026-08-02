@@ -26,6 +26,7 @@ import {
   visualCountdown,
 } from "./renderInterpolation";
 import { zombieRaidHeightScale } from "../zombie/displayScale";
+import { displayBrains } from "../brainDisplay";
 import { zombieBasicAttackName } from "./zombieAttackPresentation";
 import { budgetImpactBursts } from "./impactBurstBudget";
 
@@ -661,6 +662,36 @@ export class RaidScene {
     }
     this.bubble.scale.set(0.8); // input feedback, eased back in layout
     return true;
+  }
+
+  /** Apply one pointer-equivalent hit to the most urgent live obstacle. Returns
+   * true when an obstacle owns the key even if its tap cooldown rejects this hit,
+   * so holding Space never scrolls the page between accepted hits. */
+  activateBattleObstacle(): boolean {
+    if (this.sim.finished) return false;
+    const grabber = this.sim.activeGrabber();
+    if (grabber) {
+      this.sim.tapGrabber(grabber.id);
+      return true;
+    }
+    const crabs = [...this.sim.activeCrabs()].sort((a, b) =>
+      Number(!!b.grabbedId) - Number(!!a.grabbedId) || a.hp - b.hp
+    );
+    if (crabs[0]) {
+      this.sim.tapCrab(crabs[0].id);
+      return true;
+    }
+    const wall = this.sim.activeWall();
+    if (wall) {
+      this.sim.tapWall(wall.id);
+      return true;
+    }
+    return false;
+  }
+
+  /** Space-key action: focus cues take priority, then clickable raid obstacles. */
+  activateBattleReaction(): boolean {
+    return this.activateFocusBubble() || this.activateBattleObstacle();
   }
 
   /** Build the top-left ability strip from the army's abilities: one tappable cell
@@ -1844,16 +1875,16 @@ export class RaidScene {
     this.laserFx.push({ g, t: 0, life: upgraded ? 0.18 : 0.14 });
   }
 
-  /** Yeet one visible brain per five awarded brains from the defeated boss into
-   * midfield. The +5 badge makes the stack value explicit while keeping a 50-brain
-   * jackpot to ten readable sprites rather than fifty tiny particles. */
+  /** Yeet one visible brain per five classic displayed brains from the defeated
+   * boss into midfield. The +5 badge makes each stack explicit while keeping a
+   * 50-brain jackpot to ten readable sprites rather than fifty tiny particles. */
   private spawnBrainDrop() {
     if (this.brainDropFired || !this.brainDrop || !this.brainTex) return;
     const boss = this.sim.units.find((unit) => unit.isBoss);
     const token = boss ? this.tokens.get(boss.id) : null;
     if (!boss || !token) return;
     this.brainDropFired = true;
-    const count = Math.floor(this.brainDrop / 5);
+    const count = Math.floor(displayBrains(this.brainDrop) / 5);
     const targetX = this.mapX(FIELD_W * 0.52);
     const targetY = this.mapY(CENTER_Y) - 12 * this.sizeScale();
     for (let i = 0; i < count; i++) {

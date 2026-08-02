@@ -1,6 +1,7 @@
 // TS mirror of public/assets/quests.json (produced by tools/prep_quests.py from
 // the source Quests.plist). See docs: the quest engine is fully data-driven — each
 // requirement listens to a game notification and counts up to `countTotal`.
+import { displayBrains } from "../brainDisplay";
 
 /** A single objective within a quest. */
 export interface QuestRequirement {
@@ -78,10 +79,11 @@ export function questRewardInfo(def: Pick<
         ? { icon: "topbar_level_icon.png", label: `+${def.rewardValue} XP` }
         : null;
     case RewardType.Brains:
+      // Label only: the credited reward (QuestSystem) stays in the internal scale.
       return def.rewardValue
         ? {
             icon: "topbar_brain_icon.png",
-            label: `+${def.rewardValue} ${def.rewardValue === 1 ? "Brain" : "Brains"}`,
+            label: `+${displayBrains(def.rewardValue)} Brains`,
           }
         : null;
     case RewardType.Item:

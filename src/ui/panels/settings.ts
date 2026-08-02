@@ -9,6 +9,7 @@ import { diagnosticsReport, diagnosticsCount, clearDiagnostics } from "../../dia
 import { getSpriteSet, setSpriteSet, FARM_BACKGROUNDS } from "../../prefs";
 import { ABILITY_POOL, ABILITY_TIER, TIER_BOSS } from "../../zombie/traits";
 import { farmModeSettingsNote, otherPlayMode, playModeDestinationLabel } from "../../playMode";
+import { displayBrains, parseDisplayedBrains } from "../../brainDisplay";
 
 export async function confirmLocalFarmReset(
   hud: Pick<Hud, "confirmInGame" | "onResetLocal">,
@@ -519,7 +520,12 @@ export function openDevMenu(hud: Hud): void {
     nightRow,
     numRow("Level", hud.state.level, (n) => hud.state.setLevel(n)),
     numRow("Gold", hud.state.gold, (n) => hud.state.setGold(n)),
-    numRow("Brains", hud.state.brains, (n) => hud.state.setBrains(n)),
+    // Shown and entered in the classic x10 scale; stored internally. Amounts that
+    // aren't a clean multiple of 10 are ignored rather than rounded.
+    numRow("Brains", displayBrains(hud.state.brains), (n) => {
+      const internal = parseDisplayedBrains(n);
+      if (internal !== null) hud.state.setBrains(internal);
+    }),
     raidWrap
   );
 }

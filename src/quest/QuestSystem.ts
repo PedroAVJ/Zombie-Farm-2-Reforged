@@ -8,6 +8,7 @@
 // gated on still-unsupported categories (social and photo/camera) simply never
 // advance — dormant, not broken. Epic quests are selected per active boss event.
 import { GameState } from "../GameState";
+import { displayBrainText } from "../brainDisplay";
 import { QuestBus, QuestEvent } from "./events";
 import { QuestDef, QuestView, RewardType, questRewardInfo } from "./types";
 import { QuestSave } from "../save/schema";
@@ -202,10 +203,10 @@ export class QuestSystem {
         id,
         title: def.title,
         icon: def.sprite,
-        tip: def.tip,
+        tip: displayBrainText(def.tip),
         reward: questRewardInfo(def),
         objectives: def.requirements.map((r, i) => ({
-          text: r.text,
+          text: displayBrainText(r.text),
           count: displayCounts[i],
           total: r.countTotal,
           done: displayCounts[i] >= r.countTotal,

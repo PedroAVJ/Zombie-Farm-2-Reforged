@@ -65,6 +65,7 @@ import { buildEpicBossSetup, rollEpicBossLoot } from "./epicBoss/combat";
 import { epicBossCurrencyReward } from "./epicBoss/rewards";
 import { epicZombieRewardNotes, visibleEpicBosses } from "./epicBoss/market";
 import { dropsEpicBossToken, EPIC_BOSS_FIGHT_BRAIN_COST } from "./epicBoss/tokens";
+import { displayBrains, displayBrainText } from "./brainDisplay";
 import { offerFullscreenPrompt } from "./ui/panels/fullscreenPrompt";
 import {
   choosePlayMode, setPreferredPlayMode, showOnlineUnavailable,
@@ -674,7 +675,8 @@ async function main() {
       : /[+-]\d+xp\b/.test(msg) ? "xp" : null;
     const readable = msg
       .replace(/([+-]\d+)g\b/g, "$1 gold")
-      .replace(/([+-]\d+)b\b/g, "$1 brains")
+      // Brain deltas float in the classic on-screen scale; internal amounts are unchanged.
+      .replace(/([+-])(\d+)b\b/g, (_m, sign: string, amt: string) => `${sign}${displayBrains(Number(amt))} brains`)
       .replace(/([+-]\d+)xp\b/g, "$1 XP");
     const view = new Container();
     const t = new Text({
@@ -791,7 +793,7 @@ async function main() {
     (oc, or) => tutorial?.onPlotPlowed(oc, or),
     awardOfflineEpicBossToken,
     (currency, needed) => hud.showToast(
-      currency === "gold" ? "Not enough coins." : `Not enough brains (need ${needed}).`
+      currency === "gold" ? "Not enough coins." : `Not enough brains (need ${displayBrains(needed)}).`
     ),
     popHarvestIcon,
     () => zombies.canHarvestZombie()
@@ -818,7 +820,7 @@ async function main() {
     questCompleteQueue.push({
       icon: def.sprite,
       title: def.title,
-      message: def.messageComplete,
+      message: displayBrainText(def.messageComplete),
       rewards: questRewards(def),
     });
     if (!questCompleteShowing) showNextQuestComplete();
@@ -2117,7 +2119,7 @@ async function main() {
       } catch (error) {
         const code = errCode(error);
         hud.showToast(code === "locked" ? `${def.name} unlocks at level ${unlockLevel}.`
-          : code === "insufficient_brains" ? `You need ${def.costBrains} brains.`
+          : code === "insufficient_brains" ? `You need ${displayBrains(def.costBrains)} brains.`
           : code === "gameplay_unavailable" || code === "offline" ? "Reconnecting to the farm serverâ€¦"
           : "The Epic Boss event could not be started.");
         return false;
@@ -2572,13 +2574,16 @@ async function main() {
   // `raidScene` is the running scene once ready.
   let raidScene: RaidScene | null = null;
   window.addEventListener("keydown", (event) => {
-    if (event.code !== "Space" || event.repeat || event.ctrlKey || event.metaKey ||
+    if (event.code !== "Space" || event.ctrlKey || event.metaKey ||
         event.altKey || event.shiftKey) return;
     const target = event.target instanceof HTMLElement ? event.target : null;
     if (target?.isContentEditable ||
         target?.closest("button, a, input, textarea, select, [role='button']")) return;
     if (hud.el.querySelector(".game-confirm-bg")) return;
-    if (raidScene?.activateFocusBubble()) event.preventDefault();
+    const handled = event.repeat
+      ? raidScene?.activateBattleObstacle()
+      : raidScene?.activateBattleReaction();
+    if (handled) event.preventDefault();
   });
   hud.onLaunchEpicBoss = async (partyIds, payment) => {
     if (raidActive || Date.now() < raidLaunchLockedUntil) return false;
@@ -2621,7 +2626,7 @@ async function main() {
       } catch (error) {
         const code = errCode(error);
         if (code === "insufficient_tokens") hud.showToast("You need a Boss Token.");
-        else if (code === "insufficient_brains") hud.showToast(`You need ${EPIC_BOSS_FIGHT_BRAIN_COST} brains.`);
+        else if (code === "insufficient_brains") hud.showToast(`You need ${displayBrains(EPIC_BOSS_FIGHT_BRAIN_COST)} brains.`);
         else if (code === "battle_in_progress") hud.showToast("Another battle is already in progress.");
         else if (code === "bad_roster") hud.showToast("One of those zombies is unavailable. Please choose your army again.");
         else hud.showToast("The Epic Boss fight could not be started. Please reconnect and try again.");
@@ -2639,7 +2644,7 @@ async function main() {
         state.setEpicBossRun({ ...gate.run, tokenCount: gate.run.tokenCount - 1 });
       } else {
         if (!state.spendBrains(EPIC_BOSS_FIGHT_BRAIN_COST, "epic_boss_fight")) {
-          hud.showToast(`You need ${EPIC_BOSS_FIGHT_BRAIN_COST} brains.`);
+          hud.showToast(`You need ${displayBrains(EPIC_BOSS_FIGHT_BRAIN_COST)} brains.`);
           return false;
         }
         state.setEpicBossRun(gate.run);
@@ -3037,7 +3042,13 @@ async function main() {
         return { index, name: entry, icon: `${BASE}assets/boosts/${boost.icon}`, kind: "boost", actionLabel: "Claim" };
       const drop = assets.drops[entry];
       if (drop?.brains)
-        return { index, name: entry, icon: BASE + "assets/ui/topbar_brain_icon.png", kind: "brains", actionLabel: "Claim" };
+        // Display the classic scale; the entry itself stays the internal catalog
+        // key ("10 Brains") that the claim below parses for the credited amount.
+        return {
+          index,
+          name: displayBrainText(entry),
+          icon: BASE + "assets/ui/topbar_brain_icon.png", kind: "brains", actionLabel: "Claim",
+        };
       const pdef = receivedDef(entry);
       const dropArt = drop?.icon ? lootImage(drop.icon) : "";
       if (pdef)

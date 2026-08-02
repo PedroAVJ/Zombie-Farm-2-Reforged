@@ -10,7 +10,7 @@ import { farmerCooldownMs } from "../../../src/farmer";
 import { buildPinnedV3Raid, verifyRaid, RAID_RULESET_VERSION, type PinnedRaidConfig, type RaidReplayInput } from "../raidVerifier";
 import {
   rollBrainDrop,
-  rollProtectedBrainDrop,
+  rollEscalatingBrainDrop,
   successfulInvasionCount,
 } from "../../../src/raid/brainDrops";
 import { dropsOldMcZombie, OLD_MC_ZOMBIE_KEY, OLD_MC_ZOMBIE_NAME } from "../../../src/raid/zombieDrops";
@@ -82,7 +82,7 @@ function rollPinnedBrainDrop(
   priorSuccessfulInvasions: number,
 ): number {
   return hasBoss
-    ? rollProtectedBrainDrop(recommendedLevel, priorSuccessfulInvasions)
+    ? rollEscalatingBrainDrop(recommendedLevel, priorSuccessfulInvasions)
     : 0;
 }
 

@@ -3,9 +3,6 @@
  * can award at most one stack. */
 export const BRAIN_DROP_RATE_MULTIPLIER = 2;
 export const BRAIN_OPTIMAL_LEVEL = 20;
-export const BRAIN_DROP_PROTECTION_CYCLE = 4;
-
-const PROTECTION_RATE_MULTIPLIERS = [1, 1.5, 2, 2] as const;
 
 // Post-brainflation revert: amounts are 1/10 of the old 50/30/10 stacks (a brain is now
 // ~10x more valuable). Drop CHANCES are unchanged — only the stack sizes shrank.
@@ -42,27 +39,27 @@ export function successfulInvasionCount(progress: Readonly<Record<string, number
   );
 }
 
-/** Odds escalate across each four-successful-invasion reward cycle. */
-export function brainDropProtectionMultiplier(priorSuccessfulInvasions: number): number {
-  return PROTECTION_RATE_MULTIPLIERS[
-    normalizedSuccessfulInvasions(priorSuccessfulInvasions) % BRAIN_DROP_PROTECTION_CYCLE
-  ];
+/**
+ * Every prior boss-invasion win adds another full copy of each tier's base odds.
+ * This never resets: the individual 5/3/1 tiers approach 100% on their own.
+ */
+export function brainDropOddsMultiplier(priorSuccessfulInvasions: number): number {
+  return normalizedSuccessfulInvasions(priorSuccessfulInvasions) + 1;
 }
 
 /**
- * Brain roll with drought protection. The recovered 5/3/1 tiers still roll
- * rarest-first, at escalating odds. If all tiers miss on the fourth successful
- * invasion in a cycle, one brain is awarded as a floor.
+ * The recovered 5/3/1 tiers roll rarest-first at steadily escalating odds. There
+ * is no separate minimum award: a miss remains possible until one of the actual
+ * tier probabilities reaches 100%, at which point that tier wins naturally.
  */
-export function rollProtectedBrainDrop(
+export function rollEscalatingBrainDrop(
   recommendedLevel: number,
   priorSuccessfulInvasions: number,
   random: () => number = Math.random,
 ): number {
-  const prior = normalizedSuccessfulInvasions(priorSuccessfulInvasions);
-  const multiplier = brainDropProtectionMultiplier(prior);
+  const multiplier = brainDropOddsMultiplier(priorSuccessfulInvasions);
   for (const tier of brainDropTable(recommendedLevel)) {
     if (random() < Math.min(1, tier.chance * multiplier)) return tier.amount;
   }
-  return prior % BRAIN_DROP_PROTECTION_CYCLE === BRAIN_DROP_PROTECTION_CYCLE - 1 ? 1 : 0;
+  return 0;
 }

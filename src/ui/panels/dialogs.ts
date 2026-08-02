@@ -6,6 +6,7 @@
 import { openModal } from "../Modal";
 import { UI } from "../uiAsset";
 import type { LevelUpView, QuestCompleteView, ObjectActions } from "../hudTypes";
+import { displayBrains } from "../../brainDisplay";
 
 /** Celebratory "LEVEL UP" popup listing what the new level unlocked. */
 export function renderLevelUp(host: HTMLElement, view: LevelUpView): void {
@@ -104,7 +105,7 @@ export function renderObjectActions(host: HTMLElement, o: ObjectActions): void {
     mk(o.canStore ? "Store" : "Storage full", "store", o.canStore, o.onStore)
   );
   if (o.canSell) btns.append(
-    mk(`Sell +${o.sellRefund}${o.sellBrains ? "b" : "g"}`, "sell", true, o.onSell)
+    mk(`Sell +${o.sellBrains ? displayBrains(o.sellRefund) : o.sellRefund}${o.sellBrains ? "b" : "g"}`, "sell", true, o.onSell)
   );
   panel.append(por, btns);
 }

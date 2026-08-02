@@ -33,7 +33,7 @@ import { ABILITY_TIER, ABILITY_POOL } from "../zombie/traits";
 import { displayTotals } from "../zombie/statDisplay";
 import { BossSpecial, BossThrowConfig, CombatUnit, CrabConfig, GrabberConfig, RaidDef, RaidOutcome, RaidStage } from "./types";
 import { rollLootTier } from "./LootTable";
-import { rollProtectedBrainDrop, successfulInvasionCount } from "./brainDrops";
+import { rollEscalatingBrainDrop, successfulInvasionCount } from "./brainDrops";
 import { orderPartyRoster } from "./partySelection";
 import { dropsOldMcZombie, OLD_MC_ZOMBIE_KEY, OLD_MC_ZOMBIE_NAME } from "./zombieDrops";
 
@@ -374,7 +374,7 @@ export class RaidManager {
     const brainDrop = hasBoss
       ? opts.serverAuthorized
         ? Math.max(0, Math.floor(opts.serverBrainDrop ?? 0))
-        : rollProtectedBrainDrop(
+        : rollEscalatingBrainDrop(
             raid.recommendedLevel,
             successfulInvasionCount(this.state.raidsCompleted),
           )
